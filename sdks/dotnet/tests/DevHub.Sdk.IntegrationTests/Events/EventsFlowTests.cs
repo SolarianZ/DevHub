@@ -86,6 +86,126 @@ public sealed class EventsFlowTests
     }
 
     [Fact]
+    public async Task PublicRpcActions_ShouldPublishSpecEventsWithoutSensitiveFields()
+    {
+        await using var host = await DevHubHostFixture.StartAsync();
+        await using var eventsClient = await host.CreateEventsClientAsync("public-event-flow-ws-client");
+        await using var httpClient = await host.CreateClientAsync("public-event-flow-http-client");
+
+        await eventsClient.AuthenticateAsync();
+        var subscriptionId = await eventsClient.SubscribeAsync(DevHubEventTypes.All);
+        await using var enumerator = eventsClient.ReadEventsAsync().GetAsyncEnumerator();
+
+        var definition = new AppDefinition
+        {
+            AppId = "events.public-flow.app",
+            Scope = string.Empty,
+            DisplayName = "Events Public Flow App"
+        };
+
+        _ = await httpClient.UpsertDefinitionAsync(definition);
+        var upserted = await ReadNextEventAsync(enumerator, TimeSpan.FromSeconds(3));
+        Assert.Equal(subscriptionId, upserted.SubscriptionId);
+        Assert.Equal(DevHubEventTypes.AppDefinitionUpserted, upserted.Type);
+        AssertPayloadHas(upserted, "appId", "scope", "definition");
+        Assert.Equal(definition.AppId, upserted.Payload!.Value.GetProperty("appId").GetString());
+        Assert.Equal(string.Empty, upserted.Payload!.Value.GetProperty("scope").GetString());
+        Assert.Equal(string.Empty, upserted.Payload!.Value.GetProperty("definition").GetProperty("scope").GetString());
+
+        var registered = await httpClient.RegisterInstanceAsync(CreateInstance(definition.AppId, "events-public-flow-inst-1"), InstancePassword);
+        var registeredEvent = await ReadNextEventAsync(enumerator, TimeSpan.FromSeconds(3));
+        Assert.Equal(DevHubEventTypes.AppInstanceRegistered, registeredEvent.Type);
+        AssertPayloadHas(registeredEvent, "appId", "instanceId", "scope");
+        AssertPayloadDoesNotHave(registeredEvent, "password", "instanceSessionToken");
+        Assert.Equal("events-public-flow-inst-1", registeredEvent.Payload!.Value.GetProperty("instanceId").GetString());
+
+        var requestTask = httpClient.RequestAsync(new InvokeRequest
+        {
+            AppId = definition.AppId,
+            Method = "test.public.event.success",
+            Target = new InvocationTarget
+            {
+                Scope = string.Empty
+            },
+            Options = new InvocationOptions
+            {
+                TtlMs = 5000,
+                WaitTimeoutMs = 3000
+            }
+        });
+
+        var queued = await ReadNextEventAsync(enumerator, TimeSpan.FromSeconds(3));
+        Assert.Equal(DevHubEventTypes.InvocationQueued, queued.Type);
+        AssertPayloadHas(queued, "invocationId", "appId", "target", "method", "kind");
+
+        var invocation = await WaitForSingleInvocationAsync(httpClient, registered.Instance.InstanceId, registered.InstanceSessionToken!);
+        var delivered = await ReadNextEventAsync(enumerator, TimeSpan.FromSeconds(3));
+        Assert.Equal(DevHubEventTypes.InvocationDelivered, delivered.Type);
+        AssertPayloadHas(delivered, "invocationId", "appId", "target", "instanceId", "delivery");
+        AssertPayloadDoesNotHave(delivered.Payload!.Value.GetProperty("delivery"), "leaseToken");
+
+        await httpClient.RespondAsync(new RespondRequest
+        {
+            InstanceId = registered.Instance.InstanceId,
+            InstanceSessionToken = registered.InstanceSessionToken,
+            InvocationId = invocation.InvocationId,
+            LeaseToken = invocation.Delivery!.LeaseToken,
+            Value = new { ok = true }
+        });
+
+        var completed = await ReadNextEventAsync(enumerator, TimeSpan.FromSeconds(3));
+        Assert.Equal(DevHubEventTypes.InvocationCompleted, completed.Type);
+        AssertPayloadHas(completed, "invocationId", "appId", "target", "instanceId");
+        _ = await requestTask;
+
+        var failedRequestTask = httpClient.RequestAsync(new InvokeRequest
+        {
+            AppId = definition.AppId,
+            Method = "test.public.event.failure",
+            Target = new InvocationTarget
+            {
+                Scope = string.Empty
+            },
+            Options = new InvocationOptions
+            {
+                TtlMs = 5000,
+                WaitTimeoutMs = 3000
+            }
+        });
+
+        _ = await ReadNextEventAsync(enumerator, TimeSpan.FromSeconds(3));
+        var failedInvocation = await WaitForSingleInvocationAsync(httpClient, registered.Instance.InstanceId, registered.InstanceSessionToken!);
+        _ = await ReadNextEventAsync(enumerator, TimeSpan.FromSeconds(3));
+
+        await httpClient.RespondAsync(new RespondRequest
+        {
+            InstanceId = registered.Instance.InstanceId,
+            InstanceSessionToken = registered.InstanceSessionToken,
+            InvocationId = failedInvocation.InvocationId,
+            LeaseToken = failedInvocation.Delivery!.LeaseToken,
+            Error = DevHubCalleeError.Create(1001, "app_error", new { reason = "expected" })
+        });
+
+        var failed = await ReadNextEventAsync(enumerator, TimeSpan.FromSeconds(3));
+        Assert.Equal(DevHubEventTypes.InvocationFailed, failed.Type);
+        AssertPayloadHas(failed, "invocationId", "appId", "target", "instanceId", "reason");
+        _ = await Assert.ThrowsAsync<DevHubRpcException>(() => failedRequestTask);
+
+        await httpClient.UnregisterInstanceAsync(registered.Instance.InstanceId, registered.InstanceSessionToken!);
+        var unregistered = await ReadNextEventAsync(enumerator, TimeSpan.FromSeconds(3));
+        Assert.Equal(DevHubEventTypes.AppInstanceUnregistered, unregistered.Type);
+        AssertPayloadHas(unregistered, "appId", "instanceId", "scope");
+        AssertPayloadDoesNotHave(unregistered, "password", "instanceSessionToken");
+
+        await httpClient.DeleteDefinitionAsync(definition.AppId, definition.Scope);
+        var deleted = await ReadNextEventAsync(enumerator, TimeSpan.FromSeconds(3));
+        Assert.Equal(DevHubEventTypes.AppDefinitionDeleted, deleted.Type);
+        AssertPayloadHas(deleted, "appId", "scope");
+        Assert.Equal(definition.AppId, deleted.Payload!.Value.GetProperty("appId").GetString());
+        Assert.Equal(string.Empty, deleted.Payload!.Value.GetProperty("scope").GetString());
+    }
+
+    [Fact]
     public async Task DisconnectCleanup_ShouldRequireResubscribeAfterReconnect()
     {
         await using var host = await DevHubHostFixture.StartAsync();
@@ -282,6 +402,69 @@ public sealed class EventsFlowTests
         await using var enumerator = client.ReadEventsAsync(cts.Token).GetAsyncEnumerator();
         Assert.True(await enumerator.MoveNextAsync());
         return enumerator.Current;
+    }
+
+    private static async Task<DevHubEvent> ReadNextEventAsync(IAsyncEnumerator<DevHubEvent> enumerator, TimeSpan timeout)
+    {
+        using var cts = new CancellationTokenSource(timeout);
+        var moveNextTask = enumerator.MoveNextAsync().AsTask();
+        var completedTask = await Task.WhenAny(moveNextTask, Task.Delay(Timeout.InfiniteTimeSpan, cts.Token));
+        Assert.Same(moveNextTask, completedTask);
+        Assert.True(await moveNextTask);
+        return enumerator.Current;
+    }
+
+    private static async Task<Invocation> WaitForSingleInvocationAsync(
+        DevHubClient client,
+        string instanceId,
+        string instanceSessionToken,
+        int timeoutMs = 3000)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (DateTime.UtcNow < deadline)
+        {
+            var remaining = deadline - DateTime.UtcNow;
+            var poll = await client.PollAsync(new PollRequest
+            {
+                InstanceId = instanceId,
+                InstanceSessionToken = instanceSessionToken,
+                WaitMs = Math.Min(Math.Max((int)Math.Ceiling(remaining.TotalMilliseconds), 0), 250)
+            });
+
+            if (poll.Items.Count == 1)
+            {
+                var invocation = poll.Items[0];
+                Assert.False(string.IsNullOrWhiteSpace(invocation.Delivery?.LeaseToken));
+                return invocation;
+            }
+        }
+
+        throw new TimeoutException($"未能在 {timeoutMs}ms 内拉取到实例 {instanceId} 的单条调用。");
+    }
+
+    private static void AssertPayloadHas(DevHubEvent hubEvent, params string[] propertyNames)
+    {
+        Assert.NotNull(hubEvent.Payload);
+        foreach (var propertyName in propertyNames)
+        {
+            Assert.True(
+                hubEvent.Payload!.Value.TryGetProperty(propertyName, out _),
+                $"事件 {hubEvent.Type} 缺少 payload.{propertyName}。");
+        }
+    }
+
+    private static void AssertPayloadDoesNotHave(DevHubEvent hubEvent, params string[] propertyNames)
+    {
+        Assert.NotNull(hubEvent.Payload);
+        AssertPayloadDoesNotHave(hubEvent.Payload!.Value, propertyNames);
+    }
+
+    private static void AssertPayloadDoesNotHave(JsonElement payload, params string[] propertyNames)
+    {
+        foreach (var propertyName in propertyNames)
+        {
+            Assert.False(payload.TryGetProperty(propertyName, out _), $"payload.{propertyName} 不应出现在事件载荷中。");
+        }
     }
 
     private static async Task AssertNoEventWithinAsync(DevHubEventsClient client, TimeSpan timeout)

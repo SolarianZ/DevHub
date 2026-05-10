@@ -154,7 +154,7 @@ public sealed class LaunchFlowTests
     }
 
     [Fact]
-    public async Task Launch_WhenWaitForRegisterPositiveAndNoRegistration_ShouldReturnStartingOrStarted()
+    public async Task Launch_WhenWaitForRegisterPositiveAndNoRegistration_ShouldReturnStarting()
     {
         await using var host = await DevHubHostFixture.StartAsync();
         await host.WriteDefinitionAsync(CreateLongRunningLaunchDefinition("launch.timeout.app"));
@@ -168,7 +168,7 @@ public sealed class LaunchFlowTests
             WaitForRegisterMs = 1200
         });
 
-        Assert.Contains(result.Status, new[] { "starting", "started" });
+        Assert.Equal("starting", result.Status);
         Assert.False(string.IsNullOrWhiteSpace(result.LaunchId));
         Assert.True(result.Pid > 0);
     }

@@ -135,13 +135,47 @@ public sealed class DevHubEventsClient : IAsyncDisposable
 
     internal static async Task<DevHubEventsClient> FromRuntimeAsync(
         DevHubClientOptions options,
+        IWebSocketConnectionFactory connectionFactory,
+        Func<string>? requestIdFactory,
+        Func<DateTimeOffset> utcNowProvider,
+        CancellationToken cancellationToken = default)
+    {
+        return await FromRuntimeAsync(
+            options,
+            new DevHubEventsClientDependencies(),
+            connectionFactory,
+            requestIdFactory,
+            utcNowProvider,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    internal static async Task<DevHubEventsClient> FromRuntimeAsync(
+        DevHubClientOptions options,
         DevHubEventsClientDependencies dependencies,
         IWebSocketConnectionFactory connectionFactory,
         Func<string>? requestIdFactory,
         CancellationToken cancellationToken)
     {
+        return await FromRuntimeAsync(
+            options,
+            dependencies,
+            connectionFactory,
+            requestIdFactory,
+            static () => DateTimeOffset.UtcNow,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    internal static async Task<DevHubEventsClient> FromRuntimeAsync(
+        DevHubClientOptions options,
+        DevHubEventsClientDependencies dependencies,
+        IWebSocketConnectionFactory connectionFactory,
+        Func<string>? requestIdFactory,
+        Func<DateTimeOffset> utcNowProvider,
+        CancellationToken cancellationToken)
+    {
         var clonedOptions = options?.Clone() ?? throw new ArgumentNullException(nameof(options));
         clonedOptions.Validate();
+        ArgumentNullException.ThrowIfNull(utcNowProvider);
 
         dependencies ??= new DevHubEventsClientDependencies();
         var connectionInfo = await dependencies.RuntimeResolver.ResolveAsync(clonedOptions, cancellationToken).ConfigureAwait(false);
@@ -156,7 +190,8 @@ public sealed class DevHubEventsClient : IAsyncDisposable
                 RequestTimeout = clonedOptions.RequestTimeout,
                 OnEvent = paramsElement => client!.HandleEvent(paramsElement),
                 OnTerminated = error => client?.HandleTermination(error),
-                Logger = loggerFactory.CreateLogger<JsonRpcWebSocketSession>()
+                Logger = loggerFactory.CreateLogger<JsonRpcWebSocketSession>(),
+                UtcNowProvider = utcNowProvider
             },
             connectionFactory,
             requestIdFactory);

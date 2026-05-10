@@ -397,6 +397,7 @@ public sealed class WsLifecycleTests : IDisposable
     public async Task EventsClient_ShouldCountAndClearAbandonedRequestsByFilter()
     {
         var dataDir = await CreateDataDirectoryAsync();
+        var clock = new TestClock(new DateTimeOffset(2026, 5, 10, 0, 0, 0, TimeSpan.Zero));
         var connection = new FakeWebSocketConnection();
         connection.OnSend = sent =>
         {
@@ -414,7 +415,8 @@ public sealed class WsLifecycleTests : IDisposable
                 RequestTimeout = TimeSpan.FromMilliseconds(20)
             },
             factory,
-            new SequenceRequestIdFactory("ws-auth-1", "ws-listdefs-1", "ws-getdef-1", "ws-getinst-1").Create);
+            new SequenceRequestIdFactory("ws-auth-1", "ws-listdefs-1", "ws-getdef-1", "ws-getinst-1").Create,
+            clock.GetUtcNow);
 
         await client.AuthenticateAsync();
 
@@ -424,7 +426,7 @@ public sealed class WsLifecycleTests : IDisposable
             Scope = null
         }));
 
-        await Task.Delay(70);
+        clock.Advance(TimeSpan.FromMilliseconds(70));
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.GetDefinitionAsync("app-b", string.Empty));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.GetInstanceAsync("inst-1"));
@@ -858,7 +860,7 @@ public sealed class WsLifecycleTests : IDisposable
         await WaitUntilAsync(() => connection.SentTexts.Count == 1);
 
         var secondAuthenticateTask = client.AuthenticateAsync();
-        await Task.Delay(50);
+        await WaitUntilAsync(() => connection.SentTexts.Count == 1);
         Assert.False(secondAuthenticateTask.IsCompleted);
 
         connection.Enqueue(CreateTextMessage("""{"jsonrpc":"2.0","id":"ws-auth-1","result":{"ok":true,"protocolVersion":1}}"""));
@@ -1674,6 +1676,26 @@ public sealed class WsLifecycleTests : IDisposable
         public string Create()
         {
             return _requestIds.Dequeue();
+        }
+    }
+
+    private sealed class TestClock
+    {
+        private DateTimeOffset _utcNow;
+
+        public TestClock(DateTimeOffset utcNow)
+        {
+            _utcNow = utcNow;
+        }
+
+        public DateTimeOffset GetUtcNow()
+        {
+            return _utcNow;
+        }
+
+        public void Advance(TimeSpan duration)
+        {
+            _utcNow += duration;
         }
     }
 

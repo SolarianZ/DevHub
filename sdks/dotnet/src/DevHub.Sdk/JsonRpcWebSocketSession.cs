@@ -59,6 +59,11 @@ internal sealed class DevHubWebSocketSessionOptions
         get => _logger ?? NullLogger.Instance;
         init => _logger = value ?? NullLogger.Instance;
     }
+
+    /// <summary>
+    /// 当前时间提供器。
+    /// </summary>
+    internal Func<DateTimeOffset> UtcNowProvider { get; init; } = static () => DateTimeOffset.UtcNow;
 }
 
 /// <summary>
@@ -167,7 +172,7 @@ internal sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
         ThrowIfDisposed();
         ValidateAbandonedRequestFilter(filter);
         CleanupExpiredAbandonedRequests();
-        var now = DateTimeOffset.UtcNow;
+        var now = GetUtcNow();
         return _abandonedRequests.Values.Count(entry => MatchesAbandonedRequest(entry, filter, now));
     }
 
@@ -176,7 +181,7 @@ internal sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
         ThrowIfDisposed();
         ValidateAbandonedRequestFilter(filter);
         CleanupExpiredAbandonedRequests();
-        var now = DateTimeOffset.UtcNow;
+        var now = GetUtcNow();
         var removed = 0;
 
         foreach (var abandonedRequest in _abandonedRequests.ToArray())
@@ -628,7 +633,7 @@ internal sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
             _abandonedRequests[requestId] = new AbandonedRequestEntry(
                 requestId,
                 method,
-                DateTimeOffset.UtcNow,
+                GetUtcNow(),
                 TryExtractAppId(parameters));
         }
     }
@@ -640,7 +645,7 @@ internal sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
             return;
         }
 
-        var now = DateTimeOffset.UtcNow;
+        var now = GetUtcNow();
         foreach (var abandonedRequest in _abandonedRequests)
         {
             if (abandonedRequest.Value.AbandonedAt + AbandonedRequestRetention <= now)
@@ -770,6 +775,11 @@ internal sealed class JsonRpcWebSocketSession : IDevHubWebSocketSession
         }
 
         return linkedCts;
+    }
+
+    private DateTimeOffset GetUtcNow()
+    {
+        return _options.UtcNowProvider();
     }
 
     private void ThrowIfDisposed()
