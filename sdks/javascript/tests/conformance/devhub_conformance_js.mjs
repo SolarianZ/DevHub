@@ -26,6 +26,8 @@ const SDK_RPC_METHODS = new Set([
   "hub.apps.listInstances",
   "hub.apps.getInstance",
   "hub.apps.launch",
+  "hub.invoke.notify",
+  "hub.invoke.request",
   "hub.invoke.poll",
   "hub.invoke.respond"
 ]);
@@ -812,7 +814,8 @@ function normalizeInvocationError(error) {
 function normalizeLocalInvalidParamsError() {
   return {
     code: -32602,
-    message: "invalid_params"
+    message: "invalid_params",
+    source: "sdk_local_validation"
   };
 }
 
@@ -856,6 +859,10 @@ async function dispatchSdkRpc(client, method, params) {
       return await client.getInstance(ensureString(params.instanceId, "params.instanceId"));
     case "hub.apps.launch":
       return await client.launch(params);
+    case "hub.invoke.notify":
+      return await client.notify(params);
+    case "hub.invoke.request":
+      return await client.request(params);
     case "hub.invoke.poll":
       return await client.poll(params);
     case "hub.invoke.respond":
@@ -923,6 +930,17 @@ function normalizeSdkRpcResult(method, result, expectedResult) {
       };
     case "hub.apps.launch":
       return normalizeLaunchResult(result);
+    case "hub.invoke.notify":
+      return {
+        ok: true,
+        invocationId: result.invocationId
+      };
+    case "hub.invoke.request":
+      return {
+        ok: true,
+        invocationId: result.invocationId,
+        value: result.value
+      };
     case "hub.invoke.poll":
       return normalizePollResult(result);
     default:
@@ -942,14 +960,7 @@ function normalizePingResult(result) {
 }
 
 function normalizeDefinitions(definitions, expectedDefinitions) {
-  const normalized = definitions.map((definition, index) => normalizeDefinition(definition, expectedDefinitions?.[index]));
-  if (!Array.isArray(expectedDefinitions)) {
-    return normalized;
-  }
-
-  return normalized.filter((definition) => expectedDefinitions.some((expected) => {
-    return expected?.appId === definition.appId && expected?.scope === definition.scope;
-  }));
+  return definitions.map((definition, index) => normalizeDefinition(definition, expectedDefinitions?.[index]));
 }
 
 function normalizeDefinition(definition, expectedDefinition) {
@@ -983,12 +994,7 @@ function normalizeDefinition(definition, expectedDefinition) {
 }
 
 function normalizeInstances(instances, expectedInstances) {
-  const normalized = instances.map((instance, index) => normalizeInstance(instance, expectedInstances?.[index]));
-  if (!Array.isArray(expectedInstances)) {
-    return normalized;
-  }
-
-  return normalized.filter((instance) => expectedInstances.some((expected) => expected?.instanceId === instance.instanceId));
+  return instances.map((instance, index) => normalizeInstance(instance, expectedInstances?.[index]));
 }
 
 function normalizeInstance(instance, expectedInstance) {

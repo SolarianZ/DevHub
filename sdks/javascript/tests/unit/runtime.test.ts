@@ -263,7 +263,7 @@ it("discoverRuntime 应接受 IPv6 回环端点", async () => {
   expect(result.websocketEndpoint).toBe("ws://[::1]:47231/ws");
 });
 
-it("discoverRuntime 应原样接受固定 /ws 的 IPv4 loopback WebSocket 端点", async () => {
+it("discoverRuntime 应拒绝规范外的 IPv4 loopback 端点", async () => {
   const { dataDir, runtimeDir } = await createDataDirectory();
   const tokenFile = path.join(runtimeDir, "token.txt");
   await fsPromises.writeFile(tokenFile, "token-ipv4", "utf-8");
@@ -282,10 +282,7 @@ it("discoverRuntime 应原样接受固定 /ws 的 IPv4 loopback WebSocket 端点
     }
   });
 
-  const result = await discoverRuntime(dataDir);
-
-  expect(result.rpcEndpoint).toBe("http://127.0.0.2:47231/rpc");
-  expect(result.websocketEndpoint).toBe("wss://127.0.0.2:47231/ws");
+  await expect(discoverRuntime(dataDir)).rejects.toThrow(/hub\.json\.httpBaseUrl/);
 });
 
 it.each([

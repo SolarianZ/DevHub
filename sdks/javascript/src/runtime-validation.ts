@@ -1,4 +1,3 @@
-import net from "node:net";
 import type { RuntimeConnectionInfo } from "./runtime.js";
 
 export function validateRuntimeConnectionInfo(connection: RuntimeConnectionInfo, source = "runtimeResolver"): void {
@@ -66,11 +65,7 @@ export function validateWebSocketUrl(value: string, source: string): void {
 
 function isLoopbackHost(host: string): boolean {
   const normalized = host.replace(/^\[(.*)\]$/, "$1").toLowerCase();
-  if (normalized === "localhost" || normalized === "::1") {
-    return true;
-  }
-
-  return net.isIP(normalized) === 4 && normalized.startsWith("127.");
+  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
