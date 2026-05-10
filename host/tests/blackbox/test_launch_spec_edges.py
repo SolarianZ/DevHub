@@ -496,6 +496,110 @@ class TestLaunchSpecEdges(unittest.TestCase):
 
         return result
 
+    def test_launch_edge_007_argstemplate_should_split_quotes_and_escapes(self):
+        """LAUNCH-EDGE-007: argsTemplate 必须按 Spec 拆分引号与转义。"""
+        result = TestResult("LAUNCH-EDGE-007 argsTemplate 引号与转义拆分")
+        definition_path = None
+        script_path = None
+        capture_file = None
+
+        try:
+            app_id = self._new_app_id("args-template-split")
+            temp_dir = tempfile.mkdtemp(prefix="devhub-launch-edge-")
+            script_path = os.path.join(temp_dir, "capture_argv.py")
+            capture_file = os.path.join(temp_dir, "captured.json")
+
+            with open(script_path, "w", encoding="utf-8") as handle:
+                handle.write(
+                    "import json, pathlib, sys\n"
+                    "pathlib.Path(sys.argv[1]).write_text(json.dumps(sys.argv[2:], ensure_ascii=False), encoding='utf-8')\n"
+                )
+
+            definition_path = self._create_definition(
+                app_id,
+                {
+                    "exePath": get_test_python_executable(),
+                    "argsTemplate": f"\"{script_path}\" \"{capture_file}\" --name \"hello world\" '--literal value' plain\\ value",
+                },
+            )
+
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            response = client.launch_app(
+                app_id=app_id,
+                scope="",
+                wait_for_register_ms=0,
+                request_id="launch-edge-007",
+            )
+            if not RpcAssertions.expect_success(result, response, ["status", "launchId"]):
+                return result
+
+            deadline = time.time() + 3
+            while time.time() < deadline and not os.path.exists(capture_file):
+                time.sleep(0.05)
+
+            if not os.path.exists(capture_file):
+                result.mark_failure("❌ 启动进程未写出 argv 捕获文件")
+                return result
+
+            with open(capture_file, "r", encoding="utf-8") as handle:
+                captured = json.load(handle)
+
+            expected = ["--name", "hello world", "--literal value", "plain value"]
+            if captured != expected:
+                result.mark_failure(f"❌ argsTemplate argv 拆分不符合预期: expected={expected}, actual={captured}")
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            delete_definitions([definition_path] if definition_path else [])
+            safe_remove(capture_file)
+            safe_remove(script_path)
+            if script_path:
+                safe_remove(os.path.dirname(script_path))
+
+        return result
+
+    def test_launch_edge_008_invalid_argstemplate_should_return_invalid_params(self):
+        """LAUNCH-EDGE-008: 非法 argsTemplate 必须返回 invalid_launch_args_template。"""
+        result = TestResult("LAUNCH-EDGE-008 非法 argsTemplate 返回 invalid_params")
+        definition_path = None
+
+        try:
+            app_id = self._new_app_id("invalid-args-template")
+            definition_path = self._create_definition(
+                app_id,
+                {
+                    "exePath": get_test_python_executable(),
+                    "argsTemplate": "\"unterminated",
+                },
+            )
+
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            response = client.launch_app(
+                app_id=app_id,
+                scope="",
+                wait_for_register_ms=0,
+                request_id="launch-edge-008",
+            )
+            if not RpcAssertions.expect_error(result, response, -32602, "invalid_params"):
+                return result
+            if not RpcAssertions.expect_error_data_fields(result, response, {"reason": "invalid_launch_args_template"}):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            delete_definitions([definition_path] if definition_path else [])
+
+        return result
+
     def run_all_tests(self, full=False):
         return [
             self.test_launch_edge_001_default_dedupe_template_should_apply(),
@@ -505,6 +609,8 @@ class TestLaunchSpecEdges(unittest.TestCase):
             self.test_launch_edge_004_dedupe_template_scope_placeholders_should_isolate(),
             self.test_launch_edge_005_undocumented_placeholder_should_remain_literal(),
             self.test_launch_edge_006_blank_exepath_should_fail_at_launch_stage(),
+            self.test_launch_edge_007_argstemplate_should_split_quotes_and_escapes(),
+            self.test_launch_edge_008_invalid_argstemplate_should_return_invalid_params(),
         ]
 
 

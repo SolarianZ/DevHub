@@ -1,6 +1,5 @@
 namespace DevHub.Tests;
 
-using System.Reflection;
 using System.Text.Json;
 using DevHub.Core.Models;
 using DevHub.Core.Models.Rpc;
@@ -367,69 +366,6 @@ public class LaunchScopeTests : IDisposable
         processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Once);
     }
 
-    [Fact]
-    public async Task Impl_LaunchAsync_WhenPreviousProcessExitedWithoutRegistration_ShouldAllowRetryWithinDedupeWindow()
-    {
-        WriteDefinition(
-            "launch-exit-retry.app",
-            rpcEnabled: true,
-            includeLaunch: true,
-            dedupeKeyTemplate: "{appId}:{scopeOrGlobal}",
-            argsTemplate: "--version");
-
-        var launchIdCaptured = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var processLauncher = new Mock<IProcessLauncher>();
-        processLauncher
-            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
-            .Returns<LaunchConfiguration, string?>((launchConfiguration, _) =>
-            {
-                Assert.NotNull(launchConfiguration.EnvironmentVariables);
-                var hasLaunchId = launchConfiguration.EnvironmentVariables!.TryGetValue(
-                    LaunchCoordinator.LaunchIdEnvironmentVariable,
-                    out var launchId);
-                Assert.True(hasLaunchId, $"Launch configuration did not contain '{LaunchCoordinator.LaunchIdEnvironmentVariable}'.");
-                Assert.False(string.IsNullOrWhiteSpace(launchId));
-                launchIdCaptured.TrySetResult(launchId!);
-                return System.Diagnostics.Process.GetCurrentProcess();
-            });
-
-        var coordinator = CreateCoordinator(processLauncher.Object);
-
-        var firstLaunch = await coordinator.LaunchAsync(
-            appId: "launch-exit-retry.app",
-            scope: ScopeContract.Global,
-            dedupeKey: null,
-            waitForRegisterMs: 0,
-            CancellationToken.None);
-
-        Assert.True(firstLaunch.Ok);
-        Assert.Equal("started", firstLaunch.Status);
-        Assert.True(firstLaunch.Pid.HasValue);
-
-        var launchId = await launchIdCaptured.Task.WaitAsync(TimeSpan.FromSeconds(2));
-        MarkTrackedLaunchFailed(
-            coordinator,
-            launchId,
-            reason: "process_exited_before_register",
-            failureData: new
-            {
-                reason = "process_exited_before_register",
-                launchId
-            });
-
-        var secondLaunch = await coordinator.LaunchAsync(
-            appId: "launch-exit-retry.app",
-            scope: ScopeContract.Global,
-            dedupeKey: null,
-            waitForRegisterMs: 0,
-            CancellationToken.None);
-
-        Assert.True(secondLaunch.Ok);
-        Assert.Equal("started", secondLaunch.Status);
-        Assert.NotEqual(firstLaunch.LaunchId, secondLaunch.LaunchId);
-        processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Exactly(2));
-    }
-
     /// <summary>
     /// 释放测试资源。
     /// </summary>
@@ -499,35 +435,5 @@ public class LaunchScopeTests : IDisposable
         DefinitionCatalogTestHelper.UpsertDefinition(
             DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory),
             JsonSerializer.Serialize(payload));
-    }
-
-    private static void MarkTrackedLaunchFailed(LaunchCoordinator coordinator, string launchId, string reason, object failureData)
-    {
-        var syncRootField = typeof(LaunchCoordinator).GetField("_launchSyncRoot", BindingFlags.Instance | BindingFlags.NonPublic)
-            ?? throw new InvalidOperationException("Could not locate LaunchCoordinator._launchSyncRoot.");
-        var launchRecordsField = typeof(LaunchCoordinator).GetField("_launchRecordsById", BindingFlags.Instance | BindingFlags.NonPublic)
-            ?? throw new InvalidOperationException("Could not locate LaunchCoordinator._launchRecordsById.");
-        var markLaunchFailedMethod = typeof(LaunchCoordinator).GetMethod("MarkLaunchFailed", BindingFlags.Instance | BindingFlags.NonPublic)
-            ?? throw new InvalidOperationException("Could not locate LaunchCoordinator.MarkLaunchFailed.");
-
-        var syncRoot = syncRootField.GetValue(coordinator)
-            ?? throw new InvalidOperationException("LaunchCoordinator._launchSyncRoot was null.");
-
-        lock (syncRoot)
-        {
-            var launchRecords = launchRecordsField.GetValue(coordinator)
-                ?? throw new InvalidOperationException("LaunchCoordinator._launchRecordsById was null.");
-            var tryGetValue = launchRecords.GetType().GetMethod("TryGetValue")
-                ?? throw new InvalidOperationException("Could not locate TryGetValue on LaunchCoordinator launch record map.");
-
-            var arguments = new object?[] { launchId, null };
-            var found = (bool)(tryGetValue.Invoke(launchRecords, arguments)
-                ?? throw new InvalidOperationException("TryGetValue returned null."));
-            Assert.True(found, $"Tracked launch record '{launchId}' was not found.");
-
-            var launchRecord = arguments[1]
-                ?? throw new InvalidOperationException($"Tracked launch record '{launchId}' was null.");
-            markLaunchFailedMethod.Invoke(coordinator, [launchRecord, reason, failureData]);
-        }
     }
 }

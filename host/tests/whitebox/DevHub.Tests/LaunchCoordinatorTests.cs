@@ -1,6 +1,5 @@
 namespace DevHub.Tests;
 
-using System.Reflection;
 using System.Text.Json;
 using DevHub.Core.Models;
 using DevHub.Core.Services;
@@ -818,46 +817,40 @@ public class LaunchCoordinatorTests : IDisposable
     {
         WriteDefinition("launch-exit-before-register.app", includeLaunch: true);
 
-        var launchIdCaptured = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var startCallCount = 0;
         var processLauncher = new Mock<IProcessLauncher>();
         processLauncher
             .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
             .Returns<LaunchConfiguration, string?>((launchConfiguration, _) =>
             {
-                if (startCallCount++ == 0)
-                {
-                    Assert.NotNull(launchConfiguration.EnvironmentVariables);
-                    var hasLaunchId = launchConfiguration.EnvironmentVariables.TryGetValue(
-                        LaunchCoordinator.LaunchIdEnvironmentVariable,
-                        out var launchId);
-                    Assert.True(hasLaunchId, $"Launch configuration did not contain '{LaunchCoordinator.LaunchIdEnvironmentVariable}'.");
-                    Assert.False(string.IsNullOrWhiteSpace(launchId));
-                    launchIdCaptured.TrySetResult(launchId!);
-                }
+                Assert.NotNull(launchConfiguration.EnvironmentVariables);
+                var hasLaunchId = launchConfiguration.EnvironmentVariables.TryGetValue(
+                    LaunchCoordinator.LaunchIdEnvironmentVariable,
+                    out var launchId);
+                Assert.True(hasLaunchId, $"Launch configuration did not contain '{LaunchCoordinator.LaunchIdEnvironmentVariable}'.");
+                Assert.False(string.IsNullOrWhiteSpace(launchId));
 
-                return System.Diagnostics.Process.GetCurrentProcess();
+                var process = new System.Diagnostics.Process
+                {
+                    StartInfo = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = "dotnet",
+                        ArgumentList = { "--version" },
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        UseShellExecute = false,
+                    }
+                };
+                Assert.True(process.Start());
+                return process;
             });
         var coordinator = CreateCoordinator(processLauncher: processLauncher.Object);
 
-        var launchTask = coordinator.LaunchAsync(
+        var result = await coordinator.LaunchAsync(
             appId: "launch-exit-before-register.app",
             scope: ScopeContract.Global,
             dedupeKey: "exit-before-register",
             waitForRegisterMs: 1200,
-            CancellationToken.None);
-
-        var launchId = await launchIdCaptured.Task.WaitAsync(TimeSpan.FromSeconds(2));
-        MarkTrackedLaunchFailed(
-            coordinator,
-            launchId,
-            reason: "process_exited_before_register",
-            failureData: new
-            {
-                reason = "process_exited_before_register",
-                launchId
-            });
-        var result = await launchTask.WaitAsync(TimeSpan.FromSeconds(2));
+            CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
 
         Assert.False(result.Ok);
         Assert.Equal(-32020, result.ErrorCode);
@@ -1049,36 +1042,6 @@ public class LaunchCoordinatorTests : IDisposable
         public void Advance(TimeSpan duration)
         {
             UtcNow = UtcNow.Add(duration);
-        }
-    }
-
-    private static void MarkTrackedLaunchFailed(LaunchCoordinator coordinator, string launchId, string reason, object failureData)
-    {
-        var syncRootField = typeof(LaunchCoordinator).GetField("_launchSyncRoot", BindingFlags.Instance | BindingFlags.NonPublic)
-            ?? throw new InvalidOperationException("Could not locate LaunchCoordinator._launchSyncRoot.");
-        var launchRecordsField = typeof(LaunchCoordinator).GetField("_launchRecordsById", BindingFlags.Instance | BindingFlags.NonPublic)
-            ?? throw new InvalidOperationException("Could not locate LaunchCoordinator._launchRecordsById.");
-        var markLaunchFailedMethod = typeof(LaunchCoordinator).GetMethod("MarkLaunchFailed", BindingFlags.Instance | BindingFlags.NonPublic)
-            ?? throw new InvalidOperationException("Could not locate LaunchCoordinator.MarkLaunchFailed.");
-
-        var syncRoot = syncRootField.GetValue(coordinator)
-            ?? throw new InvalidOperationException("LaunchCoordinator._launchSyncRoot was null.");
-
-        lock (syncRoot)
-        {
-            var launchRecords = launchRecordsField.GetValue(coordinator)
-                ?? throw new InvalidOperationException("LaunchCoordinator._launchRecordsById was null.");
-            var tryGetValue = launchRecords.GetType().GetMethod("TryGetValue")
-                ?? throw new InvalidOperationException("Could not locate TryGetValue on LaunchCoordinator launch record map.");
-
-            var arguments = new object?[] { launchId, null };
-            var found = (bool)(tryGetValue.Invoke(launchRecords, arguments)
-                ?? throw new InvalidOperationException("TryGetValue returned null."));
-            Assert.True(found, $"Tracked launch record '{launchId}' was not found.");
-
-            var launchRecord = arguments[1]
-                ?? throw new InvalidOperationException($"Tracked launch record '{launchId}' was null.");
-            markLaunchFailedMethod.Invoke(coordinator, [launchRecord, reason, failureData]);
         }
     }
 }
