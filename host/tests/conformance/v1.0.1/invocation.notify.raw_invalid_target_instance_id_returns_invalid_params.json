@@ -1,0 +1,60 @@
+{
+  "id": "invocation.notify.raw_invalid_target_instance_id_returns_invalid_params",
+  "caseId": "CONF-004",
+  "description": "HTTP 原始协议调用 hub.invoke.notify 且 target.instanceId 非法时，Host 必须在路由前返回 invalid_params。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "appId": "invoke.notify.raw-invalid-target-id",
+        "scopeEntry": {
+          "scope": "",
+          "displayName": "invoke.notify.raw-invalid-target-id"
+        }
+      }
+    ]
+  },
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceNotifyRawInvalidTargetId",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000141"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "invoke-notify-raw-invalid-target-id",
+    "method": "hub.invoke.notify",
+    "params": {
+      "appId": "invoke.notify.raw-invalid-target-id",
+      "method": "demo.notify.raw-invalid-target-id",
+      "target": {
+        "instanceId": "node:01",
+        "scope": ""
+      },
+      "options": {
+        "queueIfOffline": false
+      }
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "invoke-notify-raw-invalid-target-id",
+    "error": {
+      "code": -32602,
+      "message": "invalid_params",
+      "data": {
+        "reason": "invalid_target_instance"
+      }
+    }
+  },
+  "tags": [
+    "invocation",
+    "notify",
+    "validation",
+    "http",
+    "raw"
+  ]
+}
