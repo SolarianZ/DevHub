@@ -36,6 +36,7 @@ from devhub_sdk import (  # type: ignore  # noqa: E402
     InvokeCapability,
     InvokeRequest,
     LaunchConfiguration,
+    ListDefinitionsRequest,
     discover_runtime,
 )
 
@@ -463,17 +464,14 @@ async def run_events(context: dict[str, Any]) -> dict[str, Any]:
                 continue
 
             if action == "get_definition":
-                result = read_raw_result(
-                    send_raw_rpc(
-                        raw_rpc_connection,
-                        request_id=f"sdk-events-get-definition-{index}",
-                        method="hub.apps.getDefinition",
-                        params=build_definition_identity_params(step, captures, index),
-                    ),
-                    path=f"request.steps[{index}]",
-                )
+                client_name = require_string(step.get("client"), f"request.steps[{index}].client")
                 capture_as = require_string(step.get("captureAs"), f"request.steps[{index}].captureAs")
-                captures[capture_as] = require_mapping(result.get("definition"), f"request.steps[{index}].captureAs")
+                app_id = require_string(resolve_capture_value(step, captures, index, "appId"), f"request.steps[{index}].appId")
+                scope = resolve_capture_value(step, captures, index, "scope")
+                if not isinstance(scope, str):
+                    raise ValueError(f"request.steps[{index}].scope 必须为字符串。")
+                definition = await require_events_client(event_clients, client_name, index).get_definition(app_id, scope)
+                captures[capture_as] = normalize_app_definition(definition)
                 continue
 
             if action == "get_instance":
@@ -489,21 +487,17 @@ async def run_events(context: dict[str, Any]) -> dict[str, Any]:
                 continue
 
             if action == "list_definitions":
-                params: dict[str, Any] = {"scope": resolve_capture_value(step, captures, index, "scope")}
+                client_name = require_string(step.get("client"), f"request.steps[{index}].client")
+                scope = resolve_capture_value(step, captures, index, "scope")
                 app_id = resolve_capture_value(step, captures, index, "appId")
-                if app_id is not None:
-                    params["appId"] = require_string(app_id, f"request.steps[{index}].appId")
-                result = read_raw_result(
-                    send_raw_rpc(
-                        raw_rpc_connection,
-                        request_id=f"sdk-events-list-definitions-{index}",
-                        method="hub.apps.listDefinitions",
-                        params=params,
-                    ),
-                    path=f"request.steps[{index}]",
-                )
                 capture_as = require_string(step.get("captureAs"), f"request.steps[{index}].captureAs")
-                captures[capture_as] = require_list(result.get("definitions"), f"request.steps[{index}].captureAs")
+                definitions = await require_events_client(event_clients, client_name, index).list_definitions(
+                    ListDefinitionsRequest(
+                        scope=scope,
+                        app_id=None if app_id is None else require_string(app_id, f"request.steps[{index}].appId"),
+                    )
+                )
+                captures[capture_as] = [normalize_app_definition(definition) for definition in definitions]
                 continue
 
             if action == "read_event":
@@ -800,7 +794,9 @@ def normalize_app_definition(definition: AppDefinition) -> dict[str, Any]:
     }
     if definition.description is not None:
         actual["description"] = definition.description
-    if definition.capabilities is not None:
+    if definition.capabilities is not None and (
+        definition.capabilities.rpc is not True or definition.capabilities.events is not None
+    ):
         capabilities: dict[str, Any] = {}
         if definition.capabilities.rpc is not None:
             capabilities["rpc"] = definition.capabilities.rpc

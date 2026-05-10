@@ -17,6 +17,7 @@ from devhub_sdk._payloads import (
     build_heartbeat_params,
     build_get_definition_params,
     build_get_instance_params,
+    build_launch_params,
     build_list_definitions_params,
     build_list_instances_params,
     build_ping_params,
@@ -33,6 +34,7 @@ from devhub_sdk._payloads import (
 from devhub_sdk.models import (
     AppInstanceRegistration,
     InvokeRequest,
+    LaunchRequest,
     ListDefinitionsRequest,
     ListInstancesRequest,
     PollRequest,
@@ -209,6 +211,24 @@ def test_poll_builder_should_apply_defaults() -> None:
     assert payload["instanceSessionToken"] == "token-1"
     assert payload["maxCount"] == 10
     assert payload["waitMs"] == 25000
+
+
+def test_launch_builder_should_preserve_public_protocol_fields() -> None:
+    payload = build_launch_params(
+        LaunchRequest(
+            app_id="Sample.App",
+            scope="Workspace-A.v2",
+            dedupe_key="dedupe-1",
+            wait_for_register_ms=1500,
+        )
+    )
+
+    assert payload == {
+        "appId": "Sample.App",
+        "scope": "Workspace-A.v2",
+        "dedupeKey": "dedupe-1",
+        "waitForRegisterMs": 1500,
+    }
 
 
 def test_definition_builder_should_preserve_supported_fields() -> None:

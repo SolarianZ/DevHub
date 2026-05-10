@@ -1,12 +1,8 @@
 from __future__ import annotations
 
-import json
-import threading
 from dataclasses import FrozenInstanceError, dataclass, field
 from datetime import datetime, timezone
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import pytest
 
@@ -19,23 +15,17 @@ from devhub_sdk import (
     DevHubRpcException,
     HubRuntime,
     HubRuntimeTuning,
+    DevHubCalleeError,
     InvokeCapability,
     InvokeRequest,
     InvocationTarget,
     ListDefinitionsRequest,
     ListInstancesRequest,
     LaunchRequest,
+    PollRequest,
+    RespondRequest,
     RuntimeConnectionInfo,
 )
-
-
-@dataclass(slots=True)
-class HttpScenario:
-    """HTTP 场景数据。"""
-
-    responder: Callable[[dict[str, Any]], dict[str, Any] | str]
-    requests: list[dict[str, Any]] = field(default_factory=list)
-    headers: list[dict[str, str]] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -192,23 +182,29 @@ def test_http_client_context_manager_should_close_transport_on_exit() -> None:
     assert transport.close_calls == 1
 
 
-def test_http_client_runtime_view_should_be_immutable_and_keep_original_endpoint(tmp_path: Path) -> None:
-    scenario = HttpScenario(responder=_ping_success_response)
-    server, thread = _start_http_server(scenario)
-    try:
-        data_dir = _write_data_directory(tmp_path, server.server_address[1])
-        client = DevHubClient.from_runtime(DevHubClientOptions(client_id="http-client", data_dir=str(data_dir)))
+def test_http_client_runtime_view_should_be_immutable_and_keep_original_endpoint() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    transport = FakeHttpTransport(
+        {
+            "ok": True,
+            "serverTimeUtc": "2026-03-09T00:00:00Z",
+            "echo": {"source": "immutable-runtime"},
+        }
+    )
+    transport_factory = FakeHttpTransportFactory(transport)
+    client = DevHubClient.from_runtime(
+        DevHubClientOptions(client_id="http-client"),
+        DevHubClientDependencies(runtime_resolver=resolver, transport_factory=transport_factory),
+    )
 
-        with pytest.raises(FrozenInstanceError):
-            client.runtime.http_base_url = "http://127.0.0.1:1"  # type: ignore[misc]
+    with pytest.raises(FrozenInstanceError):
+        client.runtime.http_base_url = "http://127.0.0.1:1"  # type: ignore[misc]
 
-        ping = client.ping({"source": "immutable-runtime"})
+    ping = client.ping({"source": "immutable-runtime"})
 
-        assert ping.ok is True
-        assert scenario.requests[0]["method"] == "hub.ping"
-    finally:
-        server.shutdown()
-        thread.join(timeout=5)
+    assert ping.ok is True
+    assert transport.calls[0]["method"] == "hub.ping"
 
 
 def test_http_client_after_close_should_reject_rpc_without_calling_transport() -> None:
@@ -238,40 +234,55 @@ def test_http_client_after_close_should_reject_rpc_without_calling_transport() -
     assert transport.calls == []
 
 
-def test_http_client_ping_should_send_headers_and_parse_result(tmp_path: Path) -> None:
-    scenario = HttpScenario(responder=_ping_success_response)
-    server, thread = _start_http_server(scenario)
-    try:
-        data_dir = _write_data_directory(tmp_path, server.server_address[1])
-        client = DevHubClient.from_runtime(DevHubClientOptions(client_id="http-client", data_dir=str(data_dir)))
+def test_http_client_ping_should_send_params_and_parse_result() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    transport = FakeHttpTransport(
+        {
+            "ok": True,
+            "serverTimeUtc": "2026-03-09T00:00:00Z",
+            "echo": {"value": 1},
+        }
+    )
+    transport_factory = FakeHttpTransportFactory(transport)
+    client = DevHubClient.from_runtime(
+        DevHubClientOptions(client_id="http-client"),
+        DevHubClientDependencies(runtime_resolver=resolver, transport_factory=transport_factory),
+    )
 
-        ping = client.ping({"value": 1})
+    ping = client.ping({"value": 1})
 
-        assert ping.ok is True
-        assert ping.echo == {"value": 1}
-        assert scenario.headers[0]["x-devhub-protocol"] == "1"
-        assert scenario.headers[0]["x-devhub-clientid"] == "http-client"
-        assert scenario.headers[0]["authorization"] == "Bearer token-1"
-    finally:
-        server.shutdown()
-        thread.join(timeout=5)
+    assert ping.ok is True
+    assert ping.echo == {"value": 1}
+    assert transport.calls[0] == {
+        "method": "hub.ping",
+        "params": {"echo": {"value": 1}},
+    }
 
 
-def test_http_client_ping_when_echo_is_none_should_send_null(tmp_path: Path) -> None:
-    scenario = HttpScenario(responder=_ping_success_response)
-    server, thread = _start_http_server(scenario)
-    try:
-        data_dir = _write_data_directory(tmp_path, server.server_address[1])
-        client = DevHubClient.from_runtime(DevHubClientOptions(client_id="http-client", data_dir=str(data_dir)))
+def test_http_client_ping_when_echo_is_none_should_send_null() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    transport = FakeHttpTransport(
+        {
+            "ok": True,
+            "serverTimeUtc": "2026-03-09T00:00:00Z",
+            "echo": None,
+        }
+    )
+    transport_factory = FakeHttpTransportFactory(transport)
+    client = DevHubClient.from_runtime(
+        DevHubClientOptions(client_id="http-client"),
+        DevHubClientDependencies(runtime_resolver=resolver, transport_factory=transport_factory),
+    )
 
-        ping = client.ping(None)
+    ping = client.ping(None)
 
-        assert ping.ok is True
-        assert "params" in scenario.requests[0]
-        assert scenario.requests[0]["params"]["echo"] is None
-    finally:
-        server.shutdown()
-        thread.join(timeout=5)
+    assert ping.ok is True
+    assert transport.calls[0] == {
+        "method": "hub.ping",
+        "params": {"echo": None},
+    }
 
 
 def test_http_client_ping_when_echo_contains_unsupported_json_should_raise_before_transport() -> None:
@@ -299,79 +310,71 @@ def test_http_client_ping_when_echo_contains_unsupported_json_should_raise_befor
     assert transport.calls == []
 
 
-def test_http_client_when_server_returns_error_should_raise_devhub_rpc_exception(tmp_path: Path) -> None:
-    scenario = HttpScenario(responder=_unauthorized_response)
-    server, thread = _start_http_server(scenario)
-    try:
-        data_dir = _write_data_directory(tmp_path, server.server_address[1])
-        client = DevHubClient.from_runtime(DevHubClientOptions(client_id="http-client", data_dir=str(data_dir)))
+def test_http_client_when_transport_returns_error_should_raise_devhub_rpc_exception() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    transport = FakeHttpTransport(
+        DevHubRpcException(
+            code=-32001,
+            message="unauthorized",
+            data={"reason": "invalid_token"},
+            request_id="req-http-1",
+        )
+    )
+    transport_factory = FakeHttpTransportFactory(transport)
+    client = DevHubClient.from_runtime(
+        DevHubClientOptions(client_id="http-client"),
+        DevHubClientDependencies(runtime_resolver=resolver, transport_factory=transport_factory),
+    )
 
-        with pytest.raises(DevHubRpcException) as exc_info:
-            client.ping()
+    with pytest.raises(DevHubRpcException) as exc_info:
+        client.ping()
 
-        assert exc_info.value.code == -32001
-        assert exc_info.value.reason == "invalid_token"
-    finally:
-        server.shutdown()
-        thread.join(timeout=5)
-
-
-def test_http_client_when_error_data_is_not_object_should_raise_runtime_error(tmp_path: Path) -> None:
-    scenario = HttpScenario(responder=_invalid_error_data_response)
-    server, thread = _start_http_server(scenario)
-    try:
-        data_dir = _write_data_directory(tmp_path, server.server_address[1])
-        client = DevHubClient.from_runtime(DevHubClientOptions(client_id="http-client", data_dir=str(data_dir)))
-
-        with pytest.raises(RuntimeError, match="error.data"):
-            client.ping()
-    finally:
-        server.shutdown()
-        thread.join(timeout=5)
+    assert exc_info.value.code == -32001
+    assert exc_info.value.reason == "invalid_token"
 
 
-def test_http_client_when_response_contains_non_standard_json_constant_should_raise(tmp_path: Path) -> None:
-    scenario = HttpScenario(responder=_ping_response_with_non_standard_json_constant)
-    server, thread = _start_http_server(scenario)
-    try:
-        data_dir = _write_data_directory(tmp_path, server.server_address[1])
-        client = DevHubClient.from_runtime(DevHubClientOptions(client_id="http-client", data_dir=str(data_dir)))
+def test_http_client_list_definitions_should_send_explicit_null_scope_filter() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    transport = FakeHttpTransport(
+        {
+            "ok": True,
+            "definitions": [],
+        }
+    )
+    transport_factory = FakeHttpTransportFactory(transport)
+    client = DevHubClient.from_runtime(
+        DevHubClientOptions(client_id="http-client"),
+        DevHubClientDependencies(runtime_resolver=resolver, transport_factory=transport_factory),
+    )
 
-        with pytest.raises(RuntimeError, match="不是合法 JSON"):
-            client.ping({"value": 1})
-    finally:
-        server.shutdown()
-        thread.join(timeout=5)
+    definitions = client.list_definitions(ListDefinitionsRequest(scope=None))
 
-
-def test_http_client_list_definitions_should_send_explicit_null_scope_filter(tmp_path: Path) -> None:
-    scenario = HttpScenario(responder=_list_definitions_response)
-    server, thread = _start_http_server(scenario)
-    try:
-        data_dir = _write_data_directory(tmp_path, server.server_address[1])
-        client = DevHubClient.from_runtime(DevHubClientOptions(client_id="http-client", data_dir=str(data_dir)))
-
-        definitions = client.list_definitions(ListDefinitionsRequest(scope=None))
-
-        assert definitions == []
-        assert scenario.requests[0]["params"] == {"scope": None}
-    finally:
-        server.shutdown()
-        thread.join(timeout=5)
+    assert definitions == []
+    assert transport.calls[0] == {
+        "method": "hub.apps.listDefinitions",
+        "params": {"scope": None},
+    }
 
 
-def test_http_client_when_request_result_missing_value_should_raise(tmp_path: Path) -> None:
-    scenario = HttpScenario(responder=_request_missing_value_response)
-    server, thread = _start_http_server(scenario)
-    try:
-        data_dir = _write_data_directory(tmp_path, server.server_address[1])
-        client = DevHubClient.from_runtime(DevHubClientOptions(client_id="http-client", data_dir=str(data_dir)))
+def test_http_client_when_request_result_missing_value_should_raise() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    transport = FakeHttpTransport(
+        {
+            "ok": True,
+            "invocationId": "invk-1",
+        }
+    )
+    transport_factory = FakeHttpTransportFactory(transport)
+    client = DevHubClient.from_runtime(
+        DevHubClientOptions(client_id="http-client"),
+        DevHubClientDependencies(runtime_resolver=resolver, transport_factory=transport_factory),
+    )
 
-        with pytest.raises(RuntimeError):
-            client.request(InvokeRequest(app_id="test.app", method="test.request", target=InvocationTarget(scope="")))
-    finally:
-        server.shutdown()
-        thread.join(timeout=5)
+    with pytest.raises(RuntimeError):
+        client.request(InvokeRequest(app_id="test.app", method="test.request", target=InvocationTarget(scope="")))
 
 
 def test_http_client_validate_definition_should_send_params_and_parse_result() -> None:
@@ -699,154 +702,156 @@ def test_http_client_instance_lifecycle_methods_should_forward_instance_session_
     }
 
 
-def test_http_client_when_launch_status_invalid_should_raise(tmp_path: Path) -> None:
-    scenario = HttpScenario(responder=_launch_invalid_status_response)
-    server, thread = _start_http_server(scenario)
-    try:
-        data_dir = _write_data_directory(tmp_path, server.server_address[1])
-        client = DevHubClient.from_runtime(DevHubClientOptions(client_id="http-client", data_dir=str(data_dir)))
-
-        with pytest.raises(RuntimeError):
-            client.launch(LaunchRequest(app_id="test.app", scope=""))
-    finally:
-        server.shutdown()
-        thread.join(timeout=5)
-
-
-def _start_http_server(scenario: HttpScenario) -> tuple[ThreadingHTTPServer, threading.Thread]:
-    class Handler(BaseHTTPRequestHandler):
-        def do_POST(self) -> None:  # noqa: N802
-            length = int(self.headers["Content-Length"])
-            payload = json.loads(self.rfile.read(length).decode("utf-8"))
-            scenario.requests.append(payload)
-            scenario.headers.append({name.lower(): value for name, value in self.headers.items()})
-
-            response = scenario.responder(payload)
-            body = response.encode("utf-8") if isinstance(response, str) else json.dumps(response).encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-
-        def log_message(self, format: str, *args: Any) -> None:  # noqa: A003
-            return
-
-    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    return server, thread
-
-
-def _write_data_directory(tmp_path: Path, port: int) -> Path:
-    data_dir = tmp_path / "devhub-data"
-    runtime_dir = data_dir / "runtime"
-    runtime_dir.mkdir(parents=True)
-    token_file = runtime_dir / "token.txt"
-    token_file.write_text("token-1", encoding="utf-8")
-    (runtime_dir / "hub.json").write_text(
-        json.dumps(
-            {
-                "protocolVersion": 1,
-                "pid": 12345,
-                "httpBaseUrl": f"http://127.0.0.1:{port}",
-                "wsUrl": "ws://127.0.0.1:1/ws",
-                "tokenFile": str(token_file),
-                "startedAtUtc": "2026-03-09T00:00:00Z",
-                "runtimeTuning": {
-                    "leaseSeconds": 30,
-                    "onlineThresholdSeconds": 30,
-                    "launchDedupeWindowSeconds": 30,
-                    "launchRegisterTimeoutSeconds": 30,
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
-    return data_dir
-
-
-def _ping_success_response(request: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "jsonrpc": "2.0",
-        "id": request["id"],
-        "result": {
-            "ok": True,
-            "serverTimeUtc": "2026-03-09T00:00:00Z",
-            "echo": request["params"]["echo"],
-        },
-    }
-
-
-def _unauthorized_response(request: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "jsonrpc": "2.0",
-        "id": request["id"],
-        "error": {
-            "code": -32001,
-            "message": "unauthorized",
-            "data": {"reason": "invalid_token"},
-        },
-    }
-
-
-def _invalid_error_data_response(request: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "jsonrpc": "2.0",
-        "id": request["id"],
-        "error": {
-            "code": -32001,
-            "message": "unauthorized",
-            "data": "invalid_token",
-        },
-    }
-
-
-def _ping_response_with_non_standard_json_constant(request: dict[str, Any]) -> str:
-    return json.dumps(
+def test_http_client_launch_should_send_request_and_parse_result() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    transport = FakeHttpTransport(
         {
-            "jsonrpc": "2.0",
-            "id": request["id"],
-            "result": {
-                "ok": True,
-                "serverTimeUtc": "2026-03-09T00:00:00Z",
-                "echo": request["params"]["echo"],
-            },
+            "ok": True,
+            "status": "started",
+            "launchId": "launch-1",
+            "dedupeKey": "dedupe-1",
+            "pid": 1234,
         }
-    ).replace('"result": {', '"result": {"extra": NaN, ', 1)
+    )
+    transport_factory = FakeHttpTransportFactory(transport)
+    client = DevHubClient.from_runtime(
+        DevHubClientOptions(client_id="http-client"),
+        DevHubClientDependencies(runtime_resolver=resolver, transport_factory=transport_factory),
+    )
 
+    result = client.launch(
+        LaunchRequest(
+            app_id="test.app",
+            scope="workspace-a",
+            dedupe_key="dedupe-1",
+            wait_for_register_ms=1500,
+        )
+    )
 
-def _list_definitions_response(request: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "jsonrpc": "2.0",
-        "id": request["id"],
-        "result": {
-            "ok": True,
-            "definitions": [],
+    assert result.status == "started"
+    assert result.launch_id == "launch-1"
+    assert transport.calls[0] == {
+        "method": "hub.apps.launch",
+        "params": {
+            "appId": "test.app",
+            "scope": "workspace-a",
+            "dedupeKey": "dedupe-1",
+            "waitForRegisterMs": 1500,
         },
     }
 
 
-def _request_missing_value_response(request: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "jsonrpc": "2.0",
-        "id": request["id"],
-        "result": {
-            "ok": True,
-            "invocationId": "invk-1",
-        },
-    }
-
-
-def _launch_invalid_status_response(request: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "jsonrpc": "2.0",
-        "id": request["id"],
-        "result": {
+def test_http_client_when_launch_status_invalid_should_raise() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    transport = FakeHttpTransport(
+        {
             "ok": True,
             "status": "invalid",
             "launchId": "launch-1",
             "pid": 123,
+        }
+    )
+    transport_factory = FakeHttpTransportFactory(transport)
+    client = DevHubClient.from_runtime(
+        DevHubClientOptions(client_id="http-client"),
+        DevHubClientDependencies(runtime_resolver=resolver, transport_factory=transport_factory),
+    )
+
+    with pytest.raises(RuntimeError):
+        client.launch(LaunchRequest(app_id="test.app", scope=""))
+
+
+def test_http_client_poll_should_send_request_and_parse_result() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    transport = FakeHttpTransport(
+        {
+            "ok": True,
+            "serverTimeUtc": "2026-03-09T00:00:00Z",
+            "items": [],
+        }
+    )
+    transport_factory = FakeHttpTransportFactory(transport)
+    client = DevHubClient.from_runtime(
+        DevHubClientOptions(client_id="http-client"),
+        DevHubClientDependencies(runtime_resolver=resolver, transport_factory=transport_factory),
+    )
+
+    result = client.poll(
+        PollRequest(
+            instance_id="inst-1",
+            instance_session_token="token-1",
+            max_count=3,
+            wait_ms=50,
+        )
+    )
+
+    assert result.ok is True
+    assert result.items == []
+    assert transport.calls[0] == {
+        "method": "hub.invoke.poll",
+        "params": {
+            "instanceId": "inst-1",
+            "instanceSessionToken": "token-1",
+            "maxCount": 3,
+            "waitMs": 50,
+        },
+    }
+
+
+def test_http_client_respond_should_send_value_and_error_requests() -> None:
+    connection_info = _create_connection_info()
+    resolver = FakeRuntimeResolver(connection_info)
+    transport = FakeHttpTransport({"ok": True})
+    transport_factory = FakeHttpTransportFactory(transport)
+    client = DevHubClient.from_runtime(
+        DevHubClientOptions(client_id="http-client"),
+        DevHubClientDependencies(runtime_resolver=resolver, transport_factory=transport_factory),
+    )
+
+    client.respond(
+        RespondRequest(
+            instance_id="inst-1",
+            instance_session_token="token-1",
+            invocation_id="invk-1",
+            lease_token="lease-1",
+            value={"ok": True},
+        )
+    )
+    client.respond(
+        RespondRequest(
+            instance_id="inst-1",
+            instance_session_token="token-1",
+            invocation_id="invk-2",
+            lease_token="lease-2",
+            error=DevHubCalleeError.create(1001, "app_error", {"reason": "boom"}),
+        )
+    )
+
+    assert transport.calls[0] == {
+        "method": "hub.invoke.respond",
+        "params": {
+            "instanceId": "inst-1",
+            "instanceSessionToken": "token-1",
+            "invocationId": "invk-1",
+            "leaseToken": "lease-1",
+            "value": {"ok": True},
+        },
+    }
+    assert transport.calls[1] == {
+        "method": "hub.invoke.respond",
+        "params": {
+            "instanceId": "inst-1",
+            "instanceSessionToken": "token-1",
+            "invocationId": "invk-2",
+            "leaseToken": "lease-2",
+            "error": {
+                "code": 1001,
+                "message": "app_error",
+                "data": {"reason": "boom"},
+            },
         },
     }
 

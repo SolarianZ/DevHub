@@ -367,6 +367,18 @@ async def test_ws_session_should_enforce_single_active_reader_until_reader_is_cl
         connect=connect,
     )
 
+    ping_task = asyncio.create_task(session.send_request("hub.ping", None))
+    await _wait_until(lambda: len(websocket.sent_messages) == 1)
+    ping_request = json.loads(websocket.sent_messages[0])
+    await websocket.emit_json(
+        {
+            "jsonrpc": "2.0",
+            "id": ping_request["id"],
+            "result": {"ok": True, "serverTimeUtc": "2026-03-09T00:00:00Z"},
+        }
+    )
+    assert (await ping_task)["ok"] is True
+
     first_reader = session.read_events()
     first_event_task = asyncio.create_task(anext(first_reader))
     await asyncio.sleep(0)
@@ -375,7 +387,13 @@ async def test_ws_session_should_enforce_single_active_reader_until_reader_is_cl
     with pytest.raises(RuntimeError, match="活动读取器"):
         await anext(second_reader)
 
-    session._stream.queue.put_nowait({"sequence": 1})
+    await websocket.emit_json(
+        {
+            "jsonrpc": "2.0",
+            "method": "hub.event",
+            "params": {"sequence": 1},
+        }
+    )
     assert await first_event_task == {"sequence": 1}
 
     await first_reader.aclose()
@@ -383,7 +401,13 @@ async def test_ws_session_should_enforce_single_active_reader_until_reader_is_cl
     third_reader = session.read_events()
     third_event_task = asyncio.create_task(anext(third_reader))
     await asyncio.sleep(0)
-    session._stream.queue.put_nowait({"sequence": 2})
+    await websocket.emit_json(
+        {
+            "jsonrpc": "2.0",
+            "method": "hub.event",
+            "params": {"sequence": 2},
+        }
+    )
     assert await third_event_task == {"sequence": 2}
 
     await third_reader.aclose()
