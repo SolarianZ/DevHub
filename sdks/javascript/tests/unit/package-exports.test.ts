@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterEach, expect, it } from "vitest";
 import * as sdk from "../../src/index.js";
@@ -77,13 +78,13 @@ async function buildPackageToTempDist(): Promise<string> {
   const outDir = path.join(tempRoot, "dist");
   const tsconfigPath = path.join(tempRoot, "tsconfig.build.json");
   const sdkRoot = new URL("../..", import.meta.url);
-  const sdkRootPath = sdkRoot.pathname;
+  const sdkRootPath = fileURLToPath(sdkRoot);
   const tscPath = new URL("../../node_modules/typescript/bin/tsc", import.meta.url);
 
   await writeFile(
     tsconfigPath,
     JSON.stringify({
-      extends: new URL("../../tsconfig.build.json", import.meta.url).pathname,
+      extends: fileURLToPath(new URL("../../tsconfig.build.json", import.meta.url)),
       compilerOptions: {
         outDir,
         typeRoots: [
@@ -94,7 +95,7 @@ async function buildPackageToTempDist(): Promise<string> {
     "utf-8"
   );
 
-  await execFileAsync(process.execPath, [tscPath.pathname, "-p", tsconfigPath], {
+  await execFileAsync(process.execPath, [fileURLToPath(tscPath), "-p", tsconfigPath], {
     cwd: sdkRootPath,
     maxBuffer: 10 * 1024 * 1024
   });
