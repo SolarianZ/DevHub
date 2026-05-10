@@ -85,6 +85,8 @@ DevHub/
 - 若改动暴露出抽象失衡，应同步整理相关结构，而不是继续在失衡结构上堆叠实现，必要时重构相关代码（甚至询问是否允许做破坏性变更）。
 - 对真正重复的业务规则、转换逻辑、校验流程和错误处理进行提炼复用；禁止为了“看起来统一”而强行合并语义不同的逻辑。
 - 序列化字段名、公开 DTO、错误码与协议状态必须保持稳定。涉及契约变化时，必须同步检查实现、测试与相关文档。
+- 跨平台路径处理统一使用语言标准库抽象：.NET 使用 `Path`/`Path.Combine`/`Path.GetFullPath`，JavaScript 使用 `path` 与 `fileURLToPath`/`pathToFileURL`，Python 使用 `pathlib`/`os.path`，Rust 使用 `std::path::Path`/`PathBuf`；禁止手写分隔符、硬编码 Windows 或 Unix 绝对路径格式。
+- 文件系统路径与 URL 必须分开处理；测试样例中的路径统一通过临时目录或标准库生成，禁止写死 `/tmp/...`、`C:\...` 或直接把 `URL.pathname` 当作本地路径。
 - 修改 package.json 后，必须同步刷新对应 `package-lock.json` ，避免导致 Github Workflow 失败。
 
 ### 测试规范
