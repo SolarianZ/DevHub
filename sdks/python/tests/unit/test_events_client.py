@@ -293,7 +293,7 @@ async def test_events_client_should_delegate_local_abandoned_request_maintenance
 
 
 @pytest.mark.asyncio
-async def test_events_client_get_definition_should_reuse_shared_payload_builder_validation() -> None:
+async def test_events_client_get_definition_should_reject_invalid_app_id_before_request() -> None:
     connection_info = _create_connection_info()
     resolver = FakeRuntimeResolver(connection_info)
     session = FakeWsSession(
@@ -322,7 +322,7 @@ async def test_events_client_get_definition_should_reuse_shared_payload_builder_
 
 
 @pytest.mark.asyncio
-async def test_events_client_get_instance_should_reuse_shared_payload_builder_validation() -> None:
+async def test_events_client_get_instance_should_reject_invalid_instance_id_before_request() -> None:
     connection_info = _create_connection_info()
     resolver = FakeRuntimeResolver(connection_info)
     session = FakeWsSession(
@@ -351,7 +351,7 @@ async def test_events_client_get_instance_should_reuse_shared_payload_builder_va
 
 
 @pytest.mark.asyncio
-async def test_events_client_list_instances_should_reuse_shared_payload_builder_validation() -> None:
+async def test_events_client_list_instances_should_reject_invalid_app_id_before_request() -> None:
     connection_info = _create_connection_info()
     resolver = FakeRuntimeResolver(connection_info)
     session = FakeWsSession(

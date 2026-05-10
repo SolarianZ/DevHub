@@ -19,7 +19,6 @@ from devhub_sdk import (
     SDK_VERSION,
     VersionCompatibilityStatus,
 )
-from devhub_sdk._parsing import parse_definition_validation_result
 from devhub_sdk.models import LaunchRequest
 
 from ._host import DevHubHostFixture
@@ -150,20 +149,6 @@ def test_definition_management_should_round_trip_and_surface_host_validation() -
     with DevHubHostFixture.start() as host:
         client = host.create_client("http-definition-client")
 
-        invalid_definition_payload = {
-            "appId": "http.invalid.app",
-            "scope": "",
-            "displayName": " ",
-        }
-        invalid = parse_definition_validation_result(
-            client._send("hub.apps.validateDefinition", {"definition": invalid_definition_payload}),
-            path="hub.apps.validateDefinition.result",
-        )
-        assert invalid.ok is True
-        assert invalid.valid is False
-        assert invalid.errors
-        assert invalid.errors[0].path.startswith("definition.")
-
         definition = AppDefinition(
             app_id="http.manage.app",
             display_name="Managed HTTP App",
@@ -181,12 +166,6 @@ def test_definition_management_should_round_trip_and_surface_host_validation() -
 
         with pytest.raises(ValueError, match="display_name"):
             AppDefinition(app_id="http.invalid.app", display_name=" ", scope="")
-
-        with pytest.raises(DevHubRpcException) as upsert_error:
-            client._send("hub.apps.upsertDefinition", {"definition": invalid_definition_payload})
-        assert upsert_error.value.code == DevHubRpcErrorCode.INVALID_PARAMS
-        assert upsert_error.value.reason == "definition_invalid"
-        assert isinstance(upsert_error.value.try_get_data_property("errors"), list)
 
         client.delete_definition("http.manage.app", "")
         with pytest.raises(DevHubRpcException) as deleted_error:

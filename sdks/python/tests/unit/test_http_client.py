@@ -502,7 +502,7 @@ def test_http_client_get_instance_should_send_request_and_parse_instance() -> No
     }
 
 
-def test_http_client_get_instance_should_reuse_shared_payload_builder_validation() -> None:
+def test_http_client_get_instance_should_reject_invalid_instance_id_before_request() -> None:
     connection_info = _create_connection_info()
     resolver = FakeRuntimeResolver(connection_info)
     transport = FakeHttpTransport({"ok": True, "instance": {}})

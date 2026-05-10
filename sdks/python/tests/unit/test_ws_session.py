@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 
 from devhub_sdk import AbandonedRequestFilter, DevHubClientOptions, HubRuntime, HubRuntimeTuning, RuntimeConnectionInfo
+import devhub_sdk._ws_session as ws_session_module
 from devhub_sdk._ws_session import WebSocketJsonRpcSession
 
 
@@ -67,6 +68,37 @@ class ControlledConnect:
         self.connect_started.set()
         await self.allow_connect.wait()
         return self.websocket
+
+
+@dataclass(slots=True)
+class FakeClock:
+    value: float = 1000.0
+
+    def __call__(self) -> float:
+        return self.value
+
+    def advance(self, seconds: float) -> None:
+        self.value += seconds
+
+
+@dataclass(slots=True)
+class ScriptedWaitFor:
+    timeout_calls: int
+    fallback_wait_for: Any = asyncio.wait_for
+
+    async def __call__(self, awaitable, *, timeout):
+        if self.timeout_calls <= 0:
+            return await self.fallback_wait_for(awaitable, timeout=timeout)
+
+        self.timeout_calls -= 1
+        task = asyncio.ensure_future(awaitable)
+        await asyncio.sleep(0)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        raise asyncio.TimeoutError
 
 
 async def _wait_until(predicate, *, timeout: float = 1.0) -> None:
@@ -147,136 +179,156 @@ async def test_ws_session_when_first_requests_are_concurrent_should_share_single
 @pytest.mark.asyncio
 async def test_ws_session_when_late_response_matches_timed_out_request_should_ignore_it() -> None:
     websocket = FakeWebSocket()
+    wait_for = ScriptedWaitFor(timeout_calls=1)
+    original_wait_for = ws_session_module.asyncio.wait_for
+    ws_session_module.asyncio.wait_for = wait_for  # type: ignore[method-assign]
 
-    async def connect(*_args, **_kwargs) -> FakeWebSocket:
-        return websocket
+    try:
+        async def connect(*_args, **_kwargs) -> FakeWebSocket:
+            return websocket
 
-    session = WebSocketJsonRpcSession(
-        _create_connection_info(),
-        DevHubClientOptions(client_id="ws-session-client", request_timeout=0.05),
-        connect=connect,
-    )
+        session = WebSocketJsonRpcSession(
+            _create_connection_info(),
+            DevHubClientOptions(client_id="ws-session-client", request_timeout=1),
+            connect=connect,
+        )
 
-    with pytest.raises(asyncio.TimeoutError):
-        await session.send_request("hub.ping", {"echo": "slow"})
+        with pytest.raises(asyncio.TimeoutError):
+            await session.send_request("hub.ping", {"echo": "slow"})
 
-    first_request = json.loads(websocket.sent_messages[0])
-    await websocket.emit_json(
-        {
-            "jsonrpc": "2.0",
-            "id": first_request["id"],
-            "result": {"ok": True, "serverTimeUtc": "2026-03-09T00:00:00Z"},
-        }
-    )
-    await asyncio.sleep(0)
-    assert session.get_abandoned_request_count() == 1
+        first_request = json.loads(websocket.sent_messages[0])
+        await websocket.emit_json(
+            {
+                "jsonrpc": "2.0",
+                "id": first_request["id"],
+                "result": {"ok": True, "serverTimeUtc": "2026-03-09T00:00:00Z"},
+            }
+        )
+        await asyncio.sleep(0)
+        assert session.get_abandoned_request_count() == 1
 
-    second_task = asyncio.create_task(session.send_request("hub.ping", {"echo": "fast"}))
-    await _wait_until(lambda: len(websocket.sent_messages) == 2)
-    second_request = json.loads(websocket.sent_messages[1])
-    await websocket.emit_json(
-        {
-            "jsonrpc": "2.0",
-            "id": second_request["id"],
-            "result": {"ok": True, "serverTimeUtc": "2026-03-09T00:00:01Z", "echo": "fast"},
-        }
-    )
+        second_task = asyncio.create_task(session.send_request("hub.ping", {"echo": "fast"}))
+        await _wait_until(lambda: len(websocket.sent_messages) == 2)
+        second_request = json.loads(websocket.sent_messages[1])
+        await websocket.emit_json(
+            {
+                "jsonrpc": "2.0",
+                "id": second_request["id"],
+                "result": {"ok": True, "serverTimeUtc": "2026-03-09T00:00:01Z", "echo": "fast"},
+            }
+        )
 
-    second_result = await second_task
+        second_result = await second_task
 
-    assert second_result["echo"] == "fast"
-    assert session.is_terminated() is False
-    await session.close()
+        assert second_result["echo"] == "fast"
+        assert session.is_terminated() is False
+        await session.close()
+    finally:
+        ws_session_module.asyncio.wait_for = original_wait_for  # type: ignore[method-assign]
 
 
 @pytest.mark.asyncio
 async def test_ws_session_should_count_and_clear_abandoned_requests_by_filter() -> None:
     websocket = FakeWebSocket()
+    clock = FakeClock()
+    wait_for = ScriptedWaitFor(timeout_calls=3)
+    original_monotonic = ws_session_module.time.monotonic
+    original_wait_for = ws_session_module.asyncio.wait_for
+    ws_session_module.time.monotonic = clock  # type: ignore[method-assign]
+    ws_session_module.asyncio.wait_for = wait_for  # type: ignore[method-assign]
 
-    async def connect(*_args, **_kwargs) -> FakeWebSocket:
-        return websocket
+    try:
+        async def connect(*_args, **_kwargs) -> FakeWebSocket:
+            return websocket
 
-    session = WebSocketJsonRpcSession(
-        _create_connection_info(),
-        DevHubClientOptions(client_id="ws-session-client", request_timeout=0.02),
-        connect=connect,
-    )
+        session = WebSocketJsonRpcSession(
+            _create_connection_info(),
+            DevHubClientOptions(client_id="ws-session-client", request_timeout=1),
+            connect=connect,
+        )
 
-    first_request = await _create_abandoned_request(
-        session,
-        websocket,
-        "hub.apps.getDefinition",
-        {"appId": "app-a", "scope": ""},
-    )
-    await _create_abandoned_request(
-        session,
-        websocket,
-        "hub.apps.listInstances",
-        {"scope": None, "appId": "app-b"},
-    )
-    third_request = await _create_abandoned_request(
-        session,
-        websocket,
-        "hub.apps.getInstance",
-        {"instanceId": "inst-1"},
-    )
+        await _create_abandoned_request(
+            session,
+            websocket,
+            "hub.apps.getDefinition",
+            {"appId": "app-a", "scope": ""},
+        )
+        await _create_abandoned_request(
+            session,
+            websocket,
+            "hub.apps.getInstance",
+            {"instanceId": "inst-1"},
+        )
+        clock.advance(10)
+        await _create_abandoned_request(
+            session,
+            websocket,
+            "hub.apps.listInstances",
+            {"scope": None, "appId": "app-b"},
+        )
 
-    session._abandoned_request_ids[first_request["id"]].abandoned_at -= 10
-    session._abandoned_request_ids[third_request["id"]].abandoned_at -= 10
+        assert session.get_abandoned_request_count() == 3
+        assert session.get_abandoned_request_count(AbandonedRequestFilter(app_id="app-a")) == 1
+        assert session.get_abandoned_request_count(AbandonedRequestFilter(app_id="app-b")) == 1
+        assert session.get_abandoned_request_count(AbandonedRequestFilter(method="hub.apps.getInstance")) == 1
+        assert session.get_abandoned_request_count(AbandonedRequestFilter(older_than_seconds=5)) == 2
+        assert session.get_abandoned_request_count(
+            AbandonedRequestFilter(older_than_seconds=5, app_id="app-a")
+        ) == 1
 
-    assert session.get_abandoned_request_count() == 3
-    assert session.get_abandoned_request_count(AbandonedRequestFilter(app_id="app-a")) == 1
-    assert session.get_abandoned_request_count(AbandonedRequestFilter(app_id="app-b")) == 1
-    assert session.get_abandoned_request_count(AbandonedRequestFilter(method="hub.apps.getInstance")) == 1
-    assert session.get_abandoned_request_count(AbandonedRequestFilter(older_than_seconds=5)) == 2
-    assert session.get_abandoned_request_count(
-        AbandonedRequestFilter(older_than_seconds=5, app_id="app-a")
-    ) == 1
+        assert session.clear_abandoned_requests(
+            AbandonedRequestFilter(older_than_seconds=5, app_id="app-a")
+        ) == 1
+        assert session.get_abandoned_request_count() == 2
+        assert session.clear_abandoned_requests(AbandonedRequestFilter(app_id="app-b")) == 1
+        assert session.clear_abandoned_requests(AbandonedRequestFilter(method="hub.apps.getInstance")) == 1
+        assert session.get_abandoned_request_count() == 0
 
-    assert session.clear_abandoned_requests(
-        AbandonedRequestFilter(older_than_seconds=5, app_id="app-a")
-    ) == 1
-    assert session.get_abandoned_request_count() == 2
-    assert session.clear_abandoned_requests(AbandonedRequestFilter(app_id="app-b")) == 1
-    assert session.clear_abandoned_requests(AbandonedRequestFilter(method="hub.apps.getInstance")) == 1
-    assert session.get_abandoned_request_count() == 0
-
-    await session.close()
+        await session.close()
+    finally:
+        ws_session_module.time.monotonic = original_monotonic  # type: ignore[method-assign]
+        ws_session_module.asyncio.wait_for = original_wait_for  # type: ignore[method-assign]
 
 
 @pytest.mark.asyncio
 async def test_ws_session_when_manually_cleared_request_receives_late_response_should_fault_session() -> None:
     websocket = FakeWebSocket()
+    wait_for = ScriptedWaitFor(timeout_calls=1)
+    original_wait_for = ws_session_module.asyncio.wait_for
+    ws_session_module.asyncio.wait_for = wait_for  # type: ignore[method-assign]
 
-    async def connect(*_args, **_kwargs) -> FakeWebSocket:
-        return websocket
+    try:
+        async def connect(*_args, **_kwargs) -> FakeWebSocket:
+            return websocket
 
-    session = WebSocketJsonRpcSession(
-        _create_connection_info(),
-        DevHubClientOptions(client_id="ws-session-client", request_timeout=0.05),
-        connect=connect,
-    )
+        session = WebSocketJsonRpcSession(
+            _create_connection_info(),
+            DevHubClientOptions(client_id="ws-session-client", request_timeout=1),
+            connect=connect,
+        )
 
-    request = await _create_abandoned_request(session, websocket, "hub.ping", {"echo": "slow"})
+        request = await _create_abandoned_request(session, websocket, "hub.ping", {"echo": "slow"})
 
-    assert session.get_abandoned_request_count() == 1
-    assert session.clear_abandoned_requests() == 1
-    assert session.get_abandoned_request_count() == 0
+        assert session.get_abandoned_request_count() == 1
+        assert session.clear_abandoned_requests() == 1
+        assert session.get_abandoned_request_count() == 0
 
-    await websocket.emit_json(
-        {
-            "jsonrpc": "2.0",
-            "id": request["id"],
-            "result": {"ok": True, "serverTimeUtc": "2026-03-09T00:00:00Z"},
-        }
-    )
-    await asyncio.sleep(0)
+        await websocket.emit_json(
+            {
+                "jsonrpc": "2.0",
+                "id": request["id"],
+                "result": {"ok": True, "serverTimeUtc": "2026-03-09T00:00:00Z"},
+            }
+        )
+        await asyncio.sleep(0)
 
-    assert session.is_terminated() is True
-    with pytest.raises(RuntimeError, match="事件流已终止"):
-        await session.send_request("hub.ping", None)
+        assert session.is_terminated() is True
+        with pytest.raises(RuntimeError, match="事件流已终止"):
+            await session.send_request("hub.ping", None)
 
-    await session.close()
+        await session.close()
+    finally:
+        ws_session_module.asyncio.wait_for = original_wait_for  # type: ignore[method-assign]
 
 
 @pytest.mark.asyncio
@@ -417,55 +469,67 @@ async def test_ws_session_should_enforce_single_active_reader_until_reader_is_cl
 @pytest.mark.asyncio
 async def test_ws_session_close_should_bound_cleanup_when_websocket_close_hangs() -> None:
     websocket = FakeWebSocket(block_close_until_cancelled=True)
+    wait_for = ScriptedWaitFor(timeout_calls=1)
+    original_wait_for = ws_session_module.asyncio.wait_for
+    ws_session_module.asyncio.wait_for = wait_for  # type: ignore[method-assign]
 
-    async def connect(*_args, **_kwargs) -> FakeWebSocket:
-        return websocket
+    try:
+        async def connect(*_args, **_kwargs) -> FakeWebSocket:
+            return websocket
 
-    session = WebSocketJsonRpcSession(
-        _create_connection_info(),
-        DevHubClientOptions(client_id="ws-session-client", request_timeout=None),
-        connect=connect,
-    )
+        session = WebSocketJsonRpcSession(
+            _create_connection_info(),
+            DevHubClientOptions(client_id="ws-session-client", request_timeout=None),
+            connect=connect,
+        )
 
-    request_task = asyncio.create_task(session.send_request("hub.ping", None))
-    await _wait_until(lambda: len(websocket.sent_messages) == 1)
+        request_task = asyncio.create_task(session.send_request("hub.ping", None))
+        await _wait_until(lambda: len(websocket.sent_messages) == 1)
 
-    await asyncio.wait_for(session.close(), timeout=1.2)
+        await session.close()
 
-    await websocket.close_attempted.wait()
-    await websocket.close_cancelled.wait()
-    assert websocket.close_calls == 1
-    assert websocket.close_reasons == ["session_closed"]
-    assert session.is_terminated() is True
-    with pytest.raises(RuntimeError, match="WebSocket 连接已关闭"):
-        await request_task
+        await websocket.close_attempted.wait()
+        await websocket.close_cancelled.wait()
+        assert websocket.close_calls == 1
+        assert websocket.close_reasons == ["session_closed"]
+        assert session.is_terminated() is True
+        with pytest.raises(RuntimeError, match="WebSocket 连接已关闭"):
+            await request_task
+    finally:
+        ws_session_module.asyncio.wait_for = original_wait_for  # type: ignore[method-assign]
 
 
 @pytest.mark.asyncio
 async def test_ws_session_disconnect_should_bound_cleanup_when_websocket_close_hangs() -> None:
     websocket = FakeWebSocket(block_close_until_cancelled=True)
+    wait_for = ScriptedWaitFor(timeout_calls=1)
+    original_wait_for = ws_session_module.asyncio.wait_for
+    ws_session_module.asyncio.wait_for = wait_for  # type: ignore[method-assign]
 
-    async def connect(*_args, **_kwargs) -> FakeWebSocket:
-        return websocket
+    try:
+        async def connect(*_args, **_kwargs) -> FakeWebSocket:
+            return websocket
 
-    session = WebSocketJsonRpcSession(
-        _create_connection_info(),
-        DevHubClientOptions(client_id="ws-session-client", request_timeout=None),
-        connect=connect,
-    )
+        session = WebSocketJsonRpcSession(
+            _create_connection_info(),
+            DevHubClientOptions(client_id="ws-session-client", request_timeout=None),
+            connect=connect,
+        )
 
-    request_task = asyncio.create_task(session.send_request("hub.ping", None))
-    await _wait_until(lambda: len(websocket.sent_messages) == 1)
+        request_task = asyncio.create_task(session.send_request("hub.ping", None))
+        await _wait_until(lambda: len(websocket.sent_messages) == 1)
 
-    await asyncio.wait_for(session.disconnect("manual_disconnect"), timeout=1.2)
+        await session.disconnect("manual_disconnect")
 
-    await websocket.close_attempted.wait()
-    await websocket.close_cancelled.wait()
-    assert websocket.close_calls == 1
-    assert websocket.close_reasons == ["manual_disconnect"]
-    assert session.is_terminated() is True
-    with pytest.raises(RuntimeError, match="WebSocket 连接已关闭"):
-        await request_task
+        await websocket.close_attempted.wait()
+        await websocket.close_cancelled.wait()
+        assert websocket.close_calls == 1
+        assert websocket.close_reasons == ["manual_disconnect"]
+        assert session.is_terminated() is True
+        with pytest.raises(RuntimeError, match="WebSocket 连接已关闭"):
+            await request_task
+    finally:
+        ws_session_module.asyncio.wait_for = original_wait_for  # type: ignore[method-assign]
 
 
 def _create_connection_info() -> RuntimeConnectionInfo:
