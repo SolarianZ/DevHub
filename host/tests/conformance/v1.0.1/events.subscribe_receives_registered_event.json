@@ -74,7 +74,11 @@
           "scope": ""
         }
       }
-    }
+    },
+    "forbidPaths": [
+      "$.actual.event.payload.password",
+      "$.actual.event.payload.instanceSessionToken"
+    ]
   },
   "tags": [
     "events",

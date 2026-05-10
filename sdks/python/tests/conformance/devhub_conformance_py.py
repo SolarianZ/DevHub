@@ -81,6 +81,8 @@ def main() -> int:
         kind = request.get("kind") if isinstance(request, dict) else None
         if "expectedDiscovery" in vector:
             result = run_discovery(context)
+        elif kind == "raw.http":
+            result = run_http(context)
         elif kind in {"sdk.notify", "sdk.request"}:
             result = run_invocation(context)
         elif kind == "sdk.events":
@@ -245,6 +247,64 @@ def run_rpc(context: dict[str, Any]) -> dict[str, Any]:
         "sdk": "python",
         "vectorId": vector["id"],
         "phase": "rpc",
+        "outcome": "success",
+        "actual": actual,
+        "error": None,
+    }
+
+
+def run_http(context: dict[str, Any]) -> dict[str, Any]:
+    vector = context["vector"]
+    request = require_mapping(vector["request"], "request")
+    connection = discover_runtime(
+        DevHubClientOptions(
+            client_id=request.get("clientId") or "ConformanceHttpAdapter",
+            data_dir=context["dataDir"],
+        )
+    )
+
+    method = require_string(request.get("method"), "request.method").upper()
+    path = request.get("path", "/rpc")
+    if not isinstance(path, str) or not path.startswith("/"):
+        raise ValueError("request.path 必须为以 / 开头的字符串。")
+
+    headers = {str(key): str(value) for key, value in require_mapping(request.get("headers", {}), "request.headers").items()}
+    body_value = request.get("body", None)
+    body = None if body_value is None else normalize_raw_request_body(body_value).encode("utf-8")
+    http_request = urllib.request.Request(
+        f"{connection.runtime.http_base_url}{path}",
+        data=body,
+        headers=headers,
+        method=method,
+    )
+
+    try:
+        with urllib.request.urlopen(http_request, timeout=30) as response:
+            status_code = response.status
+            response_body = response.read()
+            response_headers = response.headers
+    except urllib.error.HTTPError as error:
+        status_code = error.code
+        response_body = error.read()
+        response_headers = error.headers
+    except urllib.error.URLError as error:
+        raise RuntimeError(f"HTTP request failed: {error}") from error
+
+    body_text = response_body.decode("utf-8", errors="replace")
+    actual: dict[str, Any] = {
+        "statusCode": status_code,
+        "headers": normalize_http_headers(response_headers.items()),
+        "bodyText": body_text,
+    }
+    try:
+        actual["bodyJson"] = json.loads(body_text) if body_text else None
+    except json.JSONDecodeError:
+        pass
+
+    return {
+        "sdk": "python",
+        "vectorId": vector["id"],
+        "phase": "http",
         "outcome": "success",
         "actual": actual,
         "error": None,
@@ -676,13 +736,14 @@ def normalize_invocation_error(exc: DevHubRpcException) -> dict[str, Any]:
         actual["reason"] = exc.reason
     if exc.invocation_id is not None:
         actual["invocationId"] = exc.invocation_id
-    if exc.callee_error is not None:
+    callee_error_payload = exc.data.get("calleeError") if isinstance(exc.data, dict) else None
+    if isinstance(callee_error_payload, dict):
         actual["calleeError"] = {
-            "code": exc.callee_error.code,
-            "message": exc.callee_error.message,
+            "code": callee_error_payload.get("code"),
+            "message": callee_error_payload.get("message"),
         }
-        if exc.callee_error.data is not None:
-            actual["calleeError"]["data"] = exc.callee_error.data
+        if "data" in callee_error_payload:
+            actual["calleeError"]["data"] = callee_error_payload["data"]
     return actual
 
 
@@ -836,6 +897,18 @@ def normalize_raw_request_body(request: Any) -> str:
     if isinstance(request, str):
         return request
     return json.dumps(request, ensure_ascii=False, separators=(",", ":"))
+
+
+def normalize_http_headers(items: Any) -> dict[str, str]:
+    headers: dict[str, str] = {}
+    for key, value in items:
+        normalized_key = str(key).lower()
+        text = str(value)
+        if normalized_key in headers:
+            headers[normalized_key] = f"{headers[normalized_key]}, {text}"
+        else:
+            headers[normalized_key] = text
+    return headers
 
 
 def parse_ws_payload(payload: Any) -> Any:

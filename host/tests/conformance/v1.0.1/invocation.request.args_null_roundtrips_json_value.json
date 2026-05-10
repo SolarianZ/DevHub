@@ -1,0 +1,92 @@
+{
+  "id": "invocation.request.args_null_roundtrips_json_value",
+  "caseId": "CONF-004",
+  "description": "SDK request 的 args=null 必须被接受并投递给 callee。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "appId": "invoke.request.args-null",
+        "scopeEntry": {
+          "scope": "",
+          "displayName": "invoke.request.args-null"
+        }
+      }
+    ]
+  },
+  "orchestration": {
+    "beforeCaller": [
+      {
+        "action": "register_instance",
+        "password": "conformance-password",
+        "instance": {
+          "instanceId": "request-args-null-inst",
+          "appId": "invoke.request.args-null",
+          "scope": "",
+          "pid": 32204,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      }
+    ],
+    "duringCaller": [
+      {
+        "action": "poll_expect_invocation",
+        "instanceId": "request-args-null-inst",
+        "waitMs": 1500,
+        "expected": {
+          "appId": "invoke.request.args-null",
+          "method": "demo.request.args-null",
+          "args": null,
+          "kind": "request"
+        }
+      },
+      {
+        "action": "respond_value",
+        "instanceId": "request-args-null-inst",
+        "value": {
+          "handled": "null"
+        }
+      }
+    ]
+  },
+  "request": {
+    "kind": "sdk.request",
+    "clientId": "ConformanceRequestArgsNull",
+    "invokeRequest": {
+      "appId": "invoke.request.args-null",
+      "method": "demo.request.args-null",
+      "args": null,
+      "target": {
+        "scope": ""
+      },
+      "options": {
+        "ttlMs": 5000,
+        "waitTimeoutMs": 3000,
+        "queueIfOffline": false,
+        "autoLaunch": false
+      }
+    }
+  },
+  "expectedResponse": {
+    "phase": "sdk-invocation",
+    "operation": "request",
+    "outcome": "success",
+    "actual": {
+      "ok": true,
+      "invocationId": "${ANY_NON_EMPTY_STRING}",
+      "value": {
+        "handled": "null"
+      }
+    }
+  },
+  "tags": [
+    "invocation",
+    "request",
+    "args",
+    "json-value",
+    "sdk"
+  ]
+}

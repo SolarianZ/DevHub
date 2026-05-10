@@ -882,7 +882,7 @@ def build_comparable_payload(result: dict[str, Any], is_discovery: bool) -> Any:
         }
 
     phase = result.get("phase")
-    if phase in {"sdk-invocation", "sdk-events", "ws"}:
+    if phase in {"sdk-invocation", "sdk-events", "ws", "http"}:
         comparable = {
             "phase": phase,
             "outcome": result.get("outcome"),
@@ -1074,6 +1074,8 @@ def resolve_adapter_output_contract(vector: dict[str, Any]) -> AdapterOutputCont
 
     request = vector.get("request")
     kind = request.get("kind") if isinstance(request, dict) else None
+    if kind == "raw.http":
+        return AdapterOutputContract(phase="http")
     if kind in {"sdk.notify", "sdk.request"}:
         return AdapterOutputContract(phase="sdk-invocation", allowed_operations=("notify", "request"))
     if kind == "sdk.events":

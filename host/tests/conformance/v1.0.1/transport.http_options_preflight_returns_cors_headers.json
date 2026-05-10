@@ -1,0 +1,38 @@
+{
+  "id": "transport.http_options_preflight_returns_cors_headers",
+  "caseId": "CONF-008",
+  "description": "OPTIONS /rpc 预检必须返回 204、Origin CORS 头且无响应体。",
+  "transport": "http",
+  "request": {
+    "kind": "raw.http",
+    "method": "OPTIONS",
+    "path": "/rpc",
+    "headers": {
+      "Origin": "http://localhost:1420",
+      "Access-Control-Request-Method": "POST",
+      "Access-Control-Request-Headers": "Authorization, Content-Type, X-DevHub-Protocol, X-DevHub-ClientId, X-DevHub-ClientSessionId"
+    }
+  },
+  "expectedResponse": {
+    "phase": "http",
+    "outcome": "success",
+    "actual": {
+      "statusCode": 204,
+      "headers": {
+        "access-control-allow-origin": "http://localhost:1420",
+        "access-control-allow-methods": "POST, OPTIONS",
+        "access-control-allow-headers": "Authorization, Content-Type, X-DevHub-Protocol, X-DevHub-ClientId, X-DevHub-ClientSessionId",
+        "vary": "Origin"
+      },
+      "bodyText": "",
+      "bodyJson": null
+    },
+    "matchMode": "subset"
+  },
+  "tags": [
+    "http",
+    "transport",
+    "cors",
+    "options"
+  ]
+}

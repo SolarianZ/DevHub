@@ -39,6 +39,9 @@ class TestLaunchSpecEdges(unittest.TestCase):
     def _launch_script_path(self):
         return get_shared_test_asset_path("launch_noop.py")
 
+    def _capture_argv_script_path(self):
+        return get_shared_test_asset_path("launch_capture_argv.py")
+
     def _build_launch_config(self, dedupe_key_template=None):
         launch_config = {
             "exePath": get_test_python_executable(),
@@ -600,6 +603,119 @@ class TestLaunchSpecEdges(unittest.TestCase):
 
         return result
 
+    def test_launch_edge_009_shell_metacharacters_should_remain_argv_literals(self):
+        """LAUNCH-EDGE-009: shell 元字符必须作为普通 argv 传递。"""
+        result = TestResult("LAUNCH-EDGE-009 shell 元字符不经 shell 执行")
+        definition_paths = []
+        temp_dir = None
+
+        try:
+            temp_dir = tempfile.mkdtemp(prefix="devhub-launch-edge-shell-")
+            shell_probe_file = os.path.join(temp_dir, "shell-executed.txt")
+            template_capture_file = os.path.join(temp_dir, "template-argv.json")
+            structured_capture_file = os.path.join(temp_dir, "structured-argv.json")
+            capture_script_path = self._capture_argv_script_path()
+            meta_args = [
+                ";",
+                "|",
+                f">{shell_probe_file}",
+                f"$(touch {shell_probe_file})",
+                f"`touch {shell_probe_file}`",
+            ]
+
+            template_app_id = self._new_app_id("shell-template")
+            definition_paths.append(self._create_definition(
+                template_app_id,
+                {
+                    "exePath": get_test_python_executable(),
+                    "argsTemplate": (
+                        f"\"{capture_script_path}\" \"{template_capture_file}\" "
+                        f"{meta_args[0]} {meta_args[1]} {meta_args[2]} "
+                        f"\"{meta_args[3]}\" \"{meta_args[4]}\""
+                    ),
+                },
+            ))
+
+            structured_app_id = self._new_app_id("shell-argv")
+            definition_paths.append(self._create_definition(
+                structured_app_id,
+                {
+                    "exePath": get_test_python_executable(),
+                    "args": [capture_script_path, structured_capture_file, *meta_args],
+                },
+            ))
+
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            for app_id, request_id in (
+                (template_app_id, "launch-edge-009-template"),
+                (structured_app_id, "launch-edge-009-argv"),
+            ):
+                response = client.launch_app(
+                    app_id=app_id,
+                    scope="",
+                    wait_for_register_ms=0,
+                    request_id=request_id,
+                )
+                if not RpcAssertions.expect_success(result, response, ["status", "launchId"]):
+                    return result
+
+            deadline = time.time() + 3
+            while time.time() < deadline and (
+                not os.path.exists(template_capture_file)
+                or not os.path.exists(structured_capture_file)
+            ):
+                time.sleep(0.05)
+
+            if os.path.exists(shell_probe_file):
+                result.mark_failure(f"❌ shell 元字符被执行并创建了哨兵文件: {shell_probe_file}")
+                return result
+
+            missing_files = [
+                path for path in (template_capture_file, structured_capture_file)
+                if not os.path.exists(path)
+            ]
+            if missing_files:
+                result.mark_failure(f"❌ 启动进程未写出 argv 捕获文件: {missing_files}")
+                return result
+
+            with open(template_capture_file, "r", encoding="utf-8") as handle:
+                template_captured = json.load(handle)
+            with open(structured_capture_file, "r", encoding="utf-8") as handle:
+                structured_captured = json.load(handle)
+
+            if template_captured != meta_args:
+                result.mark_failure(
+                    f"❌ argsTemplate shell 元字符未按字面 argv 传递: expected={meta_args}, actual={template_captured}"
+                )
+                return result
+
+            if structured_captured != meta_args:
+                result.mark_failure(
+                    f"❌ launch.args shell 元字符未按字面 argv 传递: expected={meta_args}, actual={structured_captured}"
+                )
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            for definition_path in definition_paths:
+                delete_definitions([definition_path] if definition_path else [])
+            if temp_dir and os.path.isdir(temp_dir):
+                try:
+                    for root, dirs, files in os.walk(temp_dir, topdown=False):
+                        for file_name in files:
+                            os.remove(os.path.join(root, file_name))
+                        for dir_name in dirs:
+                            os.rmdir(os.path.join(root, dir_name))
+                    os.rmdir(temp_dir)
+                except Exception:
+                    pass
+
+        return result
+
     def run_all_tests(self, full=False):
         return [
             self.test_launch_edge_001_default_dedupe_template_should_apply(),
@@ -611,6 +727,7 @@ class TestLaunchSpecEdges(unittest.TestCase):
             self.test_launch_edge_006_blank_exepath_should_fail_at_launch_stage(),
             self.test_launch_edge_007_argstemplate_should_split_quotes_and_escapes(),
             self.test_launch_edge_008_invalid_argstemplate_should_return_invalid_params(),
+            self.test_launch_edge_009_shell_metacharacters_should_remain_argv_literals(),
         ]
 
 

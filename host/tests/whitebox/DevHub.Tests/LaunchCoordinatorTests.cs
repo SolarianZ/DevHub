@@ -11,6 +11,7 @@ using Moq;
 /// <summary>
 /// LaunchCoordinator 行为测试。
 /// </summary>
+[Collection(TestCollections.ProcessEnvironment)]
 [Trait("Category", "Impl")]
 public class LaunchCoordinatorTests : IDisposable
 {
@@ -799,7 +800,7 @@ public class LaunchCoordinatorTests : IDisposable
 
         await launchStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
         clock.Advance(TimeSpan.FromSeconds(2));
-        await Assert.ThrowsAsync<TimeoutException>(() => launchTask.WaitAsync(TimeSpan.FromMilliseconds(100)));
+        Assert.False(launchTask.IsCompleted);
 
         clock.Advance(TimeSpan.FromSeconds(3));
         var result = await launchTask.WaitAsync(TimeSpan.FromSeconds(2));
@@ -840,6 +841,9 @@ public class LaunchCoordinatorTests : IDisposable
                         UseShellExecute = false,
                     }
                 };
+                process.StartInfo.FileName = ResolvePythonExecutable();
+                process.StartInfo.ArgumentList.Clear();
+                process.StartInfo.ArgumentList.Add(ResolveSharedAssetPath("launch_exit_immediately.py"));
                 Assert.True(process.Start());
                 return process;
             });
@@ -1043,5 +1047,33 @@ public class LaunchCoordinatorTests : IDisposable
         {
             UtcNow = UtcNow.Add(duration);
         }
+    }
+
+    private static string ResolvePythonExecutable()
+    {
+        var configured = Environment.GetEnvironmentVariable("DEVHUB_TEST_PYTHON");
+        if (!string.IsNullOrWhiteSpace(configured))
+        {
+            return configured;
+        }
+
+        return "python3";
+    }
+
+    private static string ResolveSharedAssetPath(string fileName)
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory != null)
+        {
+            var candidate = Path.Combine(directory.FullName, "host", "tests", "assets", fileName);
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new InvalidOperationException($"无法定位共享测试资产：{fileName}。");
     }
 }

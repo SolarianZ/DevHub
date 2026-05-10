@@ -1,0 +1,92 @@
+{
+  "id": "invocation.request.args_number_roundtrips_json_value",
+  "caseId": "CONF-004",
+  "description": "SDK request 的 args=number 必须原样投递给 callee。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "appId": "invoke.request.args-number",
+        "scopeEntry": {
+          "scope": "",
+          "displayName": "invoke.request.args-number"
+        }
+      }
+    ]
+  },
+  "orchestration": {
+    "beforeCaller": [
+      {
+        "action": "register_instance",
+        "password": "conformance-password",
+        "instance": {
+          "instanceId": "request-args-number-inst",
+          "appId": "invoke.request.args-number",
+          "scope": "",
+          "pid": 32206,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      }
+    ],
+    "duringCaller": [
+      {
+        "action": "poll_expect_invocation",
+        "instanceId": "request-args-number-inst",
+        "waitMs": 1500,
+        "expected": {
+          "appId": "invoke.request.args-number",
+          "method": "demo.request.args-number",
+          "kind": "request",
+          "args": 42
+        }
+      },
+      {
+        "action": "respond_value",
+        "instanceId": "request-args-number-inst",
+        "value": {
+          "handled": "number"
+        }
+      }
+    ]
+  },
+  "request": {
+    "kind": "sdk.request",
+    "clientId": "ConformanceRequestArgsNumber",
+    "invokeRequest": {
+      "appId": "invoke.request.args-number",
+      "method": "demo.request.args-number",
+      "args": 42,
+      "target": {
+        "scope": ""
+      },
+      "options": {
+        "ttlMs": 5000,
+        "waitTimeoutMs": 3000,
+        "queueIfOffline": false,
+        "autoLaunch": false
+      }
+    }
+  },
+  "expectedResponse": {
+    "phase": "sdk-invocation",
+    "operation": "request",
+    "outcome": "success",
+    "actual": {
+      "ok": true,
+      "invocationId": "${ANY_NON_EMPTY_STRING}",
+      "value": {
+        "handled": "number"
+      }
+    }
+  },
+  "tags": [
+    "invocation",
+    "request",
+    "args",
+    "json-value",
+    "sdk"
+  ]
+}

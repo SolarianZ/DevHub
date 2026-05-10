@@ -15,6 +15,7 @@ using Moq;
 /// <summary>
 /// Invocation 路由与门禁相关测试。
 /// </summary>
+[Collection(TestCollections.ProcessEnvironment)]
 [Trait("Category", "Impl")]
 public class InvocationRoutingTests : IDisposable
 {

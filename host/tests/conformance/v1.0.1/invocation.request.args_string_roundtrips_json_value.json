@@ -1,0 +1,92 @@
+{
+  "id": "invocation.request.args_string_roundtrips_json_value",
+  "caseId": "CONF-004",
+  "description": "SDK request 的 args=string 必须原样投递给 callee。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "appId": "invoke.request.args-string",
+        "scopeEntry": {
+          "scope": "",
+          "displayName": "invoke.request.args-string"
+        }
+      }
+    ]
+  },
+  "orchestration": {
+    "beforeCaller": [
+      {
+        "action": "register_instance",
+        "password": "conformance-password",
+        "instance": {
+          "instanceId": "request-args-string-inst",
+          "appId": "invoke.request.args-string",
+          "scope": "",
+          "pid": 32206,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      }
+    ],
+    "duringCaller": [
+      {
+        "action": "poll_expect_invocation",
+        "instanceId": "request-args-string-inst",
+        "waitMs": 1500,
+        "expected": {
+          "appId": "invoke.request.args-string",
+          "method": "demo.request.args-string",
+          "kind": "request",
+          "args": "literal-args"
+        }
+      },
+      {
+        "action": "respond_value",
+        "instanceId": "request-args-string-inst",
+        "value": {
+          "handled": "string"
+        }
+      }
+    ]
+  },
+  "request": {
+    "kind": "sdk.request",
+    "clientId": "ConformanceRequestArgsString",
+    "invokeRequest": {
+      "appId": "invoke.request.args-string",
+      "method": "demo.request.args-string",
+      "args": "literal-args",
+      "target": {
+        "scope": ""
+      },
+      "options": {
+        "ttlMs": 5000,
+        "waitTimeoutMs": 3000,
+        "queueIfOffline": false,
+        "autoLaunch": false
+      }
+    }
+  },
+  "expectedResponse": {
+    "phase": "sdk-invocation",
+    "operation": "request",
+    "outcome": "success",
+    "actual": {
+      "ok": true,
+      "invocationId": "${ANY_NON_EMPTY_STRING}",
+      "value": {
+        "handled": "string"
+      }
+    }
+  },
+  "tags": [
+    "invocation",
+    "request",
+    "args",
+    "json-value",
+    "sdk"
+  ]
+}

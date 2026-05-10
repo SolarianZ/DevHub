@@ -5,6 +5,7 @@ using DevHub.Core.Services;
 /// <summary>
 /// <see cref="RuntimePathOptions"/> 测试。
 /// </summary>
+[Collection(TestCollections.ProcessEnvironment)]
 [Trait("Category", "Impl")]
 public class RuntimePathOptionsTests : IDisposable
 {

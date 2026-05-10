@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.WebSockets;
 using System.Text;
@@ -29,15 +30,17 @@ try
         : null;
     var result = vector.TryGetProperty("expectedDiscovery", out _)
         ? await RunDiscoveryAsync(root, vector)
-        : string.Equals(kind, "sdk.notify", StringComparison.Ordinal) ||
-          string.Equals(kind, "sdk.request", StringComparison.Ordinal)
-            ? await RunInvocationAsync(root, vector, request)
-            : string.Equals(kind, "sdk.events", StringComparison.Ordinal)
-                ? await RunEventsAsync(root, vector, request)
-                : string.Equals(kind, "raw.ws", StringComparison.Ordinal) ||
-                  string.Equals(ReadString(vector, "transport"), "ws", StringComparison.Ordinal)
-                    ? await RunWsAsync(root, vector, request)
-                    : await RunRpcAsync(root, vector, request);
+        : string.Equals(kind, "raw.http", StringComparison.Ordinal)
+            ? await RunHttpAsync(root, vector, request)
+            : string.Equals(kind, "sdk.notify", StringComparison.Ordinal) ||
+              string.Equals(kind, "sdk.request", StringComparison.Ordinal)
+                ? await RunInvocationAsync(root, vector, request)
+                : string.Equals(kind, "sdk.events", StringComparison.Ordinal)
+                    ? await RunEventsAsync(root, vector, request)
+                    : string.Equals(kind, "raw.ws", StringComparison.Ordinal) ||
+                      string.Equals(ReadString(vector, "transport"), "ws", StringComparison.Ordinal)
+                        ? await RunWsAsync(root, vector, request)
+                        : await RunRpcAsync(root, vector, request);
     WritePayload(result);
 }
 catch (Exception exception)
@@ -642,6 +645,66 @@ async Task<AdapterResult> RunRpcAsync(JsonElement context, JsonElement vector, J
         null);
 }
 
+async Task<AdapterResult> RunHttpAsync(JsonElement context, JsonElement vector, JsonElement request)
+{
+    var dataDir = ReadString(context, "dataDir");
+    var connection = await new FileSystemDevHubRuntimeResolver().ResolveAsync(new DevHubClientOptions
+    {
+        ClientId = ReadOptionalString(request, "clientId") ?? "ConformanceHttpAdapter",
+        DataDir = dataDir
+    });
+
+    using var client = new HttpClient();
+    var method = new HttpMethod(ReadString(request, "method").ToUpperInvariant());
+    var path = ReadOptionalString(request, "path") ?? "/rpc";
+    if (!path.StartsWith("/", StringComparison.Ordinal))
+    {
+        throw new InvalidOperationException("request.path 必须以 / 开头。");
+    }
+
+    using var requestMessage = new HttpRequestMessage(method, new Uri(new Uri(connection.Runtime.HttpBaseUrl), path));
+    if (request.TryGetProperty("body", out var bodyElement) && bodyElement.ValueKind != JsonValueKind.Null)
+    {
+        requestMessage.Content = new StringContent(NormalizeRawRequestBody(bodyElement), Encoding.UTF8);
+    }
+
+    if (request.TryGetProperty("headers", out var headersElement) && headersElement.ValueKind == JsonValueKind.Object)
+    {
+        foreach (var header in headersElement.EnumerateObject())
+        {
+            var value = header.Value.GetString() ?? string.Empty;
+            if (string.Equals(header.Name, "Content-Type", StringComparison.OrdinalIgnoreCase))
+            {
+                requestMessage.Content ??= new StringContent(string.Empty, Encoding.UTF8);
+                requestMessage.Content.Headers.ContentType = MediaTypeHeaderValue.Parse(value);
+                continue;
+            }
+
+            requestMessage.Headers.TryAddWithoutValidation(header.Name, value);
+        }
+    }
+
+    using var responseMessage = await client.SendAsync(requestMessage);
+    var body = await responseMessage.Content.ReadAsStringAsync();
+    var headers = NormalizeHttpHeaders(responseMessage);
+    var actual = new Dictionary<string, object?>
+    {
+        ["statusCode"] = (int)responseMessage.StatusCode,
+        ["headers"] = headers,
+        ["bodyText"] = body,
+        ["bodyJson"] = TryParseJsonBody(body)
+    };
+
+    return new AdapterResult(
+        "dotnet",
+        ReadString(vector, "id"),
+        "http",
+        null,
+        "success",
+        actual,
+        null);
+}
+
 async Task<JsonElement> CallRawRpcAsync(
     DevHubRuntimeConnectionInfo connection,
     string requestId,
@@ -1098,6 +1161,40 @@ object? DeserializeToObject(JsonElement element)
         : JsonSerializer.Deserialize<object>(element.GetRawText(), jsonOptions);
 }
 
+Dictionary<string, string> NormalizeHttpHeaders(HttpResponseMessage response)
+{
+    var headers = new Dictionary<string, string>(StringComparer.Ordinal);
+    foreach (var header in response.Headers)
+    {
+        headers[header.Key.ToLowerInvariant()] = string.Join(", ", header.Value);
+    }
+
+    foreach (var header in response.Content.Headers)
+    {
+        headers[header.Key.ToLowerInvariant()] = string.Join(", ", header.Value);
+    }
+
+    return headers;
+}
+
+object? TryParseJsonBody(string body)
+{
+    if (string.IsNullOrEmpty(body))
+    {
+        return null;
+    }
+
+    try
+    {
+        using var document = JsonDocument.Parse(body);
+        return ConvertJsonElement(document.RootElement);
+    }
+    catch (JsonException)
+    {
+        return null;
+    }
+}
+
 object NormalizeInvocationError(DevHubRpcException exception)
 {
     var payload = new Dictionary<string, object?>
@@ -1116,16 +1213,16 @@ object NormalizeInvocationError(DevHubRpcException exception)
         payload["invocationId"] = exception.InvocationId;
     }
 
-    if (exception.CalleeError is { } calleeError)
+    if (exception.TryGetDataProperty("calleeError", out var calleeErrorElement) && calleeErrorElement.ValueKind == JsonValueKind.Object)
     {
         var calleePayload = new Dictionary<string, object?>
         {
-            ["code"] = calleeError.Code,
-            ["message"] = calleeError.Message
+            ["code"] = calleeErrorElement.GetProperty("code").GetInt32(),
+            ["message"] = calleeErrorElement.GetProperty("message").GetString()
         };
-        if (calleeError.Data is { } data)
+        if (calleeErrorElement.TryGetProperty("data", out var dataElement))
         {
-            calleePayload["data"] = ConvertJsonElement(data);
+            calleePayload["data"] = ConvertJsonElement(dataElement);
         }
 
         payload["calleeError"] = calleePayload;

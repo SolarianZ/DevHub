@@ -1,0 +1,54 @@
+{
+  "id": "discovery.invalid_httpbaseurl_trailing_slash_rejected",
+  "caseId": "CONF-001",
+  "description": "SDK 读取 hub.json 时必须拒绝末尾斜杠形式的 httpBaseUrl。",
+  "transport": "http",
+  "setup": {
+    "runtime": {
+      "mode": "copy_host_runtime"
+    },
+    "dataDir": {
+      "files": [
+        {
+          "path": "runtime/hub.json",
+          "json": {
+            "protocolVersion": 1,
+            "pid": 47231,
+            "httpBaseUrl": "http://127.0.0.1:47231/",
+            "wsUrl": "${HOST_WS_URL}",
+            "tokenFile": "${VECTOR_TOKEN_FILE}",
+            "startedAtUtc": "2026-03-28T12:34:56Z",
+            "runtimeTuning": {
+              "leaseSeconds": 30,
+              "onlineThresholdSeconds": 30,
+              "launchDedupeWindowSeconds": 30,
+              "launchRegisterTimeoutSeconds": 30
+            }
+          }
+        }
+      ]
+    }
+  },
+  "request": {
+    "kind": "discovery",
+    "clientId": "ConformanceDiscoveryInvalidHttpBaseUrl",
+    "dataDir": "${VECTOR_DATA_DIR}",
+    "useEnvironmentDataDir": false
+  },
+  "expectedResponse": null,
+  "expectedDiscovery": {
+    "phase": "discovery",
+    "outcome": "error",
+    "actual": {
+      "reason": "invalid_runtime",
+      "message": "${ANY_NON_EMPTY_STRING}"
+    }
+  },
+  "tags": [
+    "discovery",
+    "runtime",
+    "httpBaseUrl",
+    "error",
+    "trailing-slash"
+  ]
+}

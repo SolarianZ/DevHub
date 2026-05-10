@@ -1,0 +1,81 @@
+{
+  "id": "invocation.notify.args_boolean_roundtrips_json_value",
+  "caseId": "CONF-004",
+  "description": "SDK notify 的 args=boolean 必须原样投递给 callee。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "appId": "invoke.notify.args-boolean",
+        "scopeEntry": {
+          "scope": "",
+          "displayName": "invoke.notify.args-boolean"
+        }
+      }
+    ]
+  },
+  "orchestration": {
+    "beforeCaller": [
+      {
+        "action": "register_instance",
+        "password": "conformance-password",
+        "instance": {
+          "instanceId": "notify-args-boolean-inst",
+          "appId": "invoke.notify.args-boolean",
+          "scope": "",
+          "pid": 32107,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      }
+    ],
+    "duringCaller": [
+      {
+        "action": "poll_expect_invocation",
+        "instanceId": "notify-args-boolean-inst",
+        "waitMs": 1500,
+        "expected": {
+          "appId": "invoke.notify.args-boolean",
+          "method": "demo.notify.args-boolean",
+          "kind": "notify",
+          "args": false
+        }
+      }
+    ]
+  },
+  "request": {
+    "kind": "sdk.notify",
+    "clientId": "ConformanceNotifyArgsBoolean",
+    "invokeRequest": {
+      "appId": "invoke.notify.args-boolean",
+      "method": "demo.notify.args-boolean",
+      "args": false,
+      "target": {
+        "scope": ""
+      },
+      "options": {
+        "ttlMs": 60000,
+        "queueIfOffline": false,
+        "autoLaunch": false
+      }
+    }
+  },
+  "expectedResponse": {
+    "phase": "sdk-invocation",
+    "operation": "notify",
+    "outcome": "success",
+    "actual": {
+      "ok": true,
+      "invocationId": "${ANY_NON_EMPTY_STRING}"
+    }
+  },
+  "tags": [
+    "invocation",
+    "notify",
+    "args",
+    "json-value",
+    "sdk"
+  ]
+}

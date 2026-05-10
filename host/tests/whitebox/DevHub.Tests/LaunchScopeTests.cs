@@ -14,6 +14,7 @@ using Moq;
 /// <summary>
 /// Launch scope 语义专项测试。
 /// </summary>
+[Collection(TestCollections.ProcessEnvironment)]
 [Trait("Category", "Impl")]
 public class LaunchScopeTests : IDisposable
 {

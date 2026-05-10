@@ -11,6 +11,7 @@ using static DevHub.Host.Tests.TestHelpers.RuntimeFilePermissionAssertions;
 /// <summary>
 /// HostRuntimeArtifactManager 恢复与自愈行为测试。
 /// </summary>
+[Collection(TestCollections.ProcessEnvironment)]
 [Trait("Category", "Impl")]
 public sealed class HostRuntimeArtifactManagerRecoveryTests : IDisposable
 {

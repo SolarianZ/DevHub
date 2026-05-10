@@ -189,6 +189,7 @@ adapter 必须向标准输出打印一条 JSON 对象；runner 会读取最后�
 
 - Discovery 向量：`phase` 必须为 `discovery`
 - 原始 HTTP JSON-RPC 向量：`phase` 必须为 `rpc`
+- 原始 HTTP 传输向量：`phase` 必须为 `http`
 - SDK Invocation 向量：`phase` 必须为 `sdk-invocation`，且 `operation` 必须为 `notify` 或 `request`
 - SDK Events 向量：`phase` 必须为 `sdk-events`
 - Raw WebSocket 向量：`phase` 必须为 `ws`

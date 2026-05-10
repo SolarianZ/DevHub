@@ -9,6 +9,7 @@ using Moq;
 /// <summary>
 /// RPC Router 测试故障注入行为。
 /// </summary>
+[Collection(TestCollections.ProcessEnvironment)]
 [Trait("Category", "Impl")]
 public sealed class RpcRouterFaultInjectionTests
 {

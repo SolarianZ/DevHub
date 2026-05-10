@@ -14,6 +14,7 @@ using static DevHub.Host.Tests.TestHelpers.RuntimeFilePermissionAssertions;
 /// <summary>
 /// HostRuntimeArtifactManager 基础行为测试。
 /// </summary>
+[Collection(TestCollections.ProcessEnvironment)]
 [Trait("Category", "Impl")]
 public sealed class HostRuntimeArtifactManagerTests
 {

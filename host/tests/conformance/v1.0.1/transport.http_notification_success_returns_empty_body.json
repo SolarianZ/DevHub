@@ -1,0 +1,38 @@
+{
+  "id": "transport.http_notification_success_returns_empty_body",
+  "caseId": "CONF-008",
+  "description": "合法 HTTP notification 成功处理后必须返回 200 且空响应体。",
+  "transport": "http",
+  "request": {
+    "kind": "raw.http",
+    "method": "POST",
+    "path": "/rpc",
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceRawHttp",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000201"
+    },
+    "body": {
+      "jsonrpc": "2.0",
+      "method": "hub.ping",
+      "params": {}
+    }
+  },
+  "expectedResponse": {
+    "phase": "http",
+    "outcome": "success",
+    "actual": {
+      "statusCode": 200,
+      "bodyText": "",
+      "bodyJson": null
+    },
+    "matchMode": "subset"
+  },
+  "tags": [
+    "http",
+    "transport",
+    "notification"
+  ]
+}

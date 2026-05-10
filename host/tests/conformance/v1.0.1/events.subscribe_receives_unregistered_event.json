@@ -123,7 +123,11 @@
           }
         }
       }
-    }
+    },
+    "forbidPaths": [
+      "$.actual.event.params.payload.password",
+      "$.actual.event.params.payload.instanceSessionToken"
+    ]
   },
   "tags": [
     "events",

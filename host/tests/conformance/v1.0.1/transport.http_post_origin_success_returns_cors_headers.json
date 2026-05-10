@@ -1,0 +1,51 @@
+{
+  "id": "transport.http_post_origin_success_returns_cors_headers",
+  "caseId": "CONF-008",
+  "description": "带 Origin 的 POST /rpc 成功响应必须返回 Origin CORS 头。",
+  "transport": "http",
+  "request": {
+    "kind": "raw.http",
+    "method": "POST",
+    "path": "/rpc",
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceRawHttp",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000201",
+      "Origin": "tauri://localhost"
+    },
+    "body": {
+      "jsonrpc": "2.0",
+      "id": "transport-cors-success",
+      "method": "hub.ping",
+      "params": {}
+    }
+  },
+  "expectedResponse": {
+    "matchMode": "subset",
+    "phase": "http",
+    "outcome": "success",
+    "actual": {
+      "statusCode": 200,
+      "headers": {
+        "access-control-allow-origin": "tauri://localhost",
+        "vary": "Origin"
+      },
+      "bodyJson": {
+        "jsonrpc": "2.0",
+        "id": "transport-cors-success",
+        "result": {
+          "ok": true,
+          "serverTimeUtc": "${ANY_ISO_UTC}"
+        }
+      }
+    }
+  },
+  "tags": [
+    "http",
+    "transport",
+    "cors",
+    "post"
+  ]
+}

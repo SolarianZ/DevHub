@@ -185,6 +185,46 @@ async function runRpc(context) {
   };
 }
 
+async function runHttp(context) {
+  const vector = context.vector;
+  const request = ensureRecord(vector.request, "request");
+  const connection = await discoverRuntime(context.dataDir);
+  const method = ensureString(request.method, "request.method").toUpperCase();
+  const requestPath = typeof request.path === "string" && request.path.startsWith("/")
+    ? request.path
+    : "/rpc";
+  const body = "body" in request && request.body !== null
+    ? normalizeRawRequestBody(request.body)
+    : undefined;
+  const response = await fetch(`${connection.runtime.httpBaseUrl}${requestPath}`, {
+    method,
+    headers: request.headers ?? {},
+    body
+  });
+  const bodyText = await response.text();
+  const actual = {
+    statusCode: response.status,
+    headers: normalizeHttpHeaders(response.headers),
+    bodyText
+  };
+  if (bodyText) {
+    try {
+      actual.bodyJson = JSON.parse(bodyText);
+    } catch {
+    }
+  } else {
+    actual.bodyJson = null;
+  }
+  return {
+    sdk: "typescript",
+    vectorId: vector.id,
+    phase: "http",
+    outcome: "success",
+    actual,
+    error: null
+  };
+}
+
 async function runEvents(context) {
   const vector = context.vector;
   const request = ensureRecord(context.vector?.request, "request");
@@ -868,6 +908,14 @@ function normalizeRawRequestBody(request) {
   return JSON.stringify(request);
 }
 
+function normalizeHttpHeaders(headers) {
+  const normalized = {};
+  for (const [key, value] of headers.entries()) {
+    normalized[key.toLowerCase()] = value;
+  }
+  return normalized;
+}
+
 function resolveCaptureValue(step, captures, index, fieldName) {
   const referenceField = `${fieldName}Ref`;
   if (referenceField in step) {
@@ -1135,13 +1183,15 @@ async function main() {
     const kind = vector.request?.kind;
     const result = vector.expectedDiscovery
       ? await runDiscovery(context)
-      : kind === "sdk.notify" || kind === "sdk.request"
-        ? await runInvocation(context)
-        : kind === "sdk.events"
-          ? await runEvents(context)
-          : kind === "raw.ws" || vector.transport === "ws"
-            ? await runWs(context)
-            : await runRpc(context);
+      : kind === "raw.http"
+        ? await runHttp(context)
+        : kind === "sdk.notify" || kind === "sdk.request"
+          ? await runInvocation(context)
+          : kind === "sdk.events"
+            ? await runEvents(context)
+            : kind === "raw.ws" || vector.transport === "ws"
+              ? await runWs(context)
+              : await runRpc(context);
     emit(result);
   } catch (error) {
     emit({

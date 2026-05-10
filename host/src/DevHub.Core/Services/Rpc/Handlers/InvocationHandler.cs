@@ -368,7 +368,7 @@ public class InvocationHandler : IRpcHandler
             Target = target,
             Method = method,
             Args = paramsElement.TryGetProperty("args", out var argsElement)
-                ? JsonSerializer.Deserialize<object>(argsElement.GetRawText())
+                ? argsElement.Clone()
                 : null,
             Kind = mode == InvocationMode.Notify ? InvocationKind.Notify : InvocationKind.Request,
             CreatedAtUtc = _clock.UtcNow,

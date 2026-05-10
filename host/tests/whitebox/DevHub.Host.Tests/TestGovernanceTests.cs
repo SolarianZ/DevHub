@@ -31,6 +31,28 @@ public class TestGovernanceTests
         RegexOptions.Compiled | RegexOptions.Multiline);
 
     [Fact]
+    public void Impl_EnvironmentVariableScopeUsers_ShouldDeclareProcessEnvironmentCollection()
+    {
+        foreach (var testFile in GetTestFiles())
+        {
+            if (Path.GetFileName(testFile).Equals("TestGovernanceTests.cs", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var content = File.ReadAllText(testFile);
+            if (!content.Contains("EnvironmentVariableScope", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            Assert.Contains(
+                "[Collection(TestCollections.ProcessEnvironment)]",
+                content);
+        }
+    }
+
+    [Fact]
     public void Impl_AllWhiteboxTests_ShouldUseSpecOrImplPrefix()
     {
         foreach (var testFile in GetTestFiles())

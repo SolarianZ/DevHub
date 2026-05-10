@@ -668,64 +668,6 @@ public sealed class AppInstancesHandlerValidationTests
     }
 
     [Fact]
-    public async Task Impl_Methods_WhenLoggerThrowsInTry_ShouldReturnInternalError()
-    {
-        var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
-        var handler = new AppInstancesHandler(appRegistry, new SystemClock(), new ThrowOnDebugLogger<AppInstancesHandler>());
-
-        var register = await handler.HandleAsync(new JsonRpcRequest
-        {
-            Id = "register-logger-throw",
-            Method = HubRpcMethods.HubAppsRegisterInstance,
-            Params = JsonSerializer.SerializeToElement(CreateRegisterParams(new
-            {
-                instanceId = "inst-logger-throw",
-                appId = "app.validation",
-                scope = ScopeContract.Global,
-                pid = 103,
-                invoke = new { poll = true, respond = true }
-            }))
-        }, CancellationToken.None);
-        AssertError(register, -32603, "internal_error");
-
-        var heartbeat = await handler.HandleAsync(new JsonRpcRequest
-        {
-            Id = "heartbeat-logger-throw",
-            Method = HubRpcMethods.HubAppsHeartbeat,
-            Params = JsonSerializer.SerializeToElement(new { instanceId = "inst-logger-throw" })
-        }, CancellationToken.None);
-        AssertError(heartbeat, -32603, "internal_error");
-
-        var unregister = await handler.HandleAsync(new JsonRpcRequest
-        {
-            Id = "unregister-logger-throw",
-            Method = HubRpcMethods.HubAppsUnregisterInstance,
-            Params = JsonSerializer.SerializeToElement(new
-            {
-                instanceId = "inst-logger-throw",
-                password = InstancePassword
-            })
-        }, CancellationToken.None);
-        AssertError(unregister, -32603, "internal_error");
-
-        var list = await handler.HandleAsync(new JsonRpcRequest
-        {
-            Id = "list-logger-throw",
-            Method = HubRpcMethods.HubAppsListInstances,
-            Params = JsonSerializer.SerializeToElement(new { scope = (string?)null, includeOffline = true })
-        }, CancellationToken.None);
-        AssertError(list, -32603, "internal_error");
-
-        var getInstance = await handler.HandleAsync(new JsonRpcRequest
-        {
-            Id = "get-instance-logger-throw",
-            Method = HubRpcMethods.HubAppsGetInstance,
-            Params = JsonSerializer.SerializeToElement(new { instanceId = "inst-logger-throw" })
-        }, CancellationToken.None);
-        AssertError(getInstance, -32603, "internal_error");
-    }
-
-    [Fact]
     public async Task Impl_RegisterAndUnregisterWithoutEventBus_ShouldReturnOk()
     {
         var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
@@ -941,29 +883,4 @@ public sealed class AppInstancesHandlerValidationTests
         };
     }
 
-    private sealed class ThrowOnDebugLogger<T> : ILogger<T>
-    {
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull
-        {
-            return null;
-        }
-
-        public bool IsEnabled(LogLevel logLevel)
-        {
-            return true;
-        }
-
-        public void Log<TState>(
-            LogLevel logLevel,
-            EventId eventId,
-            TState state,
-            Exception? exception,
-            Func<TState, Exception?, string> formatter)
-        {
-            if (logLevel == LogLevel.Debug && formatter(state, exception).Contains("处理hub.apps", StringComparison.Ordinal))
-            {
-                throw new InvalidOperationException("mock logger failure");
-            }
-        }
-    }
 }

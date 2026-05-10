@@ -11,6 +11,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using System.Runtime.Versioning;
 
+[Collection(TestCollections.ProcessEnvironment)]
 [Trait("Category", "Impl")]
 public class CoreServiceTests
 {
