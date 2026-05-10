@@ -331,7 +331,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
             .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
             .Callback<LaunchConfiguration, string?>((launchConfig, _) =>
             {
-                launchIdCaptured.TrySetResult(launchConfig.EnvironmentVariables![LaunchCoordinator.LaunchIdEnvironmentVariable]);
+                launchIdCaptured.TrySetResult(GetRequiredLaunchId(launchConfig));
             })
             .Returns(Process.GetCurrentProcess());
 
@@ -418,7 +418,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
             .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
             .Callback<LaunchConfiguration, string?>((launchConfig, _) =>
             {
-                launchIdCaptured.TrySetResult(launchConfig.EnvironmentVariables![LaunchCoordinator.LaunchIdEnvironmentVariable]);
+                launchIdCaptured.TrySetResult(GetRequiredLaunchId(launchConfig));
             })
             .Returns(Process.GetCurrentProcess());
 
@@ -509,7 +509,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
             .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
             .Callback<LaunchConfiguration, string?>((launchConfig, _) =>
             {
-                launchIdCaptured.TrySetResult(launchConfig.EnvironmentVariables![LaunchCoordinator.LaunchIdEnvironmentVariable]);
+                launchIdCaptured.TrySetResult(GetRequiredLaunchId(launchConfig));
             })
             .Returns(Process.GetCurrentProcess());
 
@@ -1475,6 +1475,18 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
             ClientId = clientId,
             ClientSessionId = clientSessionId
         };
+    }
+
+    private static string GetRequiredLaunchId(LaunchConfiguration launchConfiguration)
+    {
+        Assert.NotNull(launchConfiguration.EnvironmentVariables);
+        var hasLaunchId = launchConfiguration.EnvironmentVariables.TryGetValue(
+            LaunchCoordinator.LaunchIdEnvironmentVariable,
+            out var launchId);
+        Assert.True(hasLaunchId, $"Launch configuration did not contain '{LaunchCoordinator.LaunchIdEnvironmentVariable}'.");
+        Assert.False(string.IsNullOrWhiteSpace(launchId));
+
+        return launchId;
     }
 
     private static void AssertError(JsonRpcResponse response, int code, string message, object id)
