@@ -12,7 +12,8 @@ use crate::versioning::{
     create_version_compatibility_result, VersionCompatibilityResult, VersionCompatibilityStatus,
     MONITOR_VERSION, SDK_VERSION,
 };
-use anyhow::Result;
+use anyhow::{Context, Result};
+use reqwest::Client;
 use serde_json::Value;
 use std::path::Path;
 use tauri::AppHandle;
@@ -20,6 +21,7 @@ use tokio::time::{sleep, Duration, Instant};
 
 const DISCOVERY_INTERVAL: Duration = Duration::from_millis(500);
 const LAUNCH_ACTION_DELAY: Duration = Duration::from_secs(3);
+const UNSUPPORTED_PROTOCOL_PROBE_TIMEOUT: Duration = Duration::from_millis(1500);
 
 #[derive(Debug, Clone)]
 enum RuntimeDiscoverySuccess {
@@ -149,10 +151,15 @@ impl DiscoveryCoordinator {
             let discovery_result = match discover_runtime(Path::new(&resolved.path)) {
                 Ok(connection) => {
                     match assess_discovered_runtime_before_verification(&connection) {
-                        Some(compatibility) => Ok(RuntimeDiscoverySuccess::HostIncompatible {
-                            connection,
-                            compatibility,
-                        }),
+                        Some(compatibility) => {
+                            match probe_unsupported_protocol_runtime(&connection).await {
+                                Ok(()) => Ok(RuntimeDiscoverySuccess::HostIncompatible {
+                                    connection,
+                                    compatibility,
+                                }),
+                                Err(error) => Err(error),
+                            }
+                        }
                         None => match verify_runtime(&connection).await {
                             Ok(verification) => {
                                 let compatibility = assess_runtime_compatibility_with_host_version(
@@ -429,6 +436,37 @@ fn should_transition_to_launch_available(elapsed: Duration, announced_launch_act
     !announced_launch_action && elapsed >= LAUNCH_ACTION_DELAY
 }
 
+async fn probe_unsupported_protocol_runtime(
+    connection: &MonitorRuntimeConnectionInfo,
+) -> Result<()> {
+    probe_unsupported_protocol_runtime_with_client(
+        connection,
+        &build_unsupported_protocol_probe_client()?,
+    )
+    .await
+}
+
+fn build_unsupported_protocol_probe_client() -> Result<Client> {
+    Client::builder()
+        .timeout(UNSUPPORTED_PROTOCOL_PROBE_TIMEOUT)
+        .build()
+        .context("无法创建不兼容 Host 活性探测 HTTP 客户端。")
+}
+
+async fn probe_unsupported_protocol_runtime_with_client(
+    connection: &MonitorRuntimeConnectionInfo,
+    client: &Client,
+) -> Result<()> {
+    client
+        .post(&connection.rpc_endpoint)
+        .header("Content-Type", "application/json")
+        .body(r#"{"jsonrpc":"2.0","id":"monitor-probe","method":"hub.ping","params":{}}"#)
+        .send()
+        .await
+        .map(|_| ())
+        .with_context(|| format!("不兼容 Host 活性探测失败：{}", connection.rpc_endpoint))
+}
+
 #[derive(Debug, Clone)]
 struct RuntimeCompatibilityAssessment {
     result: VersionCompatibilityResult,
@@ -502,14 +540,18 @@ fn assess_runtime_compatibility_with_host_version(
 mod tests {
     use super::{
         assess_discovered_runtime_before_verification, assess_runtime_compatibility,
-        build_launch_available_snapshot, should_transition_to_launch_available,
-        LAUNCH_ACTION_DELAY,
+        build_launch_available_snapshot, probe_unsupported_protocol_runtime_with_client,
+        should_transition_to_launch_available, LAUNCH_ACTION_DELAY,
     };
     use crate::models::{
         BootstrapPhase, DataDirSource, MonitorRuntimeConnectionInfo, MonitorRuntimeTuning,
         MonitorSettings, ResolvedDataDir,
     };
     use crate::versioning::VersionCompatibilityStatus;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::sync::mpsc;
+    use std::thread;
     use std::time::Duration;
 
     #[test]
@@ -620,6 +662,52 @@ mod tests {
     }
 
     #[test]
+    fn unsupported_protocol_probe_succeeds_when_endpoint_responds() {
+        let (url, server) = spawn_probe_server();
+        let mut connection = create_connection(2, Some("0.7.0"));
+        connection.runtime.http_base_url = url;
+        connection.rpc_endpoint = format!("{}/rpc", connection.runtime.http_base_url);
+
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(2))
+            .build()
+            .expect("failed to build client");
+
+        tauri::async_runtime::block_on(probe_unsupported_protocol_runtime_with_client(
+            &connection,
+            &client,
+        ))
+        .expect("expected active endpoint");
+        server.join().expect("probe server failed");
+    }
+
+    #[test]
+    fn unsupported_protocol_probe_fails_when_endpoint_is_unreachable() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("failed to bind listener");
+        let port = listener
+            .local_addr()
+            .expect("failed to read local address")
+            .port();
+        drop(listener);
+
+        let mut connection = create_connection(2, Some("0.7.0"));
+        connection.runtime.http_base_url = format!("http://127.0.0.1:{port}");
+        connection.rpc_endpoint = format!("{}/rpc", connection.runtime.http_base_url);
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_millis(250))
+            .build()
+            .expect("failed to build client");
+
+        let error = tauri::async_runtime::block_on(probe_unsupported_protocol_runtime_with_client(
+            &connection,
+            &client,
+        ))
+        .expect_err("expected inactive endpoint");
+
+        assert!(error.to_string().contains("不兼容 Host 活性探测失败"));
+    }
+
+    #[test]
     fn compatibility_check_allows_unknown_and_update_recommended_hosts() {
         let unknown = assess_runtime_compatibility(&create_connection(1, None));
         assert!(unknown.problem.is_none());
@@ -638,5 +726,23 @@ mod tests {
             compatible.result.status,
             VersionCompatibilityStatus::Compatible
         );
+    }
+
+    fn spawn_probe_server() -> (String, thread::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("failed to bind listener");
+        let address = listener.local_addr().expect("failed to read local address");
+        let (ready_sender, ready_receiver) = mpsc::channel();
+        let handle = thread::spawn(move || {
+            ready_sender.send(()).expect("failed to notify readiness");
+            let (mut stream, _) = listener.accept().expect("failed to accept connection");
+            let mut buffer = [0_u8; 1024];
+            let _ = stream.read(&mut buffer);
+            stream
+                .write_all(b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n")
+                .expect("failed to write response");
+        });
+        ready_receiver.recv().expect("probe server did not start");
+
+        (format!("http://{}", address), handle)
     }
 }

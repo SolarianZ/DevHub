@@ -18,12 +18,19 @@ pub struct RuntimeVerification {
 }
 
 pub fn discover_runtime(data_directory: &Path) -> Result<MonitorRuntimeConnectionInfo> {
-    reject_legacy_layout(data_directory)?;
-
     let runtime_directory = data_directory.join("runtime");
     let hub_json_path = runtime_directory.join("hub.json");
-    let hub_json = fs::read_to_string(&hub_json_path)
-        .with_context(|| format!("未找到 hub.json：{}", hub_json_path.display()))?;
+    let hub_json = match fs::read_to_string(&hub_json_path) {
+        Ok(content) => content,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            reject_legacy_layout(data_directory)?;
+            anyhow::bail!("未找到 hub.json：{}", hub_json_path.display());
+        }
+        Err(error) => {
+            return Err(error)
+                .with_context(|| format!("未找到 hub.json：{}", hub_json_path.display()));
+        }
+    };
 
     let runtime: MonitorHubRuntime = serde_json::from_str(&hub_json)
         .with_context(|| format!("hub.json 解析失败：{}", hub_json_path.display()))?;
@@ -497,6 +504,59 @@ mod tests {
         assert!(error
             .to_string()
             .contains("DEVHUB_DATA_DIR 必须指向数据根目录"));
+
+        fs::remove_dir_all(data_directory).expect("failed to clean temp directory");
+    }
+
+    #[test]
+    fn discover_runtime_prefers_valid_runtime_layout_over_legacy_root_residue() {
+        let data_directory = create_temp_directory("runtime-legacy-residue");
+        fs::write(data_directory.join("hub.json"), "{}").expect("failed to write legacy hub.json");
+        fs::write(data_directory.join("token.txt"), "legacy-token")
+            .expect("failed to write legacy token");
+
+        let runtime_directory = data_directory.join("runtime");
+        fs::create_dir_all(&runtime_directory).expect("failed to create runtime directory");
+        let token_path = runtime_directory.join("token.txt");
+        fs::write(&token_path, "current-token\n").expect("failed to write token");
+        let hub_json = serde_json::to_string_pretty(&serde_json::json!({
+            "protocolVersion": 1,
+            "pid": 4321,
+            "httpBaseUrl": "http://127.0.0.1:4123",
+            "wsUrl": "ws://127.0.0.1:4123/ws",
+            "tokenFile": token_path.display().to_string(),
+            "startedAtUtc": "2026-04-12T00:00:00Z",
+            "runtimeTuning": {
+                "leaseSeconds": 30,
+                "onlineThresholdSeconds": 15,
+                "launchDedupeWindowSeconds": 5,
+                "launchRegisterTimeoutSeconds": 45
+            }
+        }))
+        .expect("failed to serialize hub.json");
+        fs::write(runtime_directory.join("hub.json"), hub_json).expect("failed to write hub.json");
+
+        let connection = discover_runtime(&data_directory).expect("expected runtime discovery");
+
+        assert_eq!(connection.token, "current-token");
+        assert_eq!(connection.rpc_endpoint, "http://127.0.0.1:4123/rpc");
+
+        fs::remove_dir_all(data_directory).expect("failed to clean temp directory");
+    }
+
+    #[test]
+    fn discover_runtime_reports_current_runtime_error_when_legacy_residue_exists() {
+        let data_directory = create_temp_directory("runtime-invalid-with-legacy-residue");
+        fs::write(data_directory.join("hub.json"), "{}").expect("failed to write legacy hub.json");
+
+        let runtime_directory = data_directory.join("runtime");
+        fs::create_dir_all(&runtime_directory).expect("failed to create runtime directory");
+        fs::write(runtime_directory.join("hub.json"), "{ invalid json")
+            .expect("failed to write invalid hub.json");
+
+        let error = discover_runtime(&data_directory).expect_err("expected current runtime error");
+
+        assert!(error.to_string().contains("hub.json 解析失败"));
 
         fs::remove_dir_all(data_directory).expect("failed to clean temp directory");
     }
