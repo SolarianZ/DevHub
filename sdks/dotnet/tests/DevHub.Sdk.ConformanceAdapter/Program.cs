@@ -13,6 +13,27 @@ var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web)
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
 };
 
+var sdkRpcMethods = new HashSet<string>(StringComparer.Ordinal)
+{
+    "hub.ping",
+    "hub.getVersion",
+    "hub.apps.listDefinitions",
+    "hub.apps.getDefinition",
+    "hub.apps.validateDefinition",
+    "hub.apps.upsertDefinition",
+    "hub.apps.deleteDefinition",
+    "hub.apps.registerInstance",
+    "hub.apps.heartbeat",
+    "hub.apps.unregisterInstance",
+    "hub.apps.listInstances",
+    "hub.apps.getInstance",
+    "hub.apps.launch",
+    "hub.invoke.notify",
+    "hub.invoke.request",
+    "hub.invoke.poll",
+    "hub.invoke.respond"
+};
+
 if (args.Length != 1)
 {
     WritePayload(new AdapterResult("dotnet", null, null, null, "error", null, new { message = "用法错误：需要 execution-context.json 路径。" }));
@@ -40,6 +61,8 @@ try
                     : string.Equals(kind, "raw.ws", StringComparison.Ordinal) ||
                       string.Equals(ReadString(vector, "transport"), "ws", StringComparison.Ordinal)
                         ? await RunWsAsync(root, vector, request)
+                        : ShouldUseSdkRpc(vector, request)
+                            ? await RunSdkRpcAsync(root, vector, request)
                         : await RunRpcAsync(root, vector, request);
     WritePayload(result);
 }
@@ -201,6 +224,130 @@ async Task<AdapterResult> RunInvocationAsync(JsonElement context, JsonElement ve
             "error",
             NormalizeLocalInvalidParamsError(exception),
             null);
+    }
+}
+
+async Task<AdapterResult> RunSdkRpcAsync(JsonElement context, JsonElement vector, JsonElement request)
+{
+    var requestId = ReadRequiredString(request.GetProperty("id"), "request.id");
+    var method = ReadString(request, "method");
+    var parameters = ReadJsonRpcParams(request);
+
+    await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+    {
+        ClientId = ReadVectorClientId(vector),
+        DataDir = ReadString(context, "dataDir")
+    });
+
+    try
+    {
+        var result = await DispatchSdkRpcAsync(client, method, parameters);
+        return new AdapterResult(
+            "dotnet",
+            ReadString(vector, "id"),
+            "rpc",
+            null,
+            "success",
+            new Dictionary<string, object?>
+            {
+                ["jsonrpc"] = "2.0",
+                ["id"] = requestId,
+                ["result"] = NormalizeSdkRpcResult(method, result, TryGetExpectedResult(vector))
+            },
+            null);
+    }
+    catch (DevHubRpcException exception)
+    {
+        return new AdapterResult(
+            "dotnet",
+            ReadString(vector, "id"),
+            "rpc",
+            null,
+            "success",
+            new Dictionary<string, object?>
+            {
+                ["jsonrpc"] = "2.0",
+                ["id"] = requestId,
+                ["error"] = NormalizeRpcError(exception)
+            },
+            null);
+    }
+    catch (Exception exception) when (IsExpectedLocalInvalidParamsError(vector, exception))
+    {
+        return new AdapterResult(
+            "dotnet",
+            ReadString(vector, "id"),
+            "rpc",
+            null,
+            "success",
+            new Dictionary<string, object?>
+            {
+                ["jsonrpc"] = "2.0",
+                ["id"] = requestId,
+                ["error"] = new Dictionary<string, object?>
+                {
+                    ["code"] = -32602,
+                    ["message"] = "invalid_params"
+                }
+            },
+            null);
+    }
+}
+
+async Task<object?> DispatchSdkRpcAsync(DevHubClient client, string method, JsonElement parameters)
+{
+    switch (method)
+    {
+        case "hub.ping":
+            return await client.PingAsync(parameters.TryGetProperty("echo", out var echoElement)
+                ? DeserializeToObject(echoElement)
+                : null);
+        case "hub.getVersion":
+            return await client.GetHostVersionAsync();
+        case "hub.apps.listDefinitions":
+            return await client.ListDefinitionsAsync(BuildSdkListDefinitionsRequest(parameters));
+        case "hub.apps.getDefinition":
+            return await client.GetDefinitionAsync(ReadString(parameters, "appId"), ReadString(parameters, "scope"));
+        case "hub.apps.validateDefinition":
+            return await client.ValidateDefinitionAsync(BuildAppDefinition(parameters.GetProperty("definition")));
+        case "hub.apps.upsertDefinition":
+            return await client.UpsertDefinitionAsync(BuildAppDefinition(parameters.GetProperty("definition")));
+        case "hub.apps.deleteDefinition":
+            await client.DeleteDefinitionAsync(ReadString(parameters, "appId"), ReadString(parameters, "scope"));
+            return null;
+        case "hub.apps.registerInstance":
+            return await client.RegisterInstanceAsync(
+                BuildAppInstanceRegistration(parameters.GetProperty("instance")),
+                ReadString(parameters, "password"),
+                parameters.TryGetProperty("launchId", out var launchIdElement)
+                    ? ReadRequiredString(launchIdElement, "params.launchId")
+                    : null);
+        case "hub.apps.heartbeat":
+            return await client.HeartbeatAsync(
+                ReadString(parameters, "instanceId"),
+                ReadString(parameters, "instanceSessionToken"));
+        case "hub.apps.unregisterInstance":
+            await client.UnregisterInstanceAsync(
+                ReadString(parameters, "instanceId"),
+                ReadString(parameters, "instanceSessionToken"));
+            return null;
+        case "hub.apps.listInstances":
+            return await client.ListInstancesAsync(BuildListInstancesRequest(parameters));
+        case "hub.apps.getInstance":
+            return await client.GetInstanceAsync(ReadString(parameters, "instanceId"));
+        case "hub.apps.launch":
+            return await client.LaunchAsync(BuildLaunchRequest(parameters));
+        case "hub.invoke.notify":
+            return await client.NotifyAsync(BuildInvokeRequest(parameters));
+        case "hub.invoke.request":
+            return await client.RequestAsync(BuildInvokeRequest(parameters));
+        case "hub.invoke.poll":
+            return await client.PollAsync(BuildPollRequest(parameters));
+        case "hub.invoke.respond":
+            await client.RespondAsync(BuildRespondRequest(parameters));
+            return null;
+        default:
+            throw new InvalidOperationException($"不支持通过 SDK RPC 分发的方法：{method}");
     }
 }
 
@@ -893,14 +1040,225 @@ ListDefinitionsRequest BuildListDefinitionsRequest(
     };
 }
 
+ListDefinitionsRequest BuildSdkListDefinitionsRequest(JsonElement parameters)
+{
+    return new ListDefinitionsRequest
+    {
+        AppId = ReadOptionalString(parameters, "appId"),
+        Scope = parameters.TryGetProperty("scope", out var scopeElement)
+            ? ReadOptionalStringValue(scopeElement, "params.scope")
+            : null
+    };
+}
+
+ListInstancesRequest BuildListInstancesRequest(JsonElement parameters)
+{
+    return new ListInstancesRequest
+    {
+        AppId = ReadOptionalString(parameters, "appId"),
+        Scope = parameters.TryGetProperty("scope", out var scopeElement)
+            ? ReadOptionalStringValue(scopeElement, "params.scope")
+            : null,
+        IncludeOffline = ReadOptionalBoolean(parameters, "includeOffline") ?? false
+    };
+}
+
+LaunchRequest BuildLaunchRequest(JsonElement parameters)
+{
+    return new LaunchRequest
+    {
+        AppId = ReadString(parameters, "appId"),
+        Scope = ReadString(parameters, "scope"),
+        DedupeKey = ReadOptionalString(parameters, "dedupeKey"),
+        WaitForRegisterMs = ReadOptionalInt32(parameters, "waitForRegisterMs")
+    };
+}
+
+PollRequest BuildPollRequest(JsonElement parameters)
+{
+    return new PollRequest
+    {
+        InstanceId = ReadString(parameters, "instanceId"),
+        InstanceSessionToken = ReadString(parameters, "instanceSessionToken"),
+        MaxCount = ReadOptionalInt32(parameters, "maxCount"),
+        WaitMs = ReadOptionalInt32(parameters, "waitMs")
+    };
+}
+
+RespondRequest BuildRespondRequest(JsonElement parameters)
+{
+    var request = new RespondRequest
+    {
+        InstanceId = ReadString(parameters, "instanceId"),
+        InstanceSessionToken = ReadString(parameters, "instanceSessionToken"),
+        InvocationId = ReadString(parameters, "invocationId"),
+        LeaseToken = ReadString(parameters, "leaseToken")
+    };
+
+    if (parameters.TryGetProperty("value", out var valueElement))
+    {
+        request.Value = DeserializeToObject(valueElement);
+    }
+
+    if (parameters.TryGetProperty("error", out var errorElement))
+    {
+        request.Error = BuildCalleeError(errorElement);
+    }
+
+    return request;
+}
+
+DevHubCalleeError BuildCalleeError(JsonElement payload)
+{
+    if (payload.ValueKind != JsonValueKind.Object)
+    {
+        throw new InvalidOperationException("params.error 必须为对象。");
+    }
+
+    return DevHubCalleeError.Create(
+        ReadInt32(payload, "code"),
+        ReadString(payload, "message"),
+        payload.TryGetProperty("data", out var dataElement) ? DeserializeToObject(dataElement) : null);
+}
+
 object? NormalizeDefinitionValidationResult(DefinitionValidationResult result)
 {
     return ConvertJsonElement(JsonSerializer.SerializeToElement(result, jsonOptions));
 }
 
+object? NormalizeSdkRpcResult(string method, object? result, JsonElement? expectedResult)
+{
+    switch (method)
+    {
+        case "hub.ping":
+            return NormalizePingResult((PingResult)result!);
+        case "hub.getVersion":
+            return new Dictionary<string, object?>
+            {
+                ["ok"] = true,
+                ["version"] = result
+            };
+        case "hub.apps.listDefinitions":
+            return new Dictionary<string, object?>
+            {
+                ["ok"] = true,
+                ["definitions"] = ((IReadOnlyList<AppDefinition>)result!).Select((definition, index) =>
+                    NormalizeSdkAppDefinition(definition, TryGetExpectedArrayItem(expectedResult, "definitions", index))).ToArray()
+            };
+        case "hub.apps.getDefinition":
+            return new Dictionary<string, object?>
+            {
+                ["ok"] = true,
+                ["definition"] = NormalizeSdkAppDefinition((AppDefinition)result!, TryGetExpectedProperty(expectedResult, "definition"))
+            };
+        case "hub.apps.validateDefinition":
+            return NormalizeDefinitionValidationResult((DefinitionValidationResult)result!);
+        case "hub.apps.upsertDefinition":
+            return new Dictionary<string, object?>
+            {
+                ["ok"] = true,
+                ["definition"] = NormalizeSdkAppDefinition((AppDefinition)result!, TryGetExpectedProperty(expectedResult, "definition"))
+            };
+        case "hub.apps.deleteDefinition":
+        case "hub.apps.unregisterInstance":
+        case "hub.invoke.respond":
+            return new Dictionary<string, object?> { ["ok"] = true };
+        case "hub.apps.registerInstance":
+            var registration = (RegisterInstanceResult)result!;
+            return new Dictionary<string, object?>
+            {
+                ["ok"] = true,
+                ["instance"] = NormalizeSdkAppInstance(registration.Instance, TryGetExpectedProperty(expectedResult, "instance")),
+                ["instanceSessionToken"] = registration.InstanceSessionToken
+            };
+        case "hub.apps.heartbeat":
+            return new Dictionary<string, object?>
+            {
+                ["ok"] = true,
+                ["lastSeenUtc"] = NormalizeDate((DateTimeOffset)result!)
+            };
+        case "hub.apps.listInstances":
+            return new Dictionary<string, object?>
+            {
+                ["ok"] = true,
+                ["instances"] = ((IReadOnlyList<AppInstance>)result!).Select((instance, index) =>
+                    NormalizeSdkAppInstance(instance, TryGetExpectedArrayItem(expectedResult, "instances", index))).ToArray()
+            };
+        case "hub.apps.getInstance":
+            return new Dictionary<string, object?>
+            {
+                ["ok"] = true,
+                ["instance"] = NormalizeSdkAppInstance((AppInstance)result!, TryGetExpectedProperty(expectedResult, "instance"))
+            };
+        case "hub.apps.launch":
+            return NormalizeLaunchResult((LaunchResult)result!);
+        case "hub.invoke.notify":
+            var notify = (NotifyResult)result!;
+            return new Dictionary<string, object?>
+            {
+                ["ok"] = true,
+                ["invocationId"] = notify.InvocationId
+            };
+        case "hub.invoke.request":
+            var request = (RequestResult)result!;
+            return new Dictionary<string, object?>
+            {
+                ["ok"] = true,
+                ["invocationId"] = request.InvocationId,
+                ["value"] = ConvertJsonElement(request.Value)
+            };
+        case "hub.invoke.poll":
+            return NormalizePollResult((PollResult)result!);
+        default:
+            throw new InvalidOperationException($"不支持归一化 SDK RPC 方法结果：{method}");
+    }
+}
+
+object NormalizePingResult(PingResult result)
+{
+    var payload = new Dictionary<string, object?>
+    {
+        ["ok"] = true,
+        ["serverTimeUtc"] = NormalizeDate(result.ServerTimeUtc)
+    };
+    if (result.Echo is { } echo)
+    {
+        payload["echo"] = ConvertJsonElement(echo);
+    }
+
+    return payload;
+}
+
 object? NormalizeAppDefinition(AppDefinition definition)
 {
     return ConvertJsonElement(JsonSerializer.SerializeToElement(definition, jsonOptions));
+}
+
+object NormalizeSdkAppDefinition(AppDefinition definition, JsonElement? expectedDefinition)
+{
+    var payload = new Dictionary<string, object?>
+    {
+        ["appId"] = definition.AppId,
+        ["scope"] = definition.Scope,
+        ["displayName"] = definition.DisplayName
+    };
+
+    if (definition.Description is not null)
+    {
+        payload["description"] = definition.Description;
+    }
+
+    if (TryGetExpectedProperty(expectedDefinition, "capabilities") is { } expectedCapabilities)
+    {
+        payload["capabilities"] = NormalizeExpectedObjectFields(definition.Capabilities, expectedCapabilities);
+    }
+
+    if (TryGetExpectedProperty(expectedDefinition, "launch") is { } expectedLaunch)
+    {
+        payload["launch"] = NormalizeExpectedObjectFields(definition.Launch, expectedLaunch);
+    }
+
+    return payload;
 }
 
 string ResolveInstanceSessionToken(
@@ -1103,6 +1461,143 @@ object NormalizeEvent(DevHubEvent @event)
 object NormalizeAppInstance(AppInstance instance)
 {
     return ConvertJsonElement(JsonSerializer.SerializeToElement(instance, jsonOptions))!;
+}
+
+object NormalizeSdkAppInstance(AppInstance instance, JsonElement? expectedInstance)
+{
+    var payload = new Dictionary<string, object?>
+    {
+        ["instanceId"] = instance.InstanceId,
+        ["appId"] = instance.AppId,
+        ["scope"] = instance.Scope,
+        ["pid"] = instance.Pid,
+        ["registeredAtUtc"] = instance.RegisteredAtUtc is { } registeredAtUtc ? NormalizeDate(registeredAtUtc) : null,
+        ["lastSeenUtc"] = instance.LastSeenUtc is { } lastSeenUtc ? NormalizeDate(lastSeenUtc) : null,
+        ["invoke"] = instance.Invoke is null
+            ? null
+            : new Dictionary<string, object?>
+            {
+                ["poll"] = instance.Invoke.Poll,
+                ["respond"] = instance.Invoke.Respond
+            }
+    };
+
+    if (expectedInstance is { } expected && expected.TryGetProperty("meta", out _) || instance.Meta is not null)
+    {
+        payload["meta"] = ConvertJsonElement(instance.Meta);
+    }
+
+    return payload;
+}
+
+object NormalizeLaunchResult(LaunchResult result)
+{
+    var payload = new Dictionary<string, object?>
+    {
+        ["ok"] = true,
+        ["status"] = result.Status
+    };
+    if (result.Pid is not null)
+    {
+        payload["pid"] = result.Pid;
+    }
+
+    if (result.LaunchId is not null)
+    {
+        payload["launchId"] = result.LaunchId;
+    }
+
+    if (result.DedupeKey is not null)
+    {
+        payload["dedupeKey"] = result.DedupeKey;
+    }
+
+    if (result.InstanceId is not null)
+    {
+        payload["instanceId"] = result.InstanceId;
+    }
+
+    return payload;
+}
+
+object NormalizePollResult(PollResult result)
+{
+    return new Dictionary<string, object?>
+    {
+        ["ok"] = true,
+        ["serverTimeUtc"] = NormalizeDate(result.ServerTimeUtc),
+        ["items"] = result.Items.Select(NormalizeInvocation).ToArray()
+    };
+}
+
+object NormalizeInvocation(Invocation invocation)
+{
+    var payload = new Dictionary<string, object?>
+    {
+        ["invocationId"] = invocation.InvocationId,
+        ["appId"] = invocation.AppId,
+        ["target"] = ConvertJsonElement(JsonSerializer.SerializeToElement(invocation.Target, jsonOptions)),
+        ["method"] = invocation.Method,
+        ["kind"] = JsonSerializer.SerializeToElement(invocation.Kind, jsonOptions).GetString(),
+        ["createdAtUtc"] = NormalizeDate(invocation.CreatedAtUtc),
+        ["caller"] = ConvertJsonElement(JsonSerializer.SerializeToElement(invocation.Caller, jsonOptions))
+    };
+
+    if (invocation.Args is not null)
+    {
+        payload["args"] = ConvertJsonElement(invocation.Args);
+    }
+
+    if (invocation.Options is not null)
+    {
+        payload["options"] = ConvertJsonElement(JsonSerializer.SerializeToElement(invocation.Options, jsonOptions));
+    }
+
+    if (invocation.Delivery is not null)
+    {
+        payload["delivery"] = ConvertJsonElement(JsonSerializer.SerializeToElement(invocation.Delivery, jsonOptions));
+    }
+
+    return payload;
+}
+
+object NormalizeRpcError(DevHubRpcException exception)
+{
+    var payload = new Dictionary<string, object?>
+    {
+        ["code"] = exception.Code,
+        ["message"] = exception.Message
+    };
+    if (exception.ErrorData is { } data)
+    {
+        payload["data"] = ConvertJsonElement(data);
+    }
+
+    return payload;
+}
+
+object? NormalizeExpectedObjectFields<T>(T value, JsonElement expected)
+{
+    var source = JsonSerializer.SerializeToElement(value, jsonOptions);
+    if (source.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+    {
+        return null;
+    }
+
+    var payload = new Dictionary<string, object?>();
+    foreach (var property in expected.EnumerateObject())
+    {
+        payload[property.Name] = source.TryGetProperty(property.Name, out var actual)
+            ? ConvertJsonElement(actual)
+            : null;
+    }
+
+    return payload;
+}
+
+string NormalizeDate(DateTimeOffset value)
+{
+    return value.ToUniversalTime().ToString("O");
 }
 
 async Task SendTextAsync(ClientWebSocket socket, string payload)
@@ -1319,6 +1814,284 @@ object? TryParseJsonBody(string body)
     }
 }
 
+bool ShouldUseSdkRpc(JsonElement vector, JsonElement request)
+{
+    if (request.ValueKind != JsonValueKind.Object)
+    {
+        return false;
+    }
+
+    if (!request.TryGetProperty("jsonrpc", out var jsonrpcElement) ||
+        jsonrpcElement.ValueKind != JsonValueKind.String ||
+        !string.Equals(jsonrpcElement.GetString(), "2.0", StringComparison.Ordinal))
+    {
+        return false;
+    }
+
+    if (!request.TryGetProperty("id", out _))
+    {
+        return false;
+    }
+
+    if (!request.TryGetProperty("method", out var methodElement) ||
+        methodElement.ValueKind != JsonValueKind.String ||
+        methodElement.GetString() is not { } method ||
+        !sdkRpcMethods.Contains(method))
+    {
+        return false;
+    }
+
+    if (request.TryGetProperty("params", out var paramsElement) &&
+        paramsElement.ValueKind is not JsonValueKind.Object and not JsonValueKind.Null and not JsonValueKind.Undefined)
+    {
+        return false;
+    }
+
+    return !IsRawProtocolVector(vector);
+}
+
+bool IsRawProtocolVector(JsonElement vector)
+{
+    if (VectorTagsContain(vector, "transport"))
+    {
+        return true;
+    }
+
+    if (VectorTagsContain(vector, "auth") &&
+        vector.TryGetProperty("expectedResponse", out var authExpectedResponse) &&
+        authExpectedResponse.ValueKind == JsonValueKind.Object &&
+        authExpectedResponse.TryGetProperty("error", out _))
+    {
+        return true;
+    }
+
+    var id = ReadOptionalString(vector, "id") ?? string.Empty;
+    return id.StartsWith("errors.http.", StringComparison.Ordinal) ||
+           ExpectsStructuredHostInvalidParams(vector) ||
+           ExpectsHostDefinitionValidationFailure(vector);
+}
+
+bool VectorTagsContain(JsonElement vector, string expectedTag)
+{
+    if (!vector.TryGetProperty("tags", out var tags) || tags.ValueKind != JsonValueKind.Array)
+    {
+        return false;
+    }
+
+    foreach (var tag in tags.EnumerateArray())
+    {
+        if (tag.ValueKind == JsonValueKind.String &&
+            string.Equals(tag.GetString(), expectedTag, StringComparison.Ordinal))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool ExpectsStructuredHostInvalidParams(JsonElement vector)
+{
+    return TryGetExpectedError(vector, out var expectedError) &&
+           expectedError.TryGetProperty("code", out var codeElement) &&
+           codeElement.ValueKind == JsonValueKind.Number &&
+           codeElement.TryGetInt32(out var code) &&
+           code == -32602 &&
+           expectedError.TryGetProperty("message", out var messageElement) &&
+           string.Equals(messageElement.GetString(), "invalid_params", StringComparison.Ordinal) &&
+           expectedError.TryGetProperty("data", out _);
+}
+
+bool ExpectsHostDefinitionValidationFailure(JsonElement vector)
+{
+    if (!vector.TryGetProperty("request", out var request) ||
+        request.ValueKind != JsonValueKind.Object ||
+        !request.TryGetProperty("method", out var methodElement) ||
+        !string.Equals(methodElement.GetString(), "hub.apps.validateDefinition", StringComparison.Ordinal) ||
+        !TryGetExpectedResultElement(vector, out var expectedResult) ||
+        !expectedResult.TryGetProperty("valid", out var validElement))
+    {
+        return false;
+    }
+
+    return validElement.ValueKind == JsonValueKind.False;
+}
+
+bool IsExpectedLocalInvalidParamsError(JsonElement vector, Exception exception)
+{
+    return exception is ArgumentException or InvalidOperationException &&
+           ExpectedInvalidParamsFields(vector).Any(field => ErrorMessageIncludesField(exception, field));
+}
+
+IEnumerable<string> ExpectedInvalidParamsFields(JsonElement vector)
+{
+    if (!TryGetExpectedError(vector, out var expectedError) ||
+        !expectedError.TryGetProperty("code", out var codeElement) ||
+        !codeElement.TryGetInt32(out var code) ||
+        code != -32602 ||
+        !expectedError.TryGetProperty("message", out var messageElement) ||
+        !string.Equals(messageElement.GetString(), "invalid_params", StringComparison.Ordinal))
+    {
+        return Array.Empty<string>();
+    }
+
+    var fields = new HashSet<string>(StringComparer.Ordinal);
+    if (vector.TryGetProperty("request", out var request) && request.ValueKind == JsonValueKind.Object)
+    {
+        if (request.TryGetProperty("params", out var parameters))
+        {
+            CollectRequestFieldNames(parameters, fields, string.Empty);
+        }
+
+        if (request.TryGetProperty("invokeRequest", out var invokeRequest))
+        {
+            CollectRequestFieldNames(invokeRequest, fields, string.Empty);
+        }
+    }
+
+    return fields
+        .OrderByDescending(static field => field.Length)
+        .ThenBy(static field => field, StringComparer.Ordinal);
+}
+
+void CollectRequestFieldNames(JsonElement value, ISet<string> fields, string prefix)
+{
+    if (value.ValueKind != JsonValueKind.Object)
+    {
+        return;
+    }
+
+    foreach (var property in value.EnumerateObject())
+    {
+        var path = string.IsNullOrEmpty(prefix) ? property.Name : $"{prefix}.{property.Name}";
+        fields.Add(path);
+        CollectRequestFieldNames(property.Value, fields, path);
+    }
+}
+
+bool ErrorMessageIncludesField(Exception exception, string field)
+{
+    if (string.IsNullOrWhiteSpace(field))
+    {
+        return false;
+    }
+
+    var message = exception.Message.ToLowerInvariant();
+    var candidates = new HashSet<string>(StringComparer.Ordinal) { field.ToLowerInvariant() };
+    var segments = field.Split('.', StringSplitOptions.RemoveEmptyEntries);
+    foreach (var segment in segments)
+    {
+        candidates.Add(segment.ToLowerInvariant());
+    }
+
+    for (var index = 1; index < segments.Length; index++)
+    {
+        candidates.Add(string.Join('.', segments.Skip(index)).ToLowerInvariant());
+    }
+
+    if (exception is ArgumentException argumentException && !string.IsNullOrWhiteSpace(argumentException.ParamName))
+    {
+        candidates.Add(argumentException.ParamName.ToLowerInvariant());
+    }
+
+    return candidates.Any(candidate => candidate.Length > 0 && message.Contains(candidate, StringComparison.Ordinal));
+}
+
+JsonElement ReadJsonRpcParams(JsonElement request)
+{
+    if (!request.TryGetProperty("params", out var parameters) || parameters.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+    {
+        using var document = JsonDocument.Parse("{}");
+        return document.RootElement.Clone();
+    }
+
+    if (parameters.ValueKind != JsonValueKind.Object)
+    {
+        throw new InvalidOperationException("request.params 必须为对象。");
+    }
+
+    return parameters.Clone();
+}
+
+string ReadVectorClientId(JsonElement vector)
+{
+    if (vector.TryGetProperty("http", out var http) &&
+        http.ValueKind == JsonValueKind.Object &&
+        http.TryGetProperty("headers", out var headers) &&
+        headers.ValueKind == JsonValueKind.Object &&
+        headers.TryGetProperty("X-DevHub-ClientId", out var clientIdElement) &&
+        clientIdElement.ValueKind == JsonValueKind.String &&
+        !string.IsNullOrWhiteSpace(clientIdElement.GetString()))
+    {
+        return clientIdElement.GetString()!;
+    }
+
+    return "ConformanceSdkRpc";
+}
+
+JsonElement? TryGetExpectedResult(JsonElement vector)
+{
+    return TryGetExpectedResultElement(vector, out var result) ? result : null;
+}
+
+bool TryGetExpectedResultElement(JsonElement vector, out JsonElement result)
+{
+    if (vector.TryGetProperty("expectedResponse", out var expectedResponse) &&
+        expectedResponse.ValueKind == JsonValueKind.Object &&
+        expectedResponse.TryGetProperty("result", out var resultElement))
+    {
+        result = resultElement;
+        return true;
+    }
+
+    result = default;
+    return false;
+}
+
+bool TryGetExpectedError(JsonElement vector, out JsonElement error)
+{
+    if (vector.TryGetProperty("expectedResponse", out var expectedResponse) &&
+        expectedResponse.ValueKind == JsonValueKind.Object)
+    {
+        if (expectedResponse.TryGetProperty("error", out var errorElement))
+        {
+            error = errorElement;
+            return true;
+        }
+
+        if (expectedResponse.TryGetProperty("actual", out var actualElement) &&
+            actualElement.ValueKind == JsonValueKind.Object)
+        {
+            error = actualElement;
+            return true;
+        }
+    }
+
+    error = default;
+    return false;
+}
+
+JsonElement? TryGetExpectedProperty(JsonElement? element, string propertyName)
+{
+    if (element is { ValueKind: JsonValueKind.Object } value && value.TryGetProperty(propertyName, out var property))
+    {
+        return property;
+    }
+
+    return null;
+}
+
+JsonElement? TryGetExpectedArrayItem(JsonElement? element, string propertyName, int index)
+{
+    var property = TryGetExpectedProperty(element, propertyName);
+    if (property is not { ValueKind: JsonValueKind.Array } array || index < 0 || index >= array.GetArrayLength())
+    {
+        return null;
+    }
+
+    return array[index];
+}
+
 object NormalizeInvocationError(DevHubRpcException exception)
 {
     var payload = new Dictionary<string, object?>
@@ -1458,6 +2231,16 @@ string? ReadOptionalString(JsonElement element, string propertyName)
     {
         JsonValueKind.Null => null,
         JsonValueKind.String => property.GetString(),
+        _ => throw new InvalidOperationException($"{propertyName} 类型非法。")
+    };
+}
+
+string? ReadOptionalStringValue(JsonElement element, string propertyName)
+{
+    return element.ValueKind switch
+    {
+        JsonValueKind.Null => null,
+        JsonValueKind.String => element.GetString(),
         _ => throw new InvalidOperationException($"{propertyName} 类型非法。")
     };
 }
