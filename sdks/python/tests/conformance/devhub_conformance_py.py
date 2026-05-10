@@ -745,6 +745,7 @@ def normalize_local_invalid_params_error() -> dict[str, Any]:
     return {
         "code": -32602,
         "message": "invalid_params",
+        "source": "sdk_local_validation",
     }
 
 
