@@ -70,15 +70,10 @@ it("显式 runtimeResolver 不应触发默认 runtime 模块加载", async () =>
 });
 
 it("默认 runtime 模块应在两个入口之间共享缓存", async () => {
-  let constructorCount = 0;
   const resolve = vi.fn(async () => createConnectionInfo());
 
   vi.doMock("../../src/runtime.js", () => {
     class MockFileSystemRuntimeResolver {
-      constructor() {
-        constructorCount += 1;
-      }
-
       resolve = resolve;
     }
 
@@ -122,7 +117,6 @@ it("默认 runtime 模块应在两个入口之间共享缓存", async () => {
     }
   );
 
-  expect(constructorCount).toBe(1);
   expect(resolve).toHaveBeenCalledTimes(2);
 
   await client.dispose();

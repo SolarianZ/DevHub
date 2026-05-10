@@ -2,7 +2,6 @@ import { promises as fsPromises } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import { WebSocketServer } from "ws";
 import type { AbandonedRequestFilter, JsonRpcEventSession } from "../../src/index.js";
 import { DevHubClient } from "../../src/client.js";
 import { DevHubEventsClient } from "../../src/events.js";
@@ -1382,73 +1381,28 @@ it("收到未知事件类型时应使事件流报错", async () => {
 });
 
 it("缺少全局 WebSocket 时收到 binary frame 应使事件流报错", async () => {
+  vi.doMock("ws", () => ({
+    WebSocket: class extends FakeWebSocket {
+      constructor(url: string) {
+        super(url, [], createBinaryFrameScenario);
+      }
+    }
+  }));
+  vi.resetModules();
   vi.stubGlobal("WebSocket", undefined as unknown as typeof WebSocket);
-
-  const server = new WebSocketServer({
-    host: "127.0.0.1",
-    port: 0,
-    path: "/ws"
+  const { DevHubEventsClient: DynamicEventsClient } = await import("../../src/events.js");
+  const client = await DynamicEventsClient.fromRuntime({
+    clientId: "unit-events-fallback-binary-client",
+    dataDir: await createRuntime()
   });
 
   try {
-    await waitForWebSocketServer(server);
-
-    const address = server.address();
-    if (!address || typeof address === "string") {
-      throw new Error("无法获取测试 WebSocket 端口。");
-    }
-
-    const runtimeDir = await createRuntime({
-      httpBaseUrl: `http://127.0.0.1:${address.port}`,
-      wsUrl: `ws://127.0.0.1:${address.port}/ws`
-    });
-
-    server.once("connection", (socket: any) => {
-      socket.on("message", (data: Buffer) => {
-        const request = JSON.parse(data.toString("utf-8")) as Record<string, unknown>;
-        const method = String(request.method);
-
-        if (method === "hub.ws.authenticate") {
-          socket.send(JSON.stringify({
-            jsonrpc: "2.0",
-            id: String(request.id),
-            result: {
-              ok: true,
-              protocolVersion: 1
-            }
-          }));
-          return;
-        }
-
-        if (method === "hub.events.subscribe") {
-          socket.send(JSON.stringify({
-            jsonrpc: "2.0",
-            id: String(request.id),
-            result: {
-              ok: true,
-              subscriptionId: "sub-1"
-            }
-          }));
-          socket.send(Buffer.from([0x01, 0x02, 0x03]), { binary: true });
-        }
-      });
-    });
-
-    const client = await DevHubEventsClient.fromRuntime({
-      clientId: "unit-events-fallback-binary-client",
-      dataDir: runtimeDir
-    });
-
-    try {
-      await client.authenticate();
-      const iterator = client.readEvents()[Symbol.asyncIterator]();
-      await client.subscribe(["invocation.completed"]);
-      await expect(iterator.next()).rejects.toThrow(/text frame/i);
-    } finally {
-      await client.dispose();
-    }
+    await client.authenticate();
+    const iterator = client.readEvents()[Symbol.asyncIterator]();
+    await client.subscribe(["invocation.completed"]);
+    await expect(iterator.next()).rejects.toThrow(/text frame/i);
   } finally {
-    await closeWebSocketServer(server);
+    await client.dispose();
   }
 });
 
@@ -1495,64 +1449,33 @@ it("authenticate 应拒绝非法 JSON-RPC 版本", async () => {
 });
 
 it("缺少全局 WebSocket 时应回退到 ws 模块", async () => {
+  const sockets: FakeWebSocket[] = [];
+  vi.doMock("ws", () => ({
+    WebSocket: class extends FakeWebSocket {
+      constructor(url: string) {
+        super(url, sockets, createDefaultScenario);
+      }
+    }
+  }));
+  vi.resetModules();
   vi.stubGlobal("WebSocket", undefined as unknown as typeof WebSocket);
-
-  const server = new WebSocketServer({
-    host: "127.0.0.1",
-    port: 0,
-    path: "/ws"
+  const { DevHubEventsClient: DynamicEventsClient } = await import("../../src/events.js");
+  const client = await DynamicEventsClient.fromRuntime({
+    clientId: "unit-events-ws-fallback-client",
+    dataDir: await createRuntime()
   });
 
   try {
-    await waitForWebSocketServer(server);
-
-    const address = server.address();
-    if (!address || typeof address === "string") {
-      throw new Error("无法获取测试 WebSocket 端口。");
-    }
-
-    const runtimeDir = await createRuntime({
-      httpBaseUrl: `http://127.0.0.1:${address.port}`,
-      wsUrl: `ws://127.0.0.1:${address.port}/ws`
+    await client.authenticate();
+    expect(sockets).toHaveLength(1);
+    expect(sockets[0]?.sentRequests[0]?.method).toBe("hub.ws.authenticate");
+    expect(sockets[0]?.sentRequests[0]?.params).toMatchObject({
+      token: "token-1",
+      protocolVersion: 1,
+      clientId: "unit-events-ws-fallback-client"
     });
-
-    const authenticateRequestPromise = new Promise<Record<string, unknown>>((resolve, reject) => {
-      server.once("connection", (socket: any) => {
-        socket.once("error", reject);
-        socket.once("message", (data: Buffer) => {
-          const request = JSON.parse(data.toString("utf-8")) as Record<string, unknown>;
-          socket.send(JSON.stringify({
-            jsonrpc: "2.0",
-            id: String(request.id),
-            result: {
-              ok: true,
-              protocolVersion: 1
-            }
-          }));
-          resolve(request);
-        });
-      });
-    });
-
-    const client = await DevHubEventsClient.fromRuntime({
-      clientId: "unit-events-ws-fallback-client",
-      dataDir: runtimeDir
-    });
-
-    try {
-      await client.authenticate();
-      const request = await authenticateRequestPromise;
-      expect(request.method).toBe("hub.ws.authenticate");
-      expect(request.params).toMatchObject({
-        token: "token-1",
-        protocolVersion: 1,
-        clientId: "unit-events-ws-fallback-client"
-      });
-    } finally {
-      await client.dispose();
-    }
   } finally {
-    await closeWebSocketServer(server);
+    await client.dispose();
   }
 });
 
@@ -1683,47 +1606,6 @@ function createBaseConnectionInfo() {
     rpcEndpoint: "http://127.0.0.1:57231/rpc",
     websocketEndpoint: "ws://127.0.0.1:57231/ws"
   };
-}
-
-async function waitForWebSocketServer(server: any): Promise<void> {
-  if (server.address()) {
-    return;
-  }
-
-  await new Promise<void>((resolve, reject) => {
-    const onListening = () => {
-      cleanup();
-      resolve();
-    };
-    const onError = (error: Error) => {
-      cleanup();
-      reject(error);
-    };
-    const cleanup = () => {
-      server.off("listening", onListening);
-      server.off("error", onError);
-    };
-
-    server.on("listening", onListening);
-    server.on("error", onError);
-  });
-}
-
-async function closeWebSocketServer(server: any): Promise<void> {
-  for (const client of server.clients) {
-    client.terminate();
-  }
-
-  await new Promise<void>((resolve, reject) => {
-    server.close((error: Error | undefined) => {
-      if (error) {
-        reject(error);
-        return;
-      }
-
-      resolve();
-    });
-  });
 }
 
 function createStubEventSession(
@@ -1887,6 +1769,7 @@ class FakeWebSocket {
   private readonly closePromise: Promise<void>;
   private closeResolver: (() => void) | undefined;
   private closed = false;
+  readonly sentRequests: Array<{ id: string; method: string; params?: Record<string, unknown> }> = [];
 
   constructor(
     readonly url: string,
@@ -1917,6 +1800,11 @@ class FakeWebSocket {
 
   send(data: string): void {
     const request = JSON.parse(data) as Record<string, unknown>;
+    this.sentRequests.push({
+      id: String(request.id),
+      method: String(request.method),
+      params: request.params as Record<string, unknown> | undefined
+    });
     for (const frame of this.scenarioFactory(request)) {
       queueMicrotask(() => {
         if (frame.type === "message") {
@@ -2080,6 +1968,38 @@ function createBlankTextScenario(request: Record<string, unknown>): ServerFrame[
       {
         type: "message",
         payload: "   "
+      }
+    ];
+  }
+
+  return [];
+}
+
+function createBinaryFrameScenario(request: Record<string, unknown>): ServerFrame[] {
+  const requestId = String(request.id);
+  const method = String(request.method);
+
+  if (method === "hub.ws.authenticate") {
+    return createDefaultScenario(request);
+  }
+
+  if (method === "hub.events.subscribe") {
+    return [
+      {
+        type: "message",
+        payload: JSON.stringify({
+          jsonrpc: "2.0",
+          id: requestId,
+          result: {
+            ok: true,
+            subscriptionId: "sub-1"
+          }
+        })
+      },
+      {
+        type: "message",
+        payload: new Uint8Array([0x01, 0x02, 0x03]),
+        isBinary: true
       }
     ];
   }

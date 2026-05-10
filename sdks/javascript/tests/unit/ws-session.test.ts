@@ -253,6 +253,8 @@ it("超时很久后的迟到响应仍应被忽略且会话保持可用", async (
 });
 
 it("应统计并按过滤条件清理已放弃请求记录", async () => {
+  const dateNowSpy = vi.spyOn(Date, "now");
+  dateNowSpy.mockReturnValue(0);
   vi.stubGlobal("WebSocket", ControlledWebSocket as unknown as typeof WebSocket);
 
   const { JsonRpcWsSession } = await import("../../src/ws-session.js");
@@ -272,14 +274,16 @@ it("应统计并按过滤条件清理已放弃请求记录", async () => {
     socket.emitOpen();
     await waitForSentRequestCount(socket, 1);
 
+    dateNowSpy.mockReturnValue(20);
     await expect(firstRequest).rejects.toThrow("WebSocket request timed out.");
-    await sleep(60);
+    dateNowSpy.mockReturnValue(60);
 
     const secondRequest = session.sendRequest("hub.apps.listInstances", {
       appId: "app-b",
       scope: ""
     });
     await waitForSentRequestCount(socket, 2);
+    dateNowSpy.mockReturnValue(80);
     await expect(secondRequest).rejects.toThrow("WebSocket request timed out.");
 
     expect(session.getAbandonedRequestCount()).toBe(2);
@@ -547,8 +551,4 @@ async function waitForSentRequestCount(socket: ControlledWebSocket, count: numbe
   }
 
   expect(socket.sentRequests).toHaveLength(count);
-}
-
-async function sleep(ms: number): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, ms));
 }

@@ -106,18 +106,76 @@ describe("specification schema assets", () => {
   });
 
   it("rpc-response 与 error-response 应保持互斥", async () => {
-    const responseSchema = await readSchema("rpc-response.json");
-    const errorSchema = await readSchema("error-response.json");
+    const validateResponse = ajv.compile(await readSchema("rpc-response.json"));
+    const validateError = ajv.compile(await readSchema("error-response.json"));
 
-    expect((responseSchema.not as { required?: string[] }).required).toEqual(["error"]);
-    expect((errorSchema.not as { required?: string[] }).required).toEqual(["result"]);
+    expect(validateResponse({
+      jsonrpc: "2.0",
+      id: "success-1",
+      result: {
+        ok: true
+      }
+    })).toBe(true);
+
+    expect(validateError({
+      jsonrpc: "2.0",
+      id: "error-1",
+      error: {
+        code: -32602,
+        message: "invalid_params"
+      }
+    })).toBe(true);
+
+    const mixedPayload = {
+      jsonrpc: "2.0",
+      id: "mixed-1",
+      result: {
+        ok: true
+      },
+      error: {
+        code: -32602,
+        message: "invalid_params"
+      }
+    };
+
+    expect(validateResponse(mixedPayload)).toBe(false);
+    expect(validateError(mixedPayload)).toBe(false);
   });
 
   it("invocation schema 应要求 caller.clientSessionId 为 UUID 字符串", async () => {
-    const schema = await readSchema("invocation.json");
-    const pattern = (
-      ((schema.properties as Record<string, any>).caller.properties.clientSessionId as { pattern?: string }).pattern
-    );
-    expect(pattern).toBe("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$");
+    const validate = ajv.compile(await readSchema("invocation.json"));
+    const validInvocation = createInvocationPayload();
+
+    expect(validate(validInvocation)).toBe(true);
+    expect(validate({
+      ...validInvocation,
+      caller: {
+        clientId: "ClientA",
+        clientSessionId: "not-a-uuid"
+      }
+    })).toBe(false);
+
+    const { clientSessionId: _clientSessionId, ...callerWithoutSessionId } = validInvocation.caller;
+    expect(validate({
+      ...validInvocation,
+      caller: callerWithoutSessionId
+    })).toBe(false);
   });
 });
+
+function createInvocationPayload(): Record<string, any> {
+  return {
+    invocationId: "invk-1",
+    appId: "sample.app",
+    target: {
+      scope: ""
+    },
+    method: "sample.method",
+    kind: "request",
+    createdAtUtc: "2026-03-09T00:00:00Z",
+    caller: {
+      clientId: "ClientA",
+      clientSessionId: "00000000-0000-0000-0000-000000000000"
+    }
+  };
+}

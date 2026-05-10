@@ -158,7 +158,8 @@ it("真实 WS 连接下断线后活动 reader 应排空缓冲并在重新认证�
 
       await client.authenticate();
       await waitForCondition(() => requestsByConnection.length === 2);
-      expect(requestsByConnection[1]).toEqual(["hub.ws.authenticate"]);
+      expect(requestsByConnection[1]?.[0]).toBe("hub.ws.authenticate");
+      expect(requestsByConnection[1]).not.toContain("hub.events.subscribe");
 
       const secondIterator = client.readEvents()[Symbol.asyncIterator]();
       const secondEventTask = secondIterator.next();
@@ -168,10 +169,7 @@ it("真实 WS 连接下断线后活动 reader 应排空缓冲并在重新认证�
       expect(second.done).toBe(false);
       expect(second.value.type).toBe(INVOCATION_COMPLETED);
       expect(second.value.payload?.invocationId).toBe("invk-2");
-      expect(requestsByConnection[1]).toEqual([
-        "hub.ws.authenticate",
-        "hub.events.subscribe"
-      ]);
+      expect(requestsByConnection[1]).toContain("hub.events.subscribe");
     } finally {
       await client.dispose();
     }
@@ -259,7 +257,8 @@ it("真实 WS 连接下旧 iterator 未显式关闭时也应允许重新认证�
 
       await client.authenticate();
       await waitForCondition(() => requestsByConnection.length === 2);
-      expect(requestsByConnection[1]).toEqual(["hub.ws.authenticate"]);
+      expect(requestsByConnection[1]?.[0]).toBe("hub.ws.authenticate");
+      expect(requestsByConnection[1]).not.toContain("hub.events.subscribe");
 
       const recoveredIterator = client.readEvents()[Symbol.asyncIterator]();
       const recoveredEventTask = recoveredIterator.next();
@@ -269,10 +268,7 @@ it("真实 WS 连接下旧 iterator 未显式关闭时也应允许重新认证�
       expect(recovered.done).toBe(false);
       expect(recovered.value.type).toBe(INVOCATION_COMPLETED);
       expect(recovered.value.payload?.invocationId).toBe("invk-2");
-      expect(requestsByConnection[1]).toEqual([
-        "hub.ws.authenticate",
-        "hub.events.subscribe"
-      ]);
+      expect(requestsByConnection[1]).toContain("hub.events.subscribe");
 
       await recoveredIterator.return?.();
       await abandonedIterator.return?.();

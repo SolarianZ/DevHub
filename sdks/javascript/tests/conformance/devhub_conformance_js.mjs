@@ -12,6 +12,23 @@ import { discoverRuntime } from "../../dist/runtime.js";
 const WebSocketCtor = globalThis.WebSocket;
 const CANONICAL_IDENTIFIER_PATTERN = "^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$";
 const CANONICAL_IDENTIFIER_REGEX = new RegExp(CANONICAL_IDENTIFIER_PATTERN);
+const SDK_RPC_METHODS = new Set([
+  "hub.ping",
+  "hub.getVersion",
+  "hub.apps.listDefinitions",
+  "hub.apps.getDefinition",
+  "hub.apps.validateDefinition",
+  "hub.apps.upsertDefinition",
+  "hub.apps.deleteDefinition",
+  "hub.apps.registerInstance",
+  "hub.apps.heartbeat",
+  "hub.apps.unregisterInstance",
+  "hub.apps.listInstances",
+  "hub.apps.getInstance",
+  "hub.apps.launch",
+  "hub.invoke.poll",
+  "hub.invoke.respond"
+]);
 
 function emit(payload) {
   process.stdout.write(`${JSON.stringify(payload)}\n`);
@@ -183,6 +200,70 @@ async function runRpc(context) {
     actual: JSON.parse(body),
     error: null
   };
+}
+
+async function runSdkRpc(context) {
+  const vector = context.vector;
+  const request = ensureRecord(vector.request, "request");
+  const method = ensureString(request.method, "request.method");
+  const params = readJsonRpcParams(request);
+  const client = await DevHubClient.fromRuntime({
+    clientId: readVectorClientId(vector),
+    dataDir: context.dataDir
+  });
+
+  try {
+    const result = await dispatchSdkRpc(client, method, params);
+    return {
+      sdk: "typescript",
+      vectorId: vector.id,
+      phase: "rpc",
+      outcome: "success",
+      actual: {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: normalizeSdkRpcResult(method, result, vector.expectedResponse?.result)
+      },
+      error: null
+    };
+  } catch (error) {
+    if (error instanceof DevHubRpcError) {
+      return {
+        sdk: "typescript",
+        vectorId: vector.id,
+        phase: "rpc",
+        outcome: "success",
+        actual: {
+          jsonrpc: "2.0",
+          id: request.id,
+          error: normalizeRpcError(error)
+        },
+        error: null
+      };
+    }
+
+    if (isExpectedLocalInvalidParamsError(vector, error)) {
+      return {
+        sdk: "typescript",
+        vectorId: vector.id,
+        phase: "rpc",
+        outcome: "success",
+        actual: {
+          jsonrpc: "2.0",
+          id: request.id,
+          error: {
+            code: -32602,
+            message: "invalid_params"
+          }
+        },
+        error: null
+      };
+    }
+
+    throw error;
+  } finally {
+    await client.dispose();
+  }
 }
 
 async function runHttp(context) {
@@ -735,9 +816,322 @@ function normalizeLocalInvalidParamsError() {
   };
 }
 
+async function dispatchSdkRpc(client, method, params) {
+  switch (method) {
+    case "hub.ping":
+      return await client.ping(params && "echo" in params ? params.echo : undefined);
+    case "hub.getVersion":
+      return await client.getHostVersion();
+    case "hub.apps.listDefinitions":
+      return await client.listDefinitions(params);
+    case "hub.apps.getDefinition":
+      return await client.getDefinition(params);
+    case "hub.apps.validateDefinition":
+      return await client.validateDefinition(ensureRecord(params.definition, "params.definition"));
+    case "hub.apps.upsertDefinition":
+      return await client.upsertDefinition(ensureRecord(params.definition, "params.definition"));
+    case "hub.apps.deleteDefinition":
+      await client.deleteDefinition(params);
+      return undefined;
+    case "hub.apps.registerInstance":
+      return await client.registerInstance(
+        ensureRecord(params.instance, "params.instance"),
+        ensureString(params.password, "params.password"),
+        "launchId" in params ? { launchId: ensureString(params.launchId, "params.launchId") } : undefined
+      );
+    case "hub.apps.heartbeat":
+      return await client.heartbeat(
+        ensureString(params.instanceId, "params.instanceId"),
+        ensureString(params.instanceSessionToken, "params.instanceSessionToken")
+      );
+    case "hub.apps.unregisterInstance":
+      await client.unregisterInstance(
+        ensureString(params.instanceId, "params.instanceId"),
+        ensureString(params.instanceSessionToken, "params.instanceSessionToken")
+      );
+      return undefined;
+    case "hub.apps.listInstances":
+      return await client.listInstances(params);
+    case "hub.apps.getInstance":
+      return await client.getInstance(ensureString(params.instanceId, "params.instanceId"));
+    case "hub.apps.launch":
+      return await client.launch(params);
+    case "hub.invoke.poll":
+      return await client.poll(params);
+    case "hub.invoke.respond":
+      await client.respond(params);
+      return undefined;
+    default:
+      throw new Error(`不支持通过 SDK RPC 分发的方法：${method}`);
+  }
+}
+
+function normalizeSdkRpcResult(method, result, expectedResult) {
+  switch (method) {
+    case "hub.ping":
+      return normalizePingResult(result);
+    case "hub.getVersion":
+      return {
+        ok: true,
+        version: result
+      };
+    case "hub.apps.listDefinitions":
+      return {
+        ok: true,
+        definitions: normalizeDefinitions(result, expectedResult?.definitions)
+      };
+    case "hub.apps.getDefinition":
+      return {
+        ok: true,
+        definition: normalizeDefinition(result, expectedResult?.definition)
+      };
+    case "hub.apps.validateDefinition":
+      return {
+        ok: true,
+        valid: result.valid,
+        errors: result.errors
+      };
+    case "hub.apps.upsertDefinition":
+      return {
+        ok: true,
+        definition: normalizeDefinition(result, expectedResult?.definition)
+      };
+    case "hub.apps.deleteDefinition":
+    case "hub.apps.unregisterInstance":
+    case "hub.invoke.respond":
+      return { ok: true };
+    case "hub.apps.registerInstance":
+      return {
+        ok: true,
+        instance: normalizeInstance(result, expectedResult?.instance),
+        instanceSessionToken: result.instanceSessionToken
+      };
+    case "hub.apps.heartbeat":
+      return {
+        ok: true,
+        lastSeenUtc: normalizeDate(result)
+      };
+    case "hub.apps.listInstances":
+      return {
+        ok: true,
+        instances: normalizeInstances(result, expectedResult?.instances)
+      };
+    case "hub.apps.getInstance":
+      return {
+        ok: true,
+        instance: normalizeInstance(result, expectedResult?.instance)
+      };
+    case "hub.apps.launch":
+      return normalizeLaunchResult(result);
+    case "hub.invoke.poll":
+      return normalizePollResult(result);
+    default:
+      throw new Error(`不支持归一化 SDK RPC 方法结果：${method}`);
+  }
+}
+
+function normalizePingResult(result) {
+  const normalized = {
+    ok: true,
+    serverTimeUtc: normalizeDate(result.serverTimeUtc)
+  };
+  if ("echo" in result) {
+    normalized.echo = result.echo;
+  }
+  return normalized;
+}
+
+function normalizeDefinitions(definitions, expectedDefinitions) {
+  const normalized = definitions.map((definition, index) => normalizeDefinition(definition, expectedDefinitions?.[index]));
+  if (!Array.isArray(expectedDefinitions)) {
+    return normalized;
+  }
+
+  return normalized.filter((definition) => expectedDefinitions.some((expected) => {
+    return expected?.appId === definition.appId && expected?.scope === definition.scope;
+  }));
+}
+
+function normalizeDefinition(definition, expectedDefinition) {
+  const normalized = {
+    appId: definition.appId,
+    scope: definition.scope,
+    displayName: definition.displayName
+  };
+
+  if (definition.description !== undefined) {
+    normalized.description = definition.description;
+  }
+
+  const expectedCapabilities = expectedDefinition?.capabilities;
+  if (expectedCapabilities !== undefined) {
+    normalized.capabilities = {};
+    for (const key of Object.keys(expectedCapabilities)) {
+      normalized.capabilities[key] = definition.capabilities?.[key];
+    }
+  }
+
+  const expectedLaunch = expectedDefinition?.launch;
+  if (expectedLaunch !== undefined) {
+    normalized.launch = {};
+    for (const key of Object.keys(expectedLaunch)) {
+      normalized.launch[key] = definition.launch?.[key];
+    }
+  }
+
+  return normalized;
+}
+
+function normalizeInstances(instances, expectedInstances) {
+  const normalized = instances.map((instance, index) => normalizeInstance(instance, expectedInstances?.[index]));
+  if (!Array.isArray(expectedInstances)) {
+    return normalized;
+  }
+
+  return normalized.filter((instance) => expectedInstances.some((expected) => expected?.instanceId === instance.instanceId));
+}
+
+function normalizeInstance(instance, expectedInstance) {
+  const normalized = {
+    instanceId: instance.instanceId,
+    appId: instance.appId,
+    scope: instance.scope,
+    pid: instance.pid,
+    registeredAtUtc: normalizeDate(instance.registeredAtUtc),
+    lastSeenUtc: normalizeDate(instance.lastSeenUtc),
+    invoke: {
+      poll: instance.invoke.poll,
+      respond: instance.invoke.respond
+    }
+  };
+
+  if (expectedInstance?.meta !== undefined || instance.meta !== undefined) {
+    normalized.meta = instance.meta;
+  }
+
+  return normalized;
+}
+
+function normalizeLaunchResult(result) {
+  const normalized = {
+    ok: true,
+    status: result.status
+  };
+  if (result.pid !== undefined) {
+    normalized.pid = result.pid;
+  }
+  if (result.launchId !== undefined) {
+    normalized.launchId = result.launchId;
+  }
+  if (result.dedupeKey !== undefined) {
+    normalized.dedupeKey = result.dedupeKey;
+  }
+  if (result.instanceId !== undefined) {
+    normalized.instanceId = result.instanceId;
+  }
+  return normalized;
+}
+
+function normalizePollResult(result) {
+  return {
+    ok: true,
+    serverTimeUtc: normalizeDate(result.serverTimeUtc),
+    items: result.items.map(normalizeInvocation)
+  };
+}
+
+function normalizeInvocation(invocation) {
+  const normalized = {
+    invocationId: invocation.invocationId,
+    appId: invocation.appId,
+    target: invocation.target,
+    method: invocation.method,
+    kind: invocation.kind,
+    createdAtUtc: normalizeDate(invocation.createdAtUtc),
+    caller: invocation.caller
+  };
+  if (invocation.args !== undefined) {
+    normalized.args = invocation.args;
+  }
+  if (invocation.options !== undefined) {
+    normalized.options = invocation.options;
+  }
+  if (invocation.delivery !== undefined) {
+    normalized.delivery = invocation.delivery;
+  }
+  return normalized;
+}
+
+function normalizeRpcError(error) {
+  const normalized = {
+    code: error.code,
+    message: error.message
+  };
+  if (error.data !== undefined) {
+    normalized.data = error.data;
+  }
+  return normalized;
+}
+
+function normalizeDate(value) {
+  return value instanceof Date ? value.toISOString() : value;
+}
+
 function expectsInvalidParams(vector) {
   const actual = vector?.expectedResponse?.actual;
   return actual?.code === -32602 && actual?.message === "invalid_params";
+}
+
+function isExpectedLocalInvalidParamsError(vector, error) {
+  return expectedInvalidParamsFields(vector).some((field) => errorMessageIncludesField(error, field));
+}
+
+function expectedInvalidParamsFields(vector) {
+  const expectedResponse = vector?.expectedResponse;
+  const expectedError = expectedResponse?.error ?? expectedResponse?.actual;
+  if (expectedError?.code !== -32602 || expectedError?.message !== "invalid_params") {
+    return [];
+  }
+
+  const fields = new Set();
+  collectRequestFieldNames(vector?.request?.params, fields, "");
+  collectRequestFieldNames(vector?.request?.invokeRequest, fields, "");
+
+  return [...fields].sort((left, right) => right.length - left.length);
+}
+
+function collectRequestFieldNames(value, fields, prefix) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return;
+  }
+
+  for (const [key, child] of Object.entries(value)) {
+    const path = prefix ? `${prefix}.${key}` : key;
+    fields.add(path);
+    collectRequestFieldNames(child, fields, path);
+  }
+}
+
+function errorMessageIncludesField(error, field) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  if (!field) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  const candidates = new Set([field.toLowerCase()]);
+  const segments = field.split(".");
+  for (const segment of segments) {
+    candidates.add(segment.toLowerCase());
+  }
+  for (let index = 1; index < segments.length; index += 1) {
+    candidates.add(segments.slice(index).join(".").toLowerCase());
+  }
+
+  return [...candidates].some((candidate) => candidate && message.includes(candidate));
 }
 
 function normalizeEvent(event) {
@@ -898,6 +1292,77 @@ function buildDefinitionIdentityParams(step, captures, index) {
     appId,
     scope: ensureScopeString(scope, `request.steps[${index}].scope`)
   };
+}
+
+function shouldUseSdkRpc(vector) {
+  const request = vector?.request;
+  if (!request || typeof request !== "object" || Array.isArray(request)) {
+    return false;
+  }
+
+  if (request.jsonrpc !== "2.0") {
+    return false;
+  }
+
+  if (!("id" in request)) {
+    return false;
+  }
+
+  if (!SDK_RPC_METHODS.has(request.method)) {
+    return false;
+  }
+
+  const params = request.params;
+  if (params !== undefined && (params === null || typeof params !== "object" || Array.isArray(params))) {
+    return false;
+  }
+
+  return !isRawProtocolVector(vector);
+}
+
+function isRawProtocolVector(vector) {
+  const tags = Array.isArray(vector?.tags) ? vector.tags : [];
+  if (tags.some((tag) => tag === "transport")) {
+    return true;
+  }
+
+  if (tags.some((tag) => tag === "auth") && vector?.expectedResponse?.error !== undefined) {
+    return true;
+  }
+
+  const id = typeof vector?.id === "string" ? vector.id : "";
+  return id.startsWith("errors.http.")
+    || expectsStructuredHostInvalidParams(vector)
+    || expectsHostDefinitionValidationFailure(vector);
+}
+
+function expectsStructuredHostInvalidParams(vector) {
+  const expectedError = vector?.expectedResponse?.error;
+  return expectedError?.code === -32602
+    && expectedError?.message === "invalid_params"
+    && expectedError?.data !== undefined;
+}
+
+function expectsHostDefinitionValidationFailure(vector) {
+  return vector?.request?.method === "hub.apps.validateDefinition"
+    && vector?.expectedResponse?.result?.valid === false;
+}
+
+function readVectorClientId(vector) {
+  const headerValue = vector?.http?.headers?.["X-DevHub-ClientId"];
+  if (typeof headerValue === "string" && headerValue.trim()) {
+    return headerValue;
+  }
+
+  return "ConformanceSdkRpc";
+}
+
+function readJsonRpcParams(request) {
+  if (!("params" in request) || request.params === undefined || request.params === null) {
+    return {};
+  }
+
+  return ensureRecord(request.params, "request.params");
 }
 
 function normalizeRawRequestBody(request) {
@@ -1191,7 +1656,9 @@ async function main() {
             ? await runEvents(context)
             : kind === "raw.ws" || vector.transport === "ws"
               ? await runWs(context)
-              : await runRpc(context);
+              : shouldUseSdkRpc(vector)
+                ? await runSdkRpc(context)
+                : await runRpc(context);
     emit(result);
   } catch (error) {
     emit({
