@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { afterEach, expect, it, vi } from "vitest";
 import { DevHubClient } from "../../src/client.js";
 import { DevHubEventsClient } from "../../src/events.js";
@@ -12,6 +13,9 @@ import {
   createVersionCompatibilityResult,
   parseSemVerMajorMinor
 } from "../../src/versioning.js";
+
+const TEST_RUNTIME_DIRECTORY = absoluteTestPath("devhub-js-sdk-runtime/runtime");
+const TEST_TOKEN_FILE = absoluteTestPath("devhub-js-sdk-runtime/runtime/token.txt");
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -294,14 +298,14 @@ function requireSdkSemVer(): { major: number; minor: number } {
 
 function createConnectionInfo(hubVersion?: string) {
   return {
-    runtimeDirectory: "/tmp/devhub-js-sdk-runtime/runtime",
+    runtimeDirectory: TEST_RUNTIME_DIRECTORY,
     token: "token-fake",
     runtime: {
       protocolVersion: 1,
       pid: 12345,
       httpBaseUrl: "http://127.0.0.1:57231",
       wsUrl: "ws://127.0.0.1:57231/ws",
-      tokenFile: "/tmp/devhub-js-sdk-runtime/runtime/token.txt",
+      tokenFile: TEST_TOKEN_FILE,
       startedAtUtc: new Date("2026-03-09T00:00:00Z"),
       ...(hubVersion === undefined ? {} : { hubVersion }),
       runtimeTuning: {
@@ -325,4 +329,8 @@ function createStubEventSession(
     clearAbandonedRequests: () => 0,
     ...session
   };
+}
+
+function absoluteTestPath(relativePath: string): string {
+  return fileURLToPath(new URL(`../../../.tmp-test-paths/${relativePath}`, import.meta.url));
 }

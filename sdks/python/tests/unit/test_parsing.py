@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from devhub_sdk import DevHubEventType
@@ -19,6 +21,10 @@ from devhub_sdk._parsing import (
     parse_register_instance_result,
     parse_request_result,
 )
+
+
+def _absolute_test_path(name: str) -> str:
+    return str((Path.cwd() / ".tmp-test-paths" / name).resolve())
 
 
 def test_parse_app_definition_should_allow_launch_without_exe_path() -> None:
@@ -225,7 +231,7 @@ def test_parse_hub_runtime_when_http_base_url_empty_should_raise() -> None:
                 "pid": 12345,
                 "httpBaseUrl": "",
                 "wsUrl": "ws://127.0.0.1:47231/ws",
-                "tokenFile": "/tmp/token.txt",
+                "tokenFile": _absolute_test_path("token.txt"),
                 "startedAtUtc": "2026-03-09T00:00:00Z",
                 "runtimeTuning": {
                     "leaseSeconds": 30,
@@ -245,7 +251,7 @@ def test_parse_hub_runtime_should_read_launch_register_timeout_seconds() -> None
             "pid": 12345,
             "httpBaseUrl": "http://127.0.0.1:47231",
             "wsUrl": "ws://127.0.0.1:47231/ws",
-            "tokenFile": "/tmp/token.txt",
+            "tokenFile": _absolute_test_path("token.txt"),
             "startedAtUtc": "2026-03-09T00:00:00Z",
             "runtimeTuning": {
                 "leaseSeconds": 30,
@@ -269,7 +275,7 @@ def test_parse_hub_runtime_when_launch_register_timeout_seconds_invalid_should_r
                 "pid": 12345,
                 "httpBaseUrl": "http://127.0.0.1:47231",
                 "wsUrl": "ws://127.0.0.1:47231/ws",
-                "tokenFile": "/tmp/token.txt",
+                "tokenFile": _absolute_test_path("token.txt"),
                 "startedAtUtc": "2026-03-09T00:00:00Z",
                 "runtimeTuning": {
                     "leaseSeconds": 30,

@@ -656,15 +656,16 @@ mod tests {
 
     #[test]
     fn launch_available_snapshot_carries_failure_context() {
+        let data_dir = absolute_test_path("devhub");
         let snapshot = build_launch_available_snapshot(
             7,
             MonitorSettings {
-                data_dir_override: Some("/tmp/devhub".to_string()),
+                data_dir_override: Some(data_dir.clone()),
                 host_executable_path: None,
                 hide_host_command_line_window: false,
             },
             ResolvedDataDir {
-                path: "/tmp/devhub".to_string(),
+                path: data_dir.clone(),
                 source: DataDirSource::SettingsOverride,
             },
             "hub.ping failed".to_string(),
@@ -672,18 +673,28 @@ mod tests {
 
         assert!(matches!(snapshot.phase, BootstrapPhase::LaunchAvailable));
         assert_eq!(snapshot.generation, 7);
-        assert_eq!(snapshot.effective_data_dir, "/tmp/devhub");
+        assert_eq!(snapshot.effective_data_dir, data_dir);
         let problem = snapshot.last_problem.expect("expected last problem");
         assert_eq!(problem.code, "host_unavailable");
         assert_eq!(problem.message, "hub.ping failed");
+    }
+
+    fn absolute_test_path(name: &str) -> String {
+        if cfg!(windows) {
+            format!(r"C:\devhub-tests\{name}")
+        } else {
+            format!("/tmp/{name}")
+        }
     }
 
     fn create_connection(
         protocol_version: u32,
         hub_version: Option<&str>,
     ) -> MonitorRuntimeConnectionInfo {
+        let runtime_directory = absolute_test_path("devhub/runtime");
+        let token_file = absolute_test_path("devhub/runtime/token.txt");
         MonitorRuntimeConnectionInfo {
-            runtime_directory: "/tmp/devhub/runtime".to_string(),
+            runtime_directory,
             token: "secret".to_string(),
             rpc_endpoint: "http://127.0.0.1:4123/rpc".to_string(),
             websocket_endpoint: "ws://127.0.0.1:4123/ws".to_string(),
@@ -692,7 +703,7 @@ mod tests {
                 pid: 4321,
                 http_base_url: "http://127.0.0.1:4123".to_string(),
                 ws_url: "ws://127.0.0.1:4123/ws".to_string(),
-                token_file: "/tmp/devhub/runtime/token.txt".to_string(),
+                token_file,
                 started_at_utc: "2026-04-12T00:00:00Z".to_string(),
                 runtime_tuning: MonitorRuntimeTuning {
                     lease_seconds: 30,

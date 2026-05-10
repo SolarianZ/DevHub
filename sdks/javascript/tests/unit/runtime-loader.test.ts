@@ -1,5 +1,9 @@
+import { fileURLToPath } from "node:url";
 import { afterEach, expect, it, vi } from "vitest";
 import type { RuntimeConnectionInfo } from "../../src/runtime.js";
+
+const TEST_RUNTIME_DIRECTORY = absoluteTestPath("devhub-js-sdk-runtime");
+const TEST_TOKEN_FILE = absoluteTestPath("devhub-js-sdk-runtime/runtime/token.txt");
 
 afterEach(() => {
   vi.doUnmock("../../src/runtime.js");
@@ -125,14 +129,14 @@ it("默认 runtime 模块应在两个入口之间共享缓存", async () => {
 
 function createConnectionInfo(): RuntimeConnectionInfo {
   return {
-    runtimeDirectory: "/tmp/devhub-js-sdk-runtime",
+    runtimeDirectory: TEST_RUNTIME_DIRECTORY,
     token: "token-1",
     runtime: {
       protocolVersion: 1,
       pid: 12345,
       httpBaseUrl: "http://127.0.0.1:47231",
       wsUrl: "ws://127.0.0.1:47231/ws",
-      tokenFile: "/tmp/devhub-js-sdk-runtime/runtime/token.txt",
+      tokenFile: TEST_TOKEN_FILE,
       startedAtUtc: new Date("2026-03-09T00:00:00Z"),
       runtimeTuning: {
         leaseSeconds: 30,
@@ -157,4 +161,8 @@ function createStubEventSession(session: {
     clearAbandonedRequests: () => 0,
     ...session
   };
+}
+
+function absoluteTestPath(relativePath: string): string {
+  return fileURLToPath(new URL(`../../../.tmp-test-paths/${relativePath}`, import.meta.url));
 }

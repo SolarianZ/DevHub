@@ -11,6 +11,9 @@ import {
 import type { NormalizedDevHubClientOptions } from "../../src/models.js";
 
 const tempRoots: string[] = [];
+const TEST_DATA_DIR = path.resolve(".tmp-test-paths/devhub-js-sdk-runtime");
+const TEST_RUNTIME_DIRECTORY = path.join(TEST_DATA_DIR, "runtime");
+const TEST_TOKEN_FILE = path.join(TEST_RUNTIME_DIRECTORY, "token.txt");
 
 afterEach(async () => {
   vi.unstubAllGlobals();
@@ -34,7 +37,7 @@ it("dispose should forward to an injected transport and remain idempotent", asyn
   const client = await DevHubClient.fromRuntime(
     {
       clientId: "unit-dispose-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -56,7 +59,7 @@ it("dispose should tolerate transports without a dispose hook", async () => {
   const client = await DevHubClient.fromRuntime(
     {
       clientId: "unit-dispose-optional-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -88,7 +91,7 @@ it("disposed client should reject further RPCs without calling transport", async
   const client = await DevHubClient.fromRuntime(
     {
       clientId: "unit-disposed-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -110,7 +113,7 @@ it("fromRuntime 应支持注入 runtimeResolver 与 transportFactory", async () 
     resolve: vi.fn(async (options: Readonly<NormalizedDevHubClientOptions>) => {
       expect(options).toMatchObject({
         clientId: "unit-injected-client",
-        dataDir: "/tmp/devhub-js-sdk-runtime",
+        dataDir: TEST_DATA_DIR,
         protocolVersion: 1
       });
       expect(options.clientSessionId).toEqual(expect.any(String));
@@ -143,7 +146,7 @@ it("fromRuntime 应支持注入 runtimeResolver 与 transportFactory", async () 
   const client = await DevHubClient.fromRuntime(
     {
       clientId: "unit-injected-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver,
@@ -180,7 +183,7 @@ it("fromRuntime 应拒绝注入 resolver 返回的非法 WebSocket 端点", asyn
   await expect(DevHubClient.fromRuntime(
     {
       clientId: "unit-invalid-resolver-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -199,7 +202,7 @@ it("runtime 应返回脱敏快照", async () => {
   const client = await DevHubClient.fromRuntime(
     {
       clientId: "unit-runtime-view-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -235,7 +238,7 @@ it("ping 应拒绝注入 transport 返回的非法 echo JSON", async () => {
   const client = await DevHubClient.fromRuntime(
     {
       clientId: "unit-injected-invalid-echo-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -262,7 +265,7 @@ it("request 应拒绝注入 transport 返回的非法 value JSON", async () => {
   const client = await DevHubClient.fromRuntime(
     {
       clientId: "unit-injected-invalid-value-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -1026,7 +1029,7 @@ it("registerInstance 应拒绝返回包含 password 的实例结果", async () =
   const client = await DevHubClient.fromRuntime(
     {
       clientId: "unit-instance-password-leak-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -1071,7 +1074,7 @@ it("registerInstance 应拒绝缺少 instanceSessionToken 的成功结果", asyn
   const client = await DevHubClient.fromRuntime(
     {
       clientId: "unit-instance-session-token-required-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -2250,7 +2253,7 @@ it("listInstances 应拒绝注入 transport 返回的非法 meta JSON", async ()
   const client = await DevHubClient.fromRuntime(
     {
       clientId: "unit-injected-invalid-meta-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -2294,7 +2297,7 @@ it("getDefinition 应将非法入站标识符视为 invalid_response", async () 
   const client = await DevHubClient.fromRuntime(
     {
       clientId: "unit-injected-invalid-identifier-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -2375,7 +2378,7 @@ it("getInstance should reject an AppInstance payload containing instanceSessionT
   const client = await DevHubClient.fromRuntime(
     {
       clientId: "unit-get-instance-token-leak-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -2411,7 +2414,7 @@ it("getInstance should reject an AppInstance payload containing password", async
   const client = await DevHubClient.fromRuntime(
     {
       clientId: "unit-get-instance-password-leak-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -2491,7 +2494,7 @@ it("poll 应拒绝注入 transport 返回的非法 args JSON", async () => {
   const client = await DevHubClient.fromRuntime(
     {
       clientId: "unit-injected-invalid-args-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -2555,14 +2558,14 @@ function createConnectionInfo(overrides: {
 
 function createBaseConnectionInfo() {
   return {
-    runtimeDirectory: "/tmp/devhub-js-sdk-runtime/runtime",
+    runtimeDirectory: TEST_RUNTIME_DIRECTORY,
     token: "token-fake",
     runtime: {
       protocolVersion: 1,
       pid: 12345,
       httpBaseUrl: "http://127.0.0.1:57231",
       wsUrl: "ws://127.0.0.1:57231/ws",
-      tokenFile: "/tmp/devhub-js-sdk-runtime/runtime/token.txt",
+      tokenFile: TEST_TOKEN_FILE,
       startedAtUtc: new Date("2026-03-09T00:00:00Z"),
       hubVersion: "0.7.0-test",
       runtimeTuning: {

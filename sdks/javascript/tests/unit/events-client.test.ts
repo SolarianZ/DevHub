@@ -14,6 +14,9 @@ import type { NormalizedDevHubClientOptions } from "../../src/models.js";
 import type { JsonRpcWsSessionOptions } from "../../src/ws-session.js";
 
 const tempRoots: string[] = [];
+const TEST_DATA_DIR = path.resolve(".tmp-test-paths/devhub-js-sdk-runtime");
+const TEST_RUNTIME_DIRECTORY = path.join(TEST_DATA_DIR, "runtime");
+const TEST_TOKEN_FILE = path.join(TEST_RUNTIME_DIRECTORY, "token.txt");
 
 afterEach(async () => {
   vi.doUnmock("ws");
@@ -31,7 +34,7 @@ it("fromRuntime 应支持注入 runtimeResolver 与 sessionFactory", async () =>
     resolve: vi.fn(async (options: Readonly<NormalizedDevHubClientOptions>) => {
       expect(options).toMatchObject({
         clientId: "unit-events-injected-client",
-        dataDir: "/tmp/devhub-js-sdk-runtime",
+        dataDir: TEST_DATA_DIR,
         protocolVersion: 1
       });
       expect(options.clientSessionId).toEqual(expect.any(String));
@@ -47,7 +50,7 @@ it("fromRuntime 应支持注入 runtimeResolver 与 sessionFactory", async () =>
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-injected-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver,
@@ -88,7 +91,7 @@ it("fromRuntime 应拒绝注入 resolver 返回的非法 WebSocket 端点", asyn
   await expect(DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-invalid-resolver-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -113,7 +116,7 @@ it("本地已放弃请求维护接口应直接委托 session 且不要求认证"
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-local-abandoned-request-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -152,7 +155,7 @@ it("同一个 events client 实例一次只允许一个活动中的 readEvents �
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-single-reader-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -202,7 +205,7 @@ it("HTTP/Events 客户端应复用默认 clientSessionId 并隐藏原始连接�
   const client = await DevHubClient.fromRuntime(
     {
       clientId: "unit-shared-http-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver,
@@ -213,7 +216,7 @@ it("HTTP/Events 客户端应复用默认 clientSessionId 并隐藏原始连接�
   const eventsClient = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-shared-events-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver,
@@ -261,7 +264,7 @@ it("authenticate should support WS ping and apps queries", async () => {
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-ws-rpc-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -339,7 +342,7 @@ it("authenticated WS listDefinitions should reject blank displayName from transp
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-list-definitions-invalid-display-name-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -398,7 +401,7 @@ it("authenticated WS getDefinition should continue accepting blank launch.exePat
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-get-definition-blank-launch-exepath-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -459,7 +462,7 @@ it("getInstance should reject an invalid instanceId before sending the WS reques
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-invalid-instance-id-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -488,7 +491,7 @@ it("getDefinition 应将 WS 非法入站标识符视为 invalid_response", async
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-invalid-identifier-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -555,7 +558,7 @@ it("getInstance should propagate instance_not_found over WS without rewriting th
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-get-instance-not-found-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -621,7 +624,7 @@ it("事件流应拒绝注入 session 返回的非法 payload JSON", async () => 
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-invalid-payload-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -680,7 +683,7 @@ it("定义事件应拒绝缺失结构化 payload 的通知", async () => {
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-invalid-definition-payload-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -740,7 +743,7 @@ it("实例事件应拒绝包含 password 的 payload", async () => {
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-password-leak-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -802,7 +805,7 @@ it("definition upserted 事件应拒绝空白 displayName，即使 launch.exePat
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-blank-display-name-event-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -870,7 +873,7 @@ it("实例事件应拒绝省略 scope 的 payload", async () => {
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-omitted-scope-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -932,7 +935,7 @@ it("实例事件应继续拒绝非法 scope", async () => {
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-invalid-scope-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -1001,7 +1004,7 @@ it("断线后重新认证应重建事件流并要求重新订阅", async () => {
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-reconnect-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -1047,7 +1050,7 @@ it("断线后即使不继续消费旧 iterator 也应允许重新认证恢复", 
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-reconnect-with-abandoned-iterator-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -1092,7 +1095,7 @@ it("旧 iterator 的收尾动作不应释放新 reader 租约", async () => {
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-stale-iterator-cleanup-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -1162,7 +1165,7 @@ it("subscribe 应在发送请求前拒绝未知事件类型", async () => {
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-invalid-subscribe-type-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -1224,7 +1227,7 @@ it("连接终止后新的 readEvents 应抛出 session_terminated typed connecti
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-terminated-stream-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -1586,14 +1589,14 @@ function createConnectionInfo(overrides: {
 
 function createBaseConnectionInfo() {
   return {
-    runtimeDirectory: "/tmp/devhub-js-sdk-runtime/runtime",
+    runtimeDirectory: TEST_RUNTIME_DIRECTORY,
     token: "token-fake",
     runtime: {
       protocolVersion: 1,
       pid: 12345,
       httpBaseUrl: "http://127.0.0.1:57231",
       wsUrl: "ws://127.0.0.1:57231/ws",
-      tokenFile: "/tmp/devhub-js-sdk-runtime/runtime/token.txt",
+      tokenFile: TEST_TOKEN_FILE,
       startedAtUtc: new Date("2026-03-09T00:00:00Z"),
       hubVersion: "0.7.0-test",
       runtimeTuning: {

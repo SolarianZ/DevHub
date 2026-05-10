@@ -90,6 +90,35 @@ vi.mock("@devhub/sdk", async () => {
   };
 });
 
+const TEST_DATA_DIR = absoluteTestPath("devhub");
+const TEST_RUNTIME_DIRECTORY = absoluteTestPath("devhub/runtime");
+const TEST_TOKEN_FILE = absoluteTestPath("devhub/runtime/token.txt");
+const TEST_HOST_EXECUTABLE_PATH = absoluteHostPlaceholder();
+const TEST_SETTINGS_FILE_PATH = absoluteTestPath("settings.json");
+const TEST_MONITOR_LOG_DIRECTORY = absoluteTestPath("monitor/logs");
+const TEST_NEW_DATA_DIR = absoluteTestPath("devhub-new");
+const TEST_OLD_DATA_DIR = absoluteTestPath("devhub-old");
+const TEST_ALT_HOST_EXECUTABLE_PATH = absoluteHostPlaceholder("alt-host");
+const TEST_PICKED_HOST_EXECUTABLE_PATH = absoluteHostPlaceholder("picked-host");
+const TEST_PICKED_DATA_DIR = absoluteTestPath("picked-data");
+
+function absoluteTestPath(relativePath: string): string {
+  const normalized = relativePath.replaceAll("\\", "/");
+  if (process.platform === "win32") {
+    return `C:\\devhub-tests\\${normalized.replaceAll("/", "\\")}`;
+  }
+
+  return `/tmp/devhub-tests/${normalized}`;
+}
+
+function absoluteHostPlaceholder(fileName = "DevHub.Host"): string {
+  return absoluteTestPath(
+    process.platform === "win32" && !fileName.endsWith(".exe")
+      ? `${fileName}.exe`
+      : fileName,
+  );
+}
+
 function createConnection(
   overrides: Omit<Partial<MonitorRuntimeConnectionInfo>, "runtime"> & {
     runtime?: Partial<MonitorHubRuntime>;
@@ -98,7 +127,7 @@ function createConnection(
   const runtimeOverrides = overrides.runtime ?? {};
 
   return {
-    runtimeDirectory: overrides.runtimeDirectory ?? "/tmp/devhub/runtime",
+    runtimeDirectory: overrides.runtimeDirectory ?? TEST_RUNTIME_DIRECTORY,
     token: overrides.token ?? "test-token",
     rpcEndpoint: overrides.rpcEndpoint ?? "http://127.0.0.1:4123/rpc",
     websocketEndpoint: overrides.websocketEndpoint ?? "ws://127.0.0.1:4123/ws",
@@ -107,7 +136,7 @@ function createConnection(
       pid: 4321,
       httpBaseUrl: "http://127.0.0.1:4123",
       wsUrl: "ws://127.0.0.1:4123/ws",
-      tokenFile: "/tmp/devhub/runtime/token.txt",
+      tokenFile: TEST_TOKEN_FILE,
       startedAtUtc: "2026-04-12T02:03:04Z",
       runtimeTuning: {
         leaseSeconds: 30,
@@ -129,11 +158,11 @@ function createBootstrapSnapshot(
   return {
     generation: 1,
     phase: "host_available",
-    effectiveDataDir: "/tmp/devhub",
+    effectiveDataDir: TEST_DATA_DIR,
     dataDirSource: "settings_override",
     settings: {
-      dataDirOverride: "/tmp/devhub",
-      hostExecutablePath: "/tmp/DevHub.Host",
+      dataDirOverride: TEST_DATA_DIR,
+      hostExecutablePath: TEST_HOST_EXECUTABLE_PATH,
       hideHostCommandLineWindow: true,
     },
     hasConfiguredHostExecutable: true,
@@ -147,15 +176,15 @@ function createSettingsSnapshot(overrides: Partial<SettingsSnapshot> = {}): Sett
   return {
     revision: overrides.revision ?? 0,
     settings: {
-      dataDirOverride: "/tmp/devhub",
-      hostExecutablePath: "/tmp/DevHub.Host",
+      dataDirOverride: TEST_DATA_DIR,
+      hostExecutablePath: TEST_HOST_EXECUTABLE_PATH,
       hideHostCommandLineWindow: true,
     },
     platform: "windows",
-    effectiveDataDir: "/tmp/devhub",
+    effectiveDataDir: TEST_DATA_DIR,
     dataDirSource: "settings_override",
-    settingsFilePath: "/tmp/settings.json",
-    monitorLogDirectory: "/tmp/monitor/logs",
+    settingsFilePath: TEST_SETTINGS_FILE_PATH,
+    monitorLogDirectory: TEST_MONITOR_LOG_DIRECTORY,
     ...overrides,
   };
 }
@@ -378,7 +407,7 @@ beforeEach(() => {
   pickHostExecutablePathMock.mockResolvedValue(null);
   requestHostLaunchMock.mockResolvedValue({
     status: "started",
-    effectiveDataDir: "/tmp/devhub",
+    effectiveDataDir: TEST_DATA_DIR,
     dataDirSource: "settings_override",
     pid: 4321,
   });
@@ -1173,7 +1202,7 @@ describe("Monitor App", () => {
           generation: 2,
           phase: "host_incompatible",
           connection: null,
-          effectiveDataDir: "/tmp/devhub-new",
+          effectiveDataDir: TEST_NEW_DATA_DIR,
           lastProblem: {
             code: "host_incompatible",
             message: "当前 Host 版本不受支持",
@@ -1183,10 +1212,10 @@ describe("Monitor App", () => {
       settingsListener?.({
         payload: createSettingsSnapshot({
           revision: 2,
-          effectiveDataDir: "/tmp/devhub-new",
+          effectiveDataDir: TEST_NEW_DATA_DIR,
           settings: {
-            dataDirOverride: "/tmp/devhub-new",
-            hostExecutablePath: "/tmp/DevHub.Host",
+            dataDirOverride: TEST_NEW_DATA_DIR,
+            hostExecutablePath: TEST_HOST_EXECUTABLE_PATH,
             hideHostCommandLineWindow: true,
           },
         }),
@@ -1196,16 +1225,16 @@ describe("Monitor App", () => {
           generation: 1,
           phase: "scanning",
           connection: null,
-          effectiveDataDir: "/tmp/devhub-old",
+          effectiveDataDir: TEST_OLD_DATA_DIR,
         }),
       );
       settingsDeferred.resolve(
         createSettingsSnapshot({
           revision: 1,
-          effectiveDataDir: "/tmp/devhub-old",
+          effectiveDataDir: TEST_OLD_DATA_DIR,
           settings: {
-            dataDirOverride: "/tmp/devhub-old",
-            hostExecutablePath: "/tmp/DevHub.Host",
+            dataDirOverride: TEST_OLD_DATA_DIR,
+            hostExecutablePath: TEST_HOST_EXECUTABLE_PATH,
             hideHostCommandLineWindow: true,
           },
         }),
@@ -1213,12 +1242,12 @@ describe("Monitor App", () => {
     });
 
     await screen.findAllByText("当前 Host 版本不受支持");
-    screen.getByText("目标位置：/tmp/devhub-new");
+    screen.getByText(`目标位置：${TEST_NEW_DATA_DIR}`);
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "设置" }));
     await screen.findByRole("heading", { name: "设置" });
-    expect((screen.getByLabelText("Host 数据目录") as HTMLInputElement).value).toBe("/tmp/devhub-new");
+    expect((screen.getByLabelText("Host 数据目录") as HTMLInputElement).value).toBe(TEST_NEW_DATA_DIR);
   });
 
   it("treats typed connection errors as rediscovery triggers during inventory refresh", async () => {
@@ -1370,14 +1399,14 @@ describe("Monitor App", () => {
     await screen.findByRole("heading", { name: "设置" });
 
     await user.clear(screen.getByLabelText("Host 可执行文件路径"));
-    await user.type(screen.getByLabelText("Host 可执行文件路径"), "/tmp/alt-host");
+    await user.type(screen.getByLabelText("Host 可执行文件路径"), TEST_ALT_HOST_EXECUTABLE_PATH);
     await user.click(screen.getByLabelText("隐藏 Host 命令行窗口"));
     await user.click(screen.getByRole("button", { name: "保存设置" }));
 
     await waitFor(() => {
       expect(saveSettingsMock).toHaveBeenCalledWith({
-        dataDirOverride: "/tmp/devhub",
-        hostExecutablePath: "/tmp/alt-host",
+        dataDirOverride: TEST_DATA_DIR,
+        hostExecutablePath: TEST_ALT_HOST_EXECUTABLE_PATH,
         hideHostCommandLineWindow: false,
       });
     });
@@ -1433,8 +1462,8 @@ describe("Monitor App", () => {
         connection: null,
       }),
     );
-    pickHostExecutablePathMock.mockResolvedValue("/tmp/picked-host");
-    pickDataDirectoryMock.mockResolvedValue("/tmp/picked-data");
+    pickHostExecutablePathMock.mockResolvedValue(TEST_PICKED_HOST_EXECUTABLE_PATH);
+    pickDataDirectoryMock.mockResolvedValue(TEST_PICKED_DATA_DIR);
 
     render(<App />);
 
@@ -1447,11 +1476,11 @@ describe("Monitor App", () => {
     await user.click(screen.getByRole("button", { name: "选择 Host 可执行文件" }));
     await user.click(screen.getByRole("button", { name: "选择 Host 数据目录" }));
 
-    expect(pickHostExecutablePathMock).toHaveBeenCalledWith("/tmp/DevHub.Host");
-    expect(pickDataDirectoryMock).toHaveBeenCalledWith("/tmp/devhub");
+    expect(pickHostExecutablePathMock).toHaveBeenCalledWith(TEST_HOST_EXECUTABLE_PATH);
+    expect(pickDataDirectoryMock).toHaveBeenCalledWith(TEST_DATA_DIR);
     await waitFor(() => {
-      expect((screen.getByLabelText("Host 可执行文件路径") as HTMLInputElement).value).toBe("/tmp/picked-host");
-      expect((screen.getByLabelText("Host 数据目录") as HTMLInputElement).value).toBe("/tmp/picked-data");
+      expect((screen.getByLabelText("Host 可执行文件路径") as HTMLInputElement).value).toBe(TEST_PICKED_HOST_EXECUTABLE_PATH);
+      expect((screen.getByLabelText("Host 数据目录") as HTMLInputElement).value).toBe(TEST_PICKED_DATA_DIR);
     });
   });
 
@@ -1473,12 +1502,12 @@ describe("Monitor App", () => {
 
     const hostPathInput = screen.getByLabelText("Host 可执行文件路径");
     await user.clear(hostPathInput);
-    await user.type(hostPathInput, "/tmp/alt-host");
+    await user.type(hostPathInput, TEST_ALT_HOST_EXECUTABLE_PATH);
 
     await user.click(screen.getByRole("button", { name: "帮助" }));
     await respondToConfirmDialog(user, "cancel", "设置中的修改尚未保存，确认放弃并离开当前工作区吗？");
     await screen.findByRole("heading", { name: "设置" });
-    expect((screen.getByLabelText("Host 可执行文件路径") as HTMLInputElement).value).toBe("/tmp/alt-host");
+    expect((screen.getByLabelText("Host 可执行文件路径") as HTMLInputElement).value).toBe(TEST_ALT_HOST_EXECUTABLE_PATH);
 
     await user.click(screen.getByRole("button", { name: "帮助" }));
     await respondToConfirmDialog(user, "confirm", "设置中的修改尚未保存，确认放弃并离开当前工作区吗？");
@@ -1486,7 +1515,7 @@ describe("Monitor App", () => {
 
     await user.click(screen.getByRole("button", { name: "设置" }));
     await screen.findByRole("heading", { name: "设置" });
-    expect((screen.getByLabelText("Host 可执行文件路径") as HTMLInputElement).value).toBe("/tmp/DevHub.Host");
+    expect((screen.getByLabelText("Host 可执行文件路径") as HTMLInputElement).value).toBe(TEST_HOST_EXECUTABLE_PATH);
   });
 
   it("keeps the home workspace visible without empty inventories while the host session is still connecting", async () => {
