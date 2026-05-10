@@ -5,6 +5,8 @@ import time
 import pytest
 
 from devhub_sdk import (
+    AppCapabilities,
+    AppDefinition,
     AppInstanceRegistration,
     DevHubCalleeError,
     DevHubRpcErrorCode,
@@ -272,18 +274,176 @@ def test_scope_routing_should_hit_expected_instance() -> None:
         ).method == "test.literal-global"
 
 
-def _create_instance(app_id: str, instance_id: str, scope: str) -> AppInstanceRegistration:
+def test_rpc_disabled_should_surface_forbidden_reason() -> None:
+    with DevHubHostFixture.start() as host:
+        client = host.create_client("invoke-rpc-disabled-client")
+        client.upsert_definition(
+            AppDefinition(
+                app_id="invoke.rpc.disabled.app",
+                display_name="invoke.rpc.disabled.app",
+                capabilities=AppCapabilities(rpc=False),
+                scope="",
+            )
+        )
+        _register_instance(client, "invoke.rpc.disabled.app", "rpc-disabled-inst-1", "")
+
+        with pytest.raises(DevHubRpcException) as exc_info:
+            client.notify(
+                InvokeRequest(
+                    app_id="invoke.rpc.disabled.app",
+                    method="test.notify",
+                    target=InvocationTarget(scope=""),
+                    options=InvocationOptions(auto_launch=False),
+                )
+            )
+
+    assert exc_info.value.code == DevHubRpcErrorCode.FORBIDDEN
+    assert exc_info.value.reason == "rpc_disabled"
+
+
+def test_target_instance_missing_should_not_fallback_to_online_scope_match() -> None:
+    with DevHubHostFixture.start() as host:
+        host.write_definition({"appId": "invoke.target.app", "displayName": "invoke.target.app"})
+        client = host.create_client("invoke-target-client")
+        online_token = _register_instance(client, "invoke.target.app", "target-online-inst-1", "")
+
+        with pytest.raises(DevHubRpcException) as exc_info:
+            client.notify(
+                InvokeRequest(
+                    app_id="invoke.target.app",
+                    method="test.target-missing",
+                    target=InvocationTarget(scope="", instance_id="target-missing-inst-1"),
+                    options=InvocationOptions(queue_if_offline=False),
+                )
+            )
+
+        poll_result = client.poll(
+            PollRequest(
+                instance_id="target-online-inst-1",
+                instance_session_token=online_token,
+                wait_ms=0,
+            )
+        )
+
+    assert exc_info.value.code == DevHubRpcErrorCode.INSTANCE_NOT_FOUND
+    assert exc_info.value.reason == "target_instance_missing"
+    assert poll_result.items == []
+
+
+def test_auto_launch_with_queue_disabled_should_fail_before_enqueuing() -> None:
+    with DevHubHostFixture.start() as host:
+        host.write_definition({"appId": "invoke.autolaunch.app", "displayName": "invoke.autolaunch.app"})
+        client = host.create_client("invoke-autolaunch-client")
+        instance_session_token = _register_instance(client, "invoke.autolaunch.app", "autolaunch-inst-1", "")
+
+        with pytest.raises(ValueError, match="queue_if_offline"):
+            client.notify(
+                InvokeRequest(
+                    app_id="invoke.autolaunch.app",
+                    method="test.invalid-options",
+                    target=InvocationTarget(scope=""),
+                    options=InvocationOptions(auto_launch=True, queue_if_offline=False),
+                )
+            )
+
+        poll_result = client.poll(
+            PollRequest(
+                instance_id="autolaunch-inst-1",
+                instance_session_token=instance_session_token,
+                wait_ms=0,
+            )
+        )
+
+    assert poll_result.items == []
+
+
+def test_poll_and_respond_capabilities_should_be_enforced() -> None:
+    with DevHubHostFixture.start() as host:
+        host.write_definition({"appId": "invoke.capability.app", "displayName": "invoke.capability.app"})
+        client = host.create_client("invoke-capability-client")
+
+        poll_disabled_token = _register_instance(
+            client,
+            "invoke.capability.app",
+            "poll-disabled-inst-1",
+            "",
+            invoke=InvokeCapability(poll=False, respond=True),
+        )
+        with pytest.raises(DevHubRpcException) as poll_error:
+            client.poll(
+                PollRequest(
+                    instance_id="poll-disabled-inst-1",
+                    instance_session_token=poll_disabled_token,
+                    wait_ms=0,
+                )
+            )
+
+        respond_disabled_token = _register_instance(
+            client,
+            "invoke.capability.app",
+            "respond-disabled-inst-1",
+            "",
+            invoke=InvokeCapability(poll=True, respond=False),
+        )
+        request_future = _call_request(
+            client,
+            app_id="invoke.capability.app",
+            target=InvocationTarget(scope="", instance_id="respond-disabled-inst-1"),
+            options=InvocationOptions(ttl_ms=1500, wait_timeout_ms=1000),
+        )
+        invocation = _wait_for_single_invocation(client, "respond-disabled-inst-1", respond_disabled_token)
+        with pytest.raises(DevHubRpcException) as respond_error:
+            client.respond(
+                RespondRequest(
+                    instance_id="respond-disabled-inst-1",
+                    instance_session_token=respond_disabled_token,
+                    invocation_id=invocation.invocation_id,
+                    lease_token=_lease_token(invocation),
+                    value={"ok": True},
+                )
+            )
+
+        with pytest.raises(DevHubRpcException) as request_error:
+            request_future()
+
+    assert poll_error.value.code == DevHubRpcErrorCode.FORBIDDEN
+    assert poll_error.value.reason == "poll_not_enabled"
+    assert respond_error.value.code == DevHubRpcErrorCode.FORBIDDEN
+    assert respond_error.value.reason == "respond_not_enabled"
+    assert request_error.value.code in {
+        DevHubRpcErrorCode.INVOCATION_TIMEOUT,
+        DevHubRpcErrorCode.INVOCATION_EXPIRED,
+    }
+
+
+def _create_instance(
+    app_id: str,
+    instance_id: str,
+    scope: str,
+    *,
+    invoke: InvokeCapability | None = None,
+) -> AppInstanceRegistration:
     return AppInstanceRegistration(
         instance_id=instance_id,
         app_id=app_id,
         scope=scope,
         pid=99999,
-        invoke=InvokeCapability(poll=True, respond=True),
+        invoke=InvokeCapability(poll=True, respond=True) if invoke is None else invoke,
     )
 
 
-def _register_instance(client, app_id: str, instance_id: str, scope: str) -> str:
-    registered = client.register_instance(_create_instance(app_id, instance_id, scope), _instance_password(instance_id))
+def _register_instance(
+    client,
+    app_id: str,
+    instance_id: str,
+    scope: str,
+    *,
+    invoke: InvokeCapability | None = None,
+) -> str:
+    registered = client.register_instance(
+        _create_instance(app_id, instance_id, scope, invoke=invoke),
+        _instance_password(instance_id),
+    )
     if registered.instance_session_token is None:
         raise AssertionError(f"实例 {instance_id} 缺少 instance_session_token。")
     return registered.instance_session_token
@@ -293,26 +453,39 @@ def _instance_password(instance_id: str) -> str:
     return f"python-sdk-{instance_id}"
 
 
-def _call_request(client, app_id: str = "invoke.request.app"):
+def _call_request(
+    client,
+    app_id: str = "invoke.request.app",
+    *,
+    target: InvocationTarget | None = None,
+    options: InvocationOptions | None = None,
+):
     result_holder = {}
     import threading
 
     def worker() -> None:
-        result_holder["value"] = client.request(
-            InvokeRequest(
-                app_id=app_id,
-                method="test.request",
-                target=InvocationTarget(scope=""),
-                args={"input": 1},
-                options=None,
+        try:
+            result_holder["value"] = client.request(
+                InvokeRequest(
+                    app_id=app_id,
+                    method="test.request",
+                    target=InvocationTarget(scope="") if target is None else target,
+                    args={"input": 1},
+                    options=options,
+                )
             )
-        )
+        except Exception as exc:  # noqa: BLE001
+            result_holder["error"] = exc
 
     thread = threading.Thread(target=worker, daemon=True)
     thread.start()
 
     def wait_result():
         thread.join(timeout=10)
+        if thread.is_alive():
+            raise TimeoutError("request 调用未在 10 秒内结束。")
+        if "error" in result_holder:
+            raise result_holder["error"]
         return result_holder["value"]
 
     return wait_result
