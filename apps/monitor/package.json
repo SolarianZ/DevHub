@@ -1,7 +1,7 @@
 {
   "name": "@devhub/monitor",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.8.0",
   "type": "module",
   "scripts": {
     "sync:version-metadata": "node ./scripts/sync-version-metadata.mjs",

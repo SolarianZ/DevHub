@@ -206,10 +206,20 @@ def wait_for_host_runtime(
     def wait_for_hub_json():
         if process.poll() is not None:
             raise RuntimeError(f"隔离 Hub 提前退出，日志片段：{read_log_tail(log_file)}")
-        if hub_json_path.is_file():
-            return None
+        if not hub_json_path.is_file():
+            return PENDING_WAIT_STATUS
 
-        return PENDING_WAIT_STATUS
+        try:
+            hub_info = json.loads(hub_json_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return PENDING_WAIT_STATUS
+
+        # suite Host 重启时会复用同一 dataDir；这里必须确认 hub.json
+        # 已切换到当前进程，避免继续读取上一轮启动遗留的端口信息。
+        if hub_info.get("pid") != process.pid:
+            return PENDING_WAIT_STATUS
+
+        return hub_info
 
     hub_json_ready = poll_until_deadline_with_long_wait_status(
         label="等待 conformance 隔离 Host 生成 hub.json",
@@ -221,7 +231,7 @@ def wait_for_host_runtime(
     if hub_json_ready is PENDING_WAIT_STATUS:
         raise RuntimeError(f"等待隔离 Hub 生成 hub.json 超时，日志片段：{read_log_tail(log_file)}")
 
-    hub_info = json.loads(hub_json_path.read_text(encoding="utf-8"))
+    hub_info = hub_json_ready
     token_file = Path(hub_info["tokenFile"])
     if not token_file.is_file():
         raise FileNotFoundError(f"隔离 Hub 的 tokenFile 不存在：{token_file}")

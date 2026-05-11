@@ -144,7 +144,7 @@ function createConnection(
         launchDedupeWindowSeconds: 5,
         launchRegisterTimeoutSeconds: 45,
       },
-      hubVersion: "0.7.0",
+      hubVersion: "0.8.0",
       ...runtimeOverrides,
     },
   };
@@ -224,7 +224,7 @@ function createVersionCompatibilityResult(
 ): VersionCompatibilityResult {
   return {
     sdkVersion: MONITOR_VERSION_METADATA.sdkVersion,
-    hostVersion: "0.7.0",
+    hostVersion: "0.8.0",
     status: "compatible",
     ...overrides,
   };
@@ -1363,8 +1363,8 @@ describe("Monitor App", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "帮助" }));
     await screen.findByRole("heading", { name: "帮助" });
-    screen.getByText(MONITOR_VERSION_METADATA.monitorVersion);
-    screen.getByText(MONITOR_VERSION_METADATA.sdkVersion);
+    expect(getHelpValue("Monitor 版本")).toBe(MONITOR_VERSION_METADATA.monitorVersion);
+    expect(getHelpValue("内置 JS SDK 版本")).toBe(MONITOR_VERSION_METADATA.sdkVersion);
     screen.getByText("未连接");
     screen.getByText("未知");
 

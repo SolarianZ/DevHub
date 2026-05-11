@@ -916,14 +916,14 @@ mod tests {
         assert!(unknown.problem.is_none());
         assert_eq!(unknown.result.status, VersionCompatibilityStatus::Unknown);
 
-        let update_recommended = assess_runtime_compatibility(&create_connection(1, Some("0.8.1")));
+        let update_recommended = assess_runtime_compatibility(&create_connection(1, Some("0.9.1")));
         assert!(update_recommended.problem.is_none());
         assert_eq!(
             update_recommended.result.status,
             VersionCompatibilityStatus::UpdateRecommended
         );
 
-        let compatible = assess_runtime_compatibility(&create_connection(1, Some("0.7.0-rc.1")));
+        let compatible = assess_runtime_compatibility(&create_connection(1, Some("0.8.1-rc.1")));
         assert!(compatible.problem.is_none());
         assert_eq!(
             compatible.result.status,
