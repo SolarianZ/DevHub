@@ -10,7 +10,8 @@ namespace DevHubDispatcher.Editor
         {
             new ExecuteMenuItemTool(),
             new ExecuteMethodTool(),
-            new GetDataPathTool()
+            new GetDataPathTool(),
+            new FocusUnityEditorTool()
         };
 
         static DevHubBuiltInToolBootstrap()
@@ -18,7 +19,7 @@ namespace DevHubDispatcher.Editor
             RegisterBuiltInTools();
         }
 
-        internal static void RegisterBuiltInTools()
+        static void RegisterBuiltInTools()
         {
             for (int index = 0; index < BuiltInTools.Length; index++)
             {
