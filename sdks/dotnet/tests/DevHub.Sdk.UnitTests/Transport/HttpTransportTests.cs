@@ -296,11 +296,36 @@ public sealed class HttpTransportTests : IDisposable
         Assert.Contains("result", exception.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task M5_DN_UT_004_HttpTransport_WhenErrorDataIsNull_ShouldThrowDevHubRpcExceptionWithNullData()
+    {
+        var dataDir = await CreateDataDirectoryAsync();
+        var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                "{\"jsonrpc\":\"2.0\",\"id\":\"req-ping\",\"error\":{\"code\":-32001,\"message\":\"unauthorized\",\"data\":null}}",
+                Encoding.UTF8,
+                "application/json")
+        });
+
+        await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+        {
+            ClientId = "client-a",
+            DataDir = dataDir
+        }, handler, () => "req-ping");
+
+        var exception = await Assert.ThrowsAsync<DevHubRpcException>(() => client.PingAsync(cancellationToken: CancellationToken.None));
+        Assert.Equal(DevHubRpcErrorCode.Unauthorized, exception.KnownCode);
+        Assert.NotNull(exception.Data);
+        Assert.Equal(JTokenType.Null, exception.Data!.Type);
+        Assert.NotNull(exception.ErrorData);
+        Assert.Equal(JTokenType.Null, exception.ErrorData!.Type);
+    }
+
     [Theory]
     [InlineData("\"bad_data\"")]
-    [InlineData("null")]
     [InlineData("[1,2,3]")]
-    public async Task M5_DN_UT_004_HttpTransport_WhenErrorDataIsNotObject_ShouldThrowInvalidOperationException(string errorDataLiteral)
+    public async Task M5_DN_UT_004_HttpTransport_WhenErrorDataIsNotObjectOrNull_ShouldThrowInvalidOperationException(string errorDataLiteral)
     {
         var dataDir = await CreateDataDirectoryAsync();
         var handler = new StaticResponseHandler(new HttpResponseMessage(HttpStatusCode.OK)
@@ -617,7 +642,8 @@ public sealed class HttpTransportTests : IDisposable
               "runtimeTuning": {
                 "leaseSeconds": 30,
                 "onlineThresholdSeconds": 30,
-                "launchDedupeWindowSeconds": 30
+                "launchDedupeWindowSeconds": 30,
+                "launchRegisterTimeoutSeconds": 30
               }
             }
             """);

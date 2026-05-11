@@ -62,15 +62,43 @@ public class RpcHttpEndpointHandler
             request.Headers.TryGetValue("X-DevHub-ClientId", out var clientIdValue);
             clientId = clientIdValue;
 
-            if (!HttpTransportRequestValidator.TryValidateContentType(request.ContentType, requestId: null, out var contentTypeError))
+            var requestHeaders = request.Headers.ToDictionary(
+                pair => pair.Key,
+                pair => pair.Value.ToString(),
+                StringComparer.OrdinalIgnoreCase);
+            if (!HttpTransportRequestValidator.TryValidate(
+                    request.ContentType,
+                    requestHeaders,
+                    _runtimeArtifactManager.GetToken,
+                    requestId: null,
+                    out var transportErrorResponse,
+                    out var validatedClientId,
+                    out var validatedClientSessionId,
+                    _logger))
             {
-                _logger.LogWarning("HTTP Content-Type 校验失败，ClientId: {ClientId}, ErrorCode: {ErrorCode}, ErrorMessage: {ErrorMessage}",
-                    clientId, contentTypeError.Error?.Code, contentTypeError.Error?.Message);
-                return FinalizeResponse(Results.Json(contentTypeError, JsonOptions));
+                _logger.LogWarning(
+                    "HTTP 传输层校验失败，ClientId: {ClientId}, RequestId: {RequestId}, ErrorCode: {ErrorCode}, ErrorMessage: {ErrorMessage}",
+                    clientId,
+                    requestId,
+                    transportErrorResponse.Error?.Code,
+                    transportErrorResponse.Error?.Message);
+                return FinalizeResponse(Results.Json(transportErrorResponse, JsonOptions));
             }
 
-            using var reader = new StreamReader(request.Body, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, leaveOpen: true);
-            var body = await reader.ReadToEndAsync(cancellationToken);
+            using var requestBody = new MemoryStream();
+            await request.Body.CopyToAsync(requestBody, cancellationToken);
+
+            string body;
+            try
+            {
+                body = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true)
+                    .GetString(requestBody.ToArray());
+            }
+            catch (DecoderFallbackException ex)
+            {
+                _logger.LogWarning(ex, "HTTP request body UTF-8 decode failed, returning parse_error. ClientId: {ClientId}", clientId);
+                return FinalizeResponse(Results.Json(TransportResponseFactory.CreateErrorResponse(-32700, "parse_error", null), JsonOptions));
+            }
 
             _logger.LogDebug("收到RPC请求，客户端ID: {ClientId}，请求体长度: {BodyLength}", clientId, body.Length);
 
@@ -100,6 +128,11 @@ public class RpcHttpEndpointHandler
                     return FinalizeResponse(Results.Json(TransportResponseFactory.CreateErrorResponse(-32600, "invalid_request", null), JsonOptions));
                 }
 
+                if (JsonRpcEnvelopeParser.TryExtractResponseId(root, out var extractedRequestId))
+                {
+                    requestId = extractedRequestId;
+                }
+
                 if (!JsonRpcEnvelopeParser.TryParse(root, out var rpcRequest, out var requestErrorResponse))
                 {
                     _logger.LogWarning("JSON-RPC 信封无效，ClientId: {ClientId}", clientId);
@@ -113,43 +146,21 @@ public class RpcHttpEndpointHandler
                 _logger.LogInformation("处理RPC请求: {Method}, RequestId: {RequestId}, ClientId: {ClientId}",
                     rpcRequest.Method, rpcRequest.Id, clientId);
 
-                var requestHeaders = request.Headers.ToDictionary(
-                    pair => pair.Key,
-                    pair => pair.Value.ToString(),
-                    StringComparer.OrdinalIgnoreCase);
-                if (!HttpTransportRequestValidator.TryValidate(
-                        request.ContentType,
-                        requestHeaders,
-                        _runtimeArtifactManager.GetToken,
-                        rpcRequest.Id,
-                        out var errorResponse,
-                        out var validatedClientId,
-                        out var validatedClientSessionId,
-                        _logger))
-                {
-                    _logger.LogWarning("请求头校验失败，Method: {Method}, RequestId: {RequestId}, ClientId: {ClientId}, ErrorCode: {ErrorCode}, ErrorMessage: {ErrorMessage}",
-                        rpcRequest.Method, rpcRequest.Id, clientId, errorResponse.Error?.Code, errorResponse.Error?.Message);
-
-                    if (suppressJsonRpcResponse)
-                    {
-                        return FinalizeResponse(Results.Empty);
-                    }
-
-                    return FinalizeResponse(Results.Json(errorResponse, JsonOptions));
-                }
-
                 rpcRequest.ClientId = validatedClientId;
                 rpcRequest.ClientSessionId = validatedClientSessionId;
+
+                if (JsonRpcEnvelopeParser.IsHubPingScalarParams(rpcRequest))
+                {
+                    _logger.LogWarning("hub.ping 顶层标量参数无效，返回 invalid_request，RequestId: {RequestId}",
+                        rpcRequest.Id);
+
+                    return FinalizeResponse(Results.Json(TransportResponseFactory.CreateErrorResponse(-32600, "invalid_request", rpcRequest.Id), JsonOptions));
+                }
 
                 if (JsonRpcEnvelopeParser.IsHubMethodParamsArray(rpcRequest))
                 {
                     _logger.LogWarning("hub.* 方法参数为数组，返回 invalid_params，Method: {Method}, RequestId: {RequestId}",
                         rpcRequest.Method, rpcRequest.Id);
-
-                    if (suppressJsonRpcResponse)
-                    {
-                        return FinalizeResponse(Results.Empty);
-                    }
 
                     return FinalizeResponse(Results.Json(TransportResponseFactory.CreateErrorResponse(-32602, "invalid_params", rpcRequest.Id), JsonOptions));
                 }
@@ -158,11 +169,6 @@ public class RpcHttpEndpointHandler
                 {
                     _logger.LogWarning("HTTP 调用了 WS-only 方法，返回 not_supported，Method: {Method}, RequestId: {RequestId}",
                         rpcRequest.Method, rpcRequest.Id);
-
-                    if (suppressJsonRpcResponse)
-                    {
-                        return FinalizeResponse(Results.Empty);
-                    }
 
                     return FinalizeResponse(Results.Json(
                         TransportResponseFactory.CreateErrorResponse(
@@ -173,9 +179,33 @@ public class RpcHttpEndpointHandler
                         JsonOptions));
                 }
 
+                if (rpcRequest.Id is null && TransportMethodPolicy.RequiresRequestId(rpcRequest.Method))
+                {
+                    _logger.LogWarning(
+                        "HTTP notification 调用了 request-only 方法，返回 invalid_request，Method: {Method}, ClientId: {ClientId}",
+                        rpcRequest.Method,
+                        clientId);
+
+                    return FinalizeResponse(Results.Json(
+                        TransportResponseFactory.CreateErrorResponse(
+                            -32600,
+                            "invalid_request",
+                            null,
+                            new { reason = "request_id_required" }),
+                        JsonOptions));
+                }
+
                 var response = await _rpcRouter.RouteAsync(rpcRequest, cancellationToken);
                 if (suppressJsonRpcResponse)
                 {
+                    if (response.Error is not null)
+                    {
+                        stopwatch.Stop();
+                        _logger.LogInformation("Notification request rejected with JSON-RPC error. Method: {Method}, ClientId: {ClientId}, ElapsedMilliseconds: {ElapsedMilliseconds}",
+                            rpcRequest.Method, clientId, stopwatch.ElapsedMilliseconds);
+                        return FinalizeResponse(Results.Json(response, JsonOptions));
+                    }
+
                     stopwatch.Stop();
                     _logger.LogInformation("通知请求已处理（无 id，不返回 JSON-RPC 响应）: {Method}, ClientId: {ClientId}, 处理时间: {ElapsedMilliseconds}ms",
                         rpcRequest.Method, clientId, stopwatch.ElapsedMilliseconds);
@@ -207,11 +237,6 @@ public class RpcHttpEndpointHandler
             stopwatch.Stop();
             _logger.LogError(ex, "处理RPC请求时发生未捕获的异常，Method: {Method}, RequestId: {RequestId}, ClientId: {ClientId}, 处理时间: {ElapsedMilliseconds}ms",
                 method, requestId, clientId, stopwatch.ElapsedMilliseconds);
-
-            if (suppressJsonRpcResponse)
-            {
-                return FinalizeResponse(Results.Empty);
-            }
 
             return FinalizeResponse(Results.Json(TransportResponseFactory.CreateErrorResponse(-32603, "internal_error", requestId), JsonOptions));
         }

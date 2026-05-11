@@ -105,7 +105,8 @@ internal static class ResponsePayloadReader
         if (TryGetProperty(element, "launch", out var launchToken) && launchToken.Type != JTokenType.Null)
         {
             EnsureElementKind(launchToken, $"{location}.launch", JTokenType.Object);
-            EnsureStringProperty(launchToken, $"{location}.launch", "exePath");
+            EnsureOptionalStringProperty(launchToken, $"{location}.launch", "exePath");
+            EnsureOptionalStringArrayProperty(launchToken, $"{location}.launch", "args");
             EnsureOptionalStringProperty(launchToken, $"{location}.launch", "argsTemplate");
             EnsureOptionalStringProperty(launchToken, $"{location}.launch", "workingDirectory");
             EnsureOptionalStringProperty(launchToken, $"{location}.launch", "dedupeKeyTemplate");
@@ -202,6 +203,7 @@ internal static class ResponsePayloadReader
         if (TryGetProperty(element, "delivery", out var deliveryToken) && deliveryToken.Type != JTokenType.Null)
         {
             EnsureElementKind(deliveryToken, $"{location}.delivery", JTokenType.Object);
+            EnsureStringProperty(deliveryToken, $"{location}.delivery", "leaseToken");
             EnsurePositiveIntegerProperty(deliveryToken, $"{location}.delivery", "leaseSeconds");
             EnsurePositiveIntegerProperty(deliveryToken, $"{location}.delivery", "attempt");
         }
@@ -284,6 +286,30 @@ internal static class ResponsePayloadReader
         if (propertyValue.Type != JTokenType.String)
         {
             throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 类型非法。");
+        }
+    }
+
+    private static void EnsureOptionalStringArrayProperty(JToken element, string location, string propertyName)
+    {
+        if (!TryGetProperty(element, propertyName, out var propertyValue))
+        {
+            return;
+        }
+
+        if (propertyValue.Type != JTokenType.Array)
+        {
+            throw new InvalidOperationException($"{location} 返回结果非法：{propertyName} 类型非法。");
+        }
+
+        var index = 0;
+        foreach (var item in propertyValue.Children())
+        {
+            if (item.Type != JTokenType.String)
+            {
+                throw new InvalidOperationException($"{location} 返回结果非法：{propertyName}[{index}] 类型非法。");
+            }
+
+            index++;
         }
     }
 
@@ -403,7 +429,7 @@ internal static class ResponsePayloadReader
                 EnsureElementKind(payload, $"{location}.payload", JTokenType.Object);
                 EnsureAppIdProperty(payload, $"{location}.payload", "appId");
                 EnsureInstanceIdProperty(payload, $"{location}.payload", "instanceId");
-                EnsureOptionalScopeStringProperty(payload, $"{location}.payload", "scope");
+                EnsureScopeStringProperty(payload, $"{location}.payload", "scope");
                 if (TryGetProperty(payload, "password", out _))
                 {
                     throw new InvalidOperationException($"{location}.payload 非法：不得包含 password。");

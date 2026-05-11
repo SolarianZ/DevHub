@@ -242,21 +242,9 @@ jobs:
           release_tag="${{ needs.resolve_release_metadata.outputs.release_tag }}"
           release_name="${{ needs.resolve_release_metadata.outputs.release_name }}"
           channel="${{ needs.resolve_release_metadata.outputs.channel }}"
-
-          release_files=(
-            "$release_dir"/host/*.zip
-            "$release_dir"/sdk/dotnet/*
-            "$release_dir"/sdk/javascript/*.tgz
-            "$release_dir"/sdk/python/*
-            "$release_dir"/release-manifest.json
-            "$release_dir"/release-notes.md
+          mapfile -d '' -t release_files < <(
+            PYTHONPATH="$PWD/scripts/release" RELEASE_DIR="$release_dir" python3 -c 'import os, sys; from pathlib import Path; from package_release import resolve_release_upload_files; [sys.stdout.buffer.write((str(path) + "\0").encode("utf-8")) for path in resolve_release_upload_files(Path(os.environ["RELEASE_DIR"]))]'
           )
-
-          if [[ -d "$release_dir/monitor" ]]; then
-            while IFS= read -r -d '' file; do
-              release_files+=("$file")
-            done < <(find "$release_dir/monitor" -type f -path "*/bundle/*" -print0 | sort -z)
-          fi
 
           if [[ "${channel}" == "preview" ]]; then
             gh release delete "${release_tag}" --yes --cleanup-tag || true

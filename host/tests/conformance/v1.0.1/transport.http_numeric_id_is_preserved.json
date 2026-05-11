@@ -1,0 +1,46 @@
+{
+  "id": "transport.http_numeric_id_is_preserved",
+  "caseId": "CONF-008",
+  "description": "合法 numeric JSON-RPC id 必须在响应中按数字回写。",
+  "transport": "http",
+  "request": {
+    "kind": "raw.http",
+    "method": "POST",
+    "path": "/rpc",
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceRawHttp",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000201"
+    },
+    "body": {
+      "jsonrpc": "2.0",
+      "id": 42,
+      "method": "hub.ping",
+      "params": {}
+    }
+  },
+  "expectedResponse": {
+    "matchMode": "subset",
+    "phase": "http",
+    "outcome": "success",
+    "actual": {
+      "statusCode": 200,
+      "bodyJson": {
+        "jsonrpc": "2.0",
+        "id": 42,
+        "result": {
+          "ok": true,
+          "serverTimeUtc": "${ANY_ISO_UTC}"
+        }
+      }
+    }
+  },
+  "tags": [
+    "http",
+    "transport",
+    "json-rpc",
+    "id"
+  ]
+}

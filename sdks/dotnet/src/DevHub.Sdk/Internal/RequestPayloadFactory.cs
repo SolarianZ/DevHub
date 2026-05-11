@@ -54,7 +54,7 @@ internal static class RequestPayloadFactory
         };
     }
 
-    internal static object BuildRegisterInstanceParams(AppInstanceRegistration instance, string password)
+    internal static object BuildRegisterInstanceParams(AppInstanceRegistration instance, string password, string? launchId = null)
     {
         CompatibilityGuards.ThrowIfNull(instance, nameof(instance));
         CompatibilityGuards.ThrowIfNullOrWhiteSpace(password, nameof(password));
@@ -88,11 +88,19 @@ internal static class RequestPayloadFactory
             instancePayload["meta"] = DevHubJson.SerializeToToken(instance.Meta);
         }
 
-        return new Dictionary<string, object?>
+        var payload = new Dictionary<string, object?>
         {
             ["password"] = password,
             ["instance"] = instancePayload
         };
+
+        if (launchId is not null)
+        {
+            CompatibilityGuards.ThrowIfNullOrWhiteSpace(launchId, nameof(launchId));
+            payload["launchId"] = launchId;
+        }
+
+        return payload;
     }
 
     internal static object BuildHeartbeatParams(string instanceId, string instanceSessionToken)
@@ -223,6 +231,7 @@ internal static class RequestPayloadFactory
         CompatibilityGuards.ThrowIfNull(request, nameof(request));
         CompatibilityGuards.ThrowIfNullOrWhiteSpace(request.InstanceSessionToken, nameof(request.InstanceSessionToken));
         CompatibilityGuards.ThrowIfNullOrWhiteSpace(request.InvocationId, nameof(request.InvocationId));
+        CompatibilityGuards.ThrowIfNullOrWhiteSpace(request.LeaseToken, nameof(request.LeaseToken));
 
         var hasValue = request.HasValue;
         var hasError = request.Error is not null;
@@ -235,7 +244,8 @@ internal static class RequestPayloadFactory
         {
             ["instanceId"] = ProtocolIdentifier.EnsureInstanceId(request.InstanceId, nameof(request.InstanceId)),
             ["instanceSessionToken"] = request.InstanceSessionToken,
-            ["invocationId"] = request.InvocationId
+            ["invocationId"] = request.InvocationId,
+            ["leaseToken"] = request.LeaseToken
         };
 
         if (hasValue)

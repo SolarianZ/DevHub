@@ -29,8 +29,6 @@ from tests.blackbox.test_base import (  # type: ignore  # noqa: E402
 
 SUITE_HOST_ENV_OVERRIDES = {
     "DEVHUB_ONLINE_THRESHOLD_SECONDS": "2",
-    "DEVHUB_PENDING_INVOCATIONS_LIMIT": "16",
-    "DEVHUB_TEST_RPC_FORCE_INTERNAL_ERROR_REQUEST_IDS": "http-internal-error",
 }
 
 
@@ -54,8 +52,12 @@ class HostRuntimeContext:
         return str(self.hub_info["wsUrl"])
 
     @property
-    def definitions_dir(self) -> Path:
-        return self.data_dir / "apps" / "definitions"
+    def apps_dir(self) -> Path:
+        return self.data_dir / "apps"
+
+    @property
+    def definitions_catalog_path(self) -> Path:
+        return self.apps_dir / "definitions.json"
 
     def create_rpc_client(self) -> RpcClient:
         return RpcClient(self.http_base_url, self.token)
@@ -66,11 +68,15 @@ class CleanupLedger:
     """记录每条向量创建的临时资产，便于统一清理。"""
 
     vector_temp_dir: Path
-    definition_paths: list[Path] = field(default_factory=list)
+    host_env_overrides_applied: bool = False
+    upserted_definitions: list[tuple[str, str]] = field(default_factory=list)
+    definitions_catalog_overridden: bool = False
+    previous_definitions_catalog: str | None = None
+    had_previous_definitions_catalog: bool = False
     registered_instances: list[tuple[str, str]] = field(default_factory=list)
     instance_session_tokens: dict[str, str] = field(default_factory=dict)
 
-    def cleanup(self, host_context: HostRuntimeContext) -> None:
+    def cleanup(self, host_context: HostRuntimeContext, restart_suite_host) -> HostRuntimeContext:
         client = host_context.create_rpc_client()
 
         for instance_id, instance_session_token in reversed(self.registered_instances):
@@ -79,15 +85,35 @@ class CleanupLedger:
             except Exception:
                 pass
 
-        for definition_path in reversed(self.definition_paths):
+        for app_id, scope in reversed(self.upserted_definitions):
             try:
-                definition_path.unlink()
-            except FileNotFoundError:
-                pass
+                client.call(
+                    "hub.apps.deleteDefinition",
+                    {
+                        "appId": app_id,
+                        "scope": scope,
+                    },
+                    request_id=f"cleanup-delete-definition-{sanitize_file_name(app_id)}",
+                )
             except Exception:
                 pass
 
+        if self.definitions_catalog_overridden and self.previous_definitions_catalog is not None:
+            host_context.apps_dir.mkdir(parents=True, exist_ok=True)
+            host_context.definitions_catalog_path.write_text(self.previous_definitions_catalog, encoding="utf-8")
+            host_context = restart_suite_host(host_context)
+        elif self.definitions_catalog_overridden and not self.had_previous_definitions_catalog:
+            try:
+                host_context.definitions_catalog_path.unlink()
+            except FileNotFoundError:
+                pass
+            host_context = restart_suite_host(host_context)
+
+        if self.host_env_overrides_applied:
+            host_context = restart_suite_host(host_context)
+
         shutil.rmtree(self.vector_temp_dir, ignore_errors=True)
+        return host_context
 
 
 @dataclass
@@ -101,11 +127,14 @@ class VectorExecutionContext:
     context_path: Path
     cleanup_ledger: CleanupLedger
 
-    def cleanup(self, host_context: HostRuntimeContext) -> None:
-        self.cleanup_ledger.cleanup(host_context)
+    def cleanup(self, host_context: HostRuntimeContext, restart_suite_host) -> HostRuntimeContext:
+        return self.cleanup_ledger.cleanup(host_context, restart_suite_host)
 
 
-def start_suite_host(temp_root: Path) -> tuple[HostRuntimeContext, subprocess.Popen[str], Any]:
+def start_suite_host(
+    temp_root: Path,
+    host_env_overrides: dict[str, str] | None = None,
+) -> tuple[HostRuntimeContext, subprocess.Popen[str], Any]:
     """启动 suite 级隔离 Host，并注入 runner 需要的调优参数。"""
 
     host_data_dir = temp_root / "isolated-hub-data"
@@ -113,7 +142,10 @@ def start_suite_host(temp_root: Path) -> tuple[HostRuntimeContext, subprocess.Po
     log_path = temp_root / "isolated-hub.log"
     log_file = open(log_path, "w+", encoding="utf-8")
 
-    with temporary_env_var(TEST_HUB_ENV_JSON_ENV_VAR, json.dumps(SUITE_HOST_ENV_OVERRIDES, ensure_ascii=False)):
+    with temporary_env_var(
+        TEST_HUB_ENV_JSON_ENV_VAR,
+        json.dumps(build_suite_host_env_overrides(host_env_overrides), ensure_ascii=False),
+    ):
         process = start_isolated_hub_process(str(host_data_dir), log_file)
 
     try:
@@ -125,6 +157,42 @@ def start_suite_host(temp_root: Path) -> tuple[HostRuntimeContext, subprocess.Po
         raise
 
 
+def restart_suite_host(
+    previous_context: HostRuntimeContext,
+    process: subprocess.Popen[str],
+    log_file,
+    host_env_overrides: dict[str, str] | None = None,
+) -> tuple[HostRuntimeContext, subprocess.Popen[str]]:
+    """复用同一 dataDir 重启 suite Host，并返回新的运行时上下文。"""
+
+    stop_process(process)
+    log_file.seek(0)
+    log_file.truncate(0)
+    log_file.flush()
+
+    with temporary_env_var(
+        TEST_HUB_ENV_JSON_ENV_VAR,
+        json.dumps(build_suite_host_env_overrides(host_env_overrides), ensure_ascii=False),
+    ):
+        restarted_process = start_isolated_hub_process(str(previous_context.data_dir), log_file)
+
+    try:
+        restarted_context = wait_for_host_runtime(previous_context.data_dir, restarted_process, log_file)
+        return restarted_context, restarted_process
+    except Exception:
+        stop_process(restarted_process)
+        raise
+
+
+def build_suite_host_env_overrides(host_env_overrides: dict[str, str] | None = None) -> dict[str, str]:
+    """合成 suite Host 默认环境覆盖与单向量环境覆盖。"""
+
+    merged = dict(SUITE_HOST_ENV_OVERRIDES)
+    if host_env_overrides:
+        merged.update(host_env_overrides)
+    return merged
+
+
 def wait_for_host_runtime(
     host_data_dir: Path,
     process: subprocess.Popen[str],
@@ -134,12 +202,63 @@ def wait_for_host_runtime(
 
     runtime_dir = host_data_dir / "runtime"
     hub_json_path = runtime_dir / "hub.json"
+    expected_pid = process.pid
+    last_error = "unknown"
+
+    def try_read_runtime_context() -> HostRuntimeContext | None:
+        nonlocal last_error
+
+        if not hub_json_path.is_file():
+            return None
+
+        try:
+            hub_info = json.loads(hub_json_path.read_text(encoding="utf-8"))
+        except Exception as exc:  # noqa: BLE001
+            last_error = f"读取 hub.json 失败：{exc}"
+            return None
+
+        if hub_info.get("pid") != expected_pid:
+            last_error = (
+                f"hub.json 尚未切换到当前进程，期望 pid={expected_pid}，"
+                f"实际 pid={hub_info.get('pid')}"
+            )
+            return None
+
+        token_file_value = hub_info.get("tokenFile")
+        if not isinstance(token_file_value, str) or not token_file_value.strip():
+            last_error = "hub.json 缺少 tokenFile"
+            return None
+
+        token_file = Path(token_file_value)
+        if not token_file.is_file():
+            last_error = f"隔离 Hub 的 tokenFile 不存在：{token_file}"
+            return None
+
+        try:
+            token = token_file.read_text(encoding="utf-8").strip()
+        except Exception as exc:  # noqa: BLE001
+            last_error = f"读取 tokenFile 失败：{exc}"
+            return None
+
+        if not token:
+            last_error = f"隔离 Hub 的 token 为空：{token_file}"
+            return None
+
+        return HostRuntimeContext(
+            data_dir=host_data_dir,
+            runtime_dir=runtime_dir,
+            hub_json_path=hub_json_path,
+            token_file=token_file,
+            token=token,
+            hub_info=hub_info,
+        )
 
     def wait_for_hub_json():
         if process.poll() is not None:
             raise RuntimeError(f"隔离 Hub 提前退出，日志片段：{read_log_tail(log_file)}")
-        if hub_json_path.is_file():
-            return None
+        host_context = try_read_runtime_context()
+        if host_context is not None:
+            return host_context
 
         return PENDING_WAIT_STATUS
 
@@ -232,23 +351,48 @@ def materialize_vector(
     vector: dict[str, Any],
     host_context: HostRuntimeContext,
     temp_root: Path,
+    restart_suite_host,
     execution_name: str | None = None,
-) -> VectorExecutionContext:
+) -> tuple[VectorExecutionContext, HostRuntimeContext]:
     """物化单条向量的 setup、上下文文件与 cleanup ledger。"""
 
     setup = require_optional_mapping(vector.get("setup"), "setup")
     validate_setup_shape(setup)
+    host_env_overrides = read_host_env_overrides(vector.get("hostEnvOverrides"))
 
     vector_dir = temp_root / sanitize_file_name(str(vector["id"]))
     vector_temp_dir = vector_dir / sanitize_file_name(execution_name) if execution_name else vector_dir
-    ledger = CleanupLedger(vector_temp_dir=vector_temp_dir)
+    ledger = CleanupLedger(vector_temp_dir=vector_temp_dir, host_env_overrides_applied=bool(host_env_overrides))
     vector_temp_dir.mkdir(parents=True, exist_ok=True)
 
     try:
+        if host_env_overrides:
+            host_context = restart_suite_host(host_context, host_env_overrides)
+
+        def restart_with_current_host_env(current_context: HostRuntimeContext) -> HostRuntimeContext:
+            return restart_suite_host(current_context, host_env_overrides)
+
         data_dir = vector_temp_dir / "data"
         runtime_dir = data_dir / "runtime"
-        token_file = copy_host_runtime(host_context, runtime_dir)
+        resolved_vector = copy.deepcopy(vector)
 
+        base_placeholders = {
+            "VECTOR_DATA_DIR": str(data_dir),
+            "VECTOR_RUNTIME_DIR": str(runtime_dir),
+            "VECTOR_PYTHON_EXE": sys.executable or "python3",
+        }
+        resolved_setup = require_optional_mapping(
+            substitute_placeholders(copy.deepcopy(vector), base_placeholders).get("setup"),
+            "setup")
+
+        host_context = apply_definitions_setup(
+            host_context,
+            require_optional_list(resolved_setup.get("definitions"), "setup.definitions"),
+            ledger,
+            restart_with_current_host_env,
+        )
+
+        token_file = copy_host_runtime(host_context, runtime_dir)
         placeholders = build_host_placeholders(host_context)
         placeholders.update(
             {
@@ -261,13 +405,7 @@ def materialize_vector(
 
         resolved_vector = substitute_placeholders(copy.deepcopy(vector), placeholders)
         resolved_setup = require_optional_mapping(resolved_vector.get("setup"), "setup")
-
         apply_data_dir_setup(data_dir, require_optional_mapping(resolved_setup.get("dataDir"), "setup.dataDir"))
-        apply_definitions_setup(
-            host_context,
-            require_optional_list(resolved_setup.get("definitions"), "setup.definitions"),
-            ledger,
-        )
         apply_instances_setup(
             host_context,
             require_optional_list(resolved_setup.get("instances"), "setup.instances"),
@@ -288,16 +426,19 @@ def materialize_vector(
         context_path = vector_temp_dir / "execution-context.json"
         context_path.write_text(json.dumps(context_payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
-        return VectorExecutionContext(
-            source_path=vector_path,
-            resolved_vector=resolved_vector,
-            data_dir=data_dir,
-            environment_data_dir=environment_data_dir,
-            context_path=context_path,
-            cleanup_ledger=ledger,
+        return (
+            VectorExecutionContext(
+                source_path=vector_path,
+                resolved_vector=resolved_vector,
+                data_dir=data_dir,
+                environment_data_dir=environment_data_dir,
+                context_path=context_path,
+                cleanup_ledger=ledger,
+            ),
+            host_context,
         )
     except Exception:
-        ledger.cleanup(host_context)
+        ledger.cleanup(host_context, restart_suite_host)
         raise
 
 
@@ -320,14 +461,25 @@ def copy_host_runtime(host_context: HostRuntimeContext, runtime_dir: Path) -> Pa
 def build_host_placeholders(host_context: HostRuntimeContext) -> dict[str, str]:
     """构造 Host 运行时占位符。"""
 
+    hub_info = host_context.hub_info
+    runtime_tuning = require_mapping(hub_info["runtimeTuning"], "host_context.hub_info.runtimeTuning")
     return {
         "HOST_DATA_DIR": str(host_context.data_dir),
+        "HOST_APPS_DIR": str(host_context.apps_dir),
+        "HOST_DEFINITIONS_CATALOG": str(host_context.definitions_catalog_path),
         "HOST_RUNTIME_DIR": str(host_context.runtime_dir),
         "HOST_HUB_JSON": str(host_context.hub_json_path),
         "HOST_TOKEN_FILE": str(host_context.token_file),
         "HOST_TOKEN": host_context.token,
+        "HOST_PID": str(hub_info["pid"]),
         "HOST_HTTP_BASE_URL": host_context.http_base_url,
         "HOST_WS_URL": host_context.ws_url,
+        "HOST_STARTED_AT_UTC": str(hub_info["startedAtUtc"]),
+        "HOST_HUB_VERSION": str(hub_info.get("hubVersion", "")),
+        "HOST_RUNTIME_TUNING_LEASE_SECONDS": str(runtime_tuning["leaseSeconds"]),
+        "HOST_RUNTIME_TUNING_ONLINE_THRESHOLD_SECONDS": str(runtime_tuning["onlineThresholdSeconds"]),
+        "HOST_RUNTIME_TUNING_LAUNCH_DEDUPE_WINDOW_SECONDS": str(runtime_tuning["launchDedupeWindowSeconds"]),
+        "HOST_RUNTIME_TUNING_LAUNCH_REGISTER_TIMEOUT_SECONDS": str(runtime_tuning["launchRegisterTimeoutSeconds"]),
     }
 
 
@@ -349,6 +501,17 @@ def substitute_placeholders(value: Any, placeholders: dict[str, str]) -> Any:
     """递归替换向量中的 ${PLACEHOLDER}。"""
 
     if isinstance(value, str):
+        direct_match = re.fullmatch(r"\$\{([A-Z0-9_]+)\}", value)
+        if direct_match:
+            replacement = placeholders.get(direct_match.group(1), value)
+            if replacement == value:
+                return value
+
+            try:
+                return json.loads(replacement)
+            except json.JSONDecodeError:
+                return replacement
+
         return re.compile(r"\$\{([A-Z0-9_]+)\}").sub(
             lambda match: placeholders.get(match.group(1), match.group(0)),
             value,
@@ -384,6 +547,70 @@ def validate_setup_shape(setup: dict[str, Any]) -> None:
         if unknown_data_dir_keys:
             raise ValueError(f"setup.dataDir 包含未支持字段：{unknown_data_dir_keys}")
 
+    definitions = require_optional_list(setup.get("definitions"), "setup.definitions")
+    validate_definitions_setup(definitions)
+
+
+def read_host_env_overrides(value: Any) -> dict[str, str]:
+    """读取单向量 Host 环境覆盖。"""
+
+    overrides = require_optional_mapping(value, "hostEnvOverrides")
+    parsed: dict[str, str] = {}
+    for key, item in overrides.items():
+        if not isinstance(key, str) or not key.strip():
+            raise ValueError("hostEnvOverrides 的键必须为非空字符串。")
+        if not isinstance(item, str):
+            raise ValueError(f"hostEnvOverrides.{key} 必须为字符串。")
+        parsed[key] = item
+    return parsed
+
+
+def validate_definitions_setup(definitions: list[Any]) -> None:
+    """校验 setup.definitions 的 catalog 条目模型。"""
+
+    allowed_keys = {"appId", "scopeEntry", "rawScopeEntry", "appEntry", "rawAppEntry"}
+    for index, item in enumerate(definitions):
+        definition_setup = require_mapping(item, f"setup.definitions[{index}]")
+        unknown_keys = sorted(key for key in definition_setup if key not in allowed_keys)
+        if unknown_keys:
+            raise ValueError(f"setup.definitions[{index}] 包含未支持字段：{unknown_keys}")
+
+        has_app_id = "appId" in definition_setup
+        has_scope_entry = "scopeEntry" in definition_setup
+        has_raw_scope_entry = "rawScopeEntry" in definition_setup
+        has_app_entry = "appEntry" in definition_setup
+        has_raw_app_entry = "rawAppEntry" in definition_setup
+
+        if has_app_id or has_scope_entry or has_raw_scope_entry:
+            if not has_app_id:
+                raise ValueError(f"setup.definitions[{index}].appId 缺失。")
+            require_string(definition_setup.get("appId"), f"setup.definitions[{index}].appId")
+            if has_scope_entry == has_raw_scope_entry:
+                raise ValueError(
+                    f"setup.definitions[{index}] 必须且只能提供 scopeEntry 或 rawScopeEntry 其中之一。"
+                )
+            if has_app_entry or has_raw_app_entry:
+                raise ValueError(
+                    f"setup.definitions[{index}] 使用 appId 预置 scope 条目时，不能同时提供 appEntry / rawAppEntry。"
+                )
+            read_catalog_setup_value(
+                definition_setup.get("scopeEntry") if has_scope_entry else definition_setup.get("rawScopeEntry"),
+                f"setup.definitions[{index}].{'scopeEntry' if has_scope_entry else 'rawScopeEntry'}",
+                require_object=has_scope_entry,
+            )
+            continue
+
+        if has_app_entry == has_raw_app_entry:
+            raise ValueError(
+                f"setup.definitions[{index}] 必须提供 appId + (scopeEntry/rawScopeEntry)，"
+                "或提供 appEntry / rawAppEntry。"
+            )
+        read_catalog_setup_value(
+            definition_setup.get("appEntry") if has_app_entry else definition_setup.get("rawAppEntry"),
+            f"setup.definitions[{index}].{'appEntry' if has_app_entry else 'rawAppEntry'}",
+            require_object=has_app_entry,
+        )
+
 
 def apply_data_dir_setup(data_dir: Path, data_dir_setup: dict[str, Any]) -> None:
     """将 setup.dataDir.files 物化到向量数据根目录。"""
@@ -402,22 +629,163 @@ def apply_definitions_setup(
     host_context: HostRuntimeContext,
     definitions: list[Any],
     ledger: CleanupLedger,
-) -> None:
-    """将 setup.definitions 写入 suite Host 的 definitions 目录。"""
+    restart_suite_host,
+) -> HostRuntimeContext:
+    """通过公开 RPC 将 setup.definitions 写入 suite Host。"""
 
-    host_context.definitions_dir.mkdir(parents=True, exist_ok=True)
+    if not definitions:
+        return host_context
+
+    if any(is_raw_definition_setup(require_mapping(item, f"setup.definitions[{index}]")) for index, item in enumerate(definitions)):
+        return apply_raw_definitions_setup(host_context, definitions, ledger, restart_suite_host)
+
+    client = host_context.create_rpc_client()
     for index, item in enumerate(definitions):
         definition_setup = require_mapping(item, f"setup.definitions[{index}]")
-        file_name = require_string(definition_setup.get("fileName"), f"setup.definitions[{index}].fileName")
-        if Path(file_name).name != file_name:
-            raise ValueError(f"setup.definitions[{index}].fileName 必须是文件名，不能包含目录。")
-        if not file_name.lower().endswith(".json"):
-            raise ValueError(f"setup.definitions[{index}].fileName 必须以 .json 结尾。")
+        materialized = try_materialize_definition_setup(definition_setup)
+        if materialized is None:
+            continue
 
-        target_path = host_context.definitions_dir / file_name
-        content = build_file_content(definition_setup, f"setup.definitions[{index}]", text_key="rawText", json_key="definition")
-        target_path.write_text(content, encoding="utf-8")
-        ledger.definition_paths.append(target_path)
+        response = client.call(
+            "hub.apps.upsertDefinition",
+            {
+                "definition": materialized,
+            },
+            request_id=f"setup-upsert-definition-{index}",
+        )
+        error = response.get("error")
+        if isinstance(error, dict):
+            raise RuntimeError(
+                "预置 Definition 失败："
+                f"{json.dumps(error, ensure_ascii=False, sort_keys=True)}"
+            )
+
+        ledger.upserted_definitions.append((materialized["appId"], materialized["scope"]))
+
+    return host_context
+
+
+def is_raw_definition_setup(definition_setup: dict[str, Any]) -> bool:
+    """判断 setup.definitions 条目是否需要按原始 catalog 片段写入。"""
+
+    return "rawScopeEntry" in definition_setup or "rawAppEntry" in definition_setup
+
+
+def apply_raw_definitions_setup(
+    host_context: HostRuntimeContext,
+    definitions: list[Any],
+    ledger: CleanupLedger,
+    restart_suite_host,
+) -> HostRuntimeContext:
+    """将包含非法条目的 setup.definitions 原样物化到 definitions.json。"""
+
+    if ledger.previous_definitions_catalog is None:
+        ledger.definitions_catalog_overridden = True
+        ledger.had_previous_definitions_catalog = host_context.definitions_catalog_path.exists()
+        if ledger.had_previous_definitions_catalog:
+            ledger.previous_definitions_catalog = host_context.definitions_catalog_path.read_text(encoding="utf-8")
+
+    catalog: dict[str, Any] = {"version": 1, "definitions": []}
+    for index, item in enumerate(definitions):
+        definition_setup = require_mapping(item, f"setup.definitions[{index}]")
+        append_catalog_definition_setup(catalog, definition_setup, index)
+
+    host_context.apps_dir.mkdir(parents=True, exist_ok=True)
+    host_context.definitions_catalog_path.write_text(
+        json.dumps(catalog, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return restart_suite_host(host_context)
+
+
+def append_catalog_definition_setup(catalog: dict[str, Any], definition_setup: dict[str, Any], index: int) -> None:
+    """将单个 setup.definitions 条目追加到 catalog 模型。"""
+
+    if "appId" in definition_setup:
+        app_id = require_string(definition_setup.get("appId"), f"setup.definitions[{index}].appId")
+        scope_entry_field = "scopeEntry" if "scopeEntry" in definition_setup else "rawScopeEntry"
+        scope_entry = read_catalog_setup_value(
+            definition_setup.get(scope_entry_field),
+            f"setup.definitions[{index}].{scope_entry_field}",
+            require_object=scope_entry_field == "scopeEntry",
+        )
+        definition_record = copy.deepcopy(scope_entry)
+        if isinstance(definition_record, dict):
+            definition_record["appId"] = app_id
+        catalog["definitions"].append(definition_record)
+        return
+
+    app_entry_field = "appEntry" if "appEntry" in definition_setup else "rawAppEntry"
+    definition_record = read_catalog_setup_value(
+        definition_setup.get(app_entry_field),
+        f"setup.definitions[{index}].{app_entry_field}",
+        require_object=app_entry_field == "appEntry",
+    )
+    catalog["definitions"].append(definition_record)
+
+
+def find_or_add_catalog_app_entry(catalog: dict[str, Any], app_id: str) -> dict[str, Any]:
+    """按 appId 查找或创建 catalog app 分组。"""
+
+    definitions = catalog["definitions"]
+    for item in definitions:
+        if isinstance(item, dict) and item.get("appId") == app_id:
+            scopes = item.setdefault("scopes", [])
+            if not isinstance(scopes, list):
+                raise ValueError(f"setup.definitions 中 {app_id} 的 scopes 必须是数组。")
+            return item
+
+    app_entry = {"appId": app_id, "scopes": []}
+    definitions.append(app_entry)
+    return app_entry
+
+
+def try_materialize_definition_setup(definition_setup: dict[str, Any]) -> dict[str, Any] | None:
+    """将 setup.definitions 条目转换为公开 AppDefinition；非法 raw 条目返回 None。"""
+
+    try:
+        if "appId" in definition_setup:
+            app_id = require_string(definition_setup.get("appId"), "setup.definitions[].appId")
+            scope_entry_field = "scopeEntry" if "scopeEntry" in definition_setup else "rawScopeEntry"
+            scope_entry = read_catalog_setup_value(
+                definition_setup.get(scope_entry_field),
+                f"setup.definitions[].{scope_entry_field}",
+                require_object=scope_entry_field == "scopeEntry",
+            )
+            if not isinstance(scope_entry, dict):
+                return None
+
+            definition = copy.deepcopy(scope_entry)
+            definition["appId"] = app_id
+            return definition if isinstance(definition.get("scope"), str) else None
+
+        app_entry_field = "appEntry" if "appEntry" in definition_setup else "rawAppEntry"
+        definition = read_catalog_setup_value(
+            definition_setup.get(app_entry_field),
+            f"setup.definitions[].{app_entry_field}",
+            require_object=app_entry_field == "appEntry",
+        )
+        return definition if isinstance(definition, dict) and isinstance(definition.get("appId"), str) and isinstance(definition.get("scope"), str) else None
+    except ValueError:
+        return None
+
+
+def read_catalog_setup_value(value: Any, path: str, *, require_object: bool) -> Any:
+    """读取 setup.definitions 中的 catalog 片段。"""
+
+    parsed = value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"{path} 必须是合法 JSON 文本。") from exc
+    else:
+        parsed = copy.deepcopy(value)
+
+    if require_object and not isinstance(parsed, dict):
+        raise ValueError(f"{path} 必须解析为对象。")
+
+    return parsed
 
 
 def apply_instances_setup(

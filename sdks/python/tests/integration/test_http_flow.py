@@ -149,13 +149,6 @@ def test_definition_management_should_round_trip_and_surface_host_validation() -
     with DevHubHostFixture.start() as host:
         client = host.create_client("http-definition-client")
 
-        invalid_definition = AppDefinition(app_id="http.invalid.app", display_name=" ", scope="")
-        invalid = client.validate_definition(invalid_definition)
-        assert invalid.ok is True
-        assert invalid.valid is False
-        assert invalid.errors
-        assert invalid.errors[0].path.startswith("definition.")
-
         definition = AppDefinition(
             app_id="http.manage.app",
             display_name="Managed HTTP App",
@@ -171,11 +164,8 @@ def test_definition_management_should_round_trip_and_surface_host_validation() -
         assert upserted.scope == ""
         assert client.get_definition("http.manage.app", "").display_name == "Managed HTTP App"
 
-        with pytest.raises(DevHubRpcException) as upsert_error:
-            client.upsert_definition(invalid_definition)
-        assert upsert_error.value.code == DevHubRpcErrorCode.INVALID_PARAMS
-        assert upsert_error.value.reason == "definition_invalid"
-        assert isinstance(upsert_error.value.try_get_data_property("errors"), list)
+        with pytest.raises(ValueError, match="display_name"):
+            AppDefinition(app_id="http.invalid.app", display_name=" ", scope="")
 
         client.delete_definition("http.manage.app", "")
         with pytest.raises(DevHubRpcException) as deleted_error:
@@ -191,7 +181,7 @@ def test_launch_should_round_trip_and_apply_dedupe_window() -> None:
                 "displayName": "HTTP Launch App",
                 "launch": {
                     "exePath": sys.executable,
-                    "argsTemplate": str(_launch_script_path()),
+                    "args": [str(_launch_script_path())],
                 },
             }
         )
@@ -236,7 +226,7 @@ def test_host_fixture_close_should_cleanup_launch_process_tree_and_temp_dir() ->
                 "displayName": "HTTP Launch Cleanup App",
                 "launch": {
                     "exePath": sys.executable,
-                    "argsTemplate": f'"{_launch_probe_script_path()}" "{ready_file}"',
+                    "args": [str(_launch_probe_script_path()), str(ready_file)],
                 },
             }
         )

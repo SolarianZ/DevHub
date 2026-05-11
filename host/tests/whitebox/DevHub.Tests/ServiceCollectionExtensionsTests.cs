@@ -37,8 +37,8 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
         var resolvedRuntimePathOptions = provider.GetRequiredService<RuntimePathOptions>();
         Assert.Equal(runtimePathOptions.RootPath, resolvedRuntimePathOptions.RootPath);
         Assert.Equal(runtimePathOptions.RuntimePath, resolvedRuntimePathOptions.RuntimePath);
-        Assert.Equal(runtimePathOptions.DefinitionsPath, resolvedRuntimePathOptions.DefinitionsPath);
-        Assert.Equal(runtimePathOptions.InstancesPath, resolvedRuntimePathOptions.InstancesPath);
+        Assert.Equal(runtimePathOptions.AppsPath, resolvedRuntimePathOptions.AppsPath);
+        Assert.Equal(runtimePathOptions.DefinitionsCatalogPath, resolvedRuntimePathOptions.DefinitionsCatalogPath);
         Assert.Equal(runtimePathOptions.LogsPath, resolvedRuntimePathOptions.LogsPath);
 
         Assert.NotNull(provider.GetRequiredService<RuntimeTuningOptions>());

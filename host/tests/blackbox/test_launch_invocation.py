@@ -12,15 +12,15 @@ from concurrent.futures import ThreadPoolExecutor
 
 from tests.blackbox.test_base import (
     DiscoveryService,
+    delete_definitions,
     RpcClient,
     RpcAssertions,
     TestResult,
     get_shared_test_asset_path,
     get_test_python_executable,
     new_instance_id,
-    safe_remove,
     unregister_instances,
-    write_app_definition,
+    upsert_app_definition,
 )
 
 
@@ -35,12 +35,12 @@ class TestLaunchInvocation(unittest.TestCase):
         if include_launch:
             launch_config = {
                 "exePath": get_test_python_executable(),
-                "argsTemplate": self._launch_script_path(),
+                "args": [self._launch_script_path()],
             }
             if dedupe_key_template is not None:
                 launch_config["dedupeKeyTemplate"] = dedupe_key_template
 
-        return write_app_definition(
+        return upsert_app_definition(
             app_id,
             scope=scope,
             rpc=True,
@@ -108,7 +108,7 @@ class TestLaunchInvocation(unittest.TestCase):
             result.mark_failure(str(e))
         finally:
             unregister_instances([instance_id])
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -163,7 +163,7 @@ class TestLaunchInvocation(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -259,7 +259,7 @@ class TestLaunchInvocation(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -361,7 +361,7 @@ class TestLaunchInvocation(unittest.TestCase):
             result.mark_failure(str(e))
         finally:
             for definition_path in definition_paths:
-                safe_remove(definition_path)
+                delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -442,7 +442,7 @@ class TestLaunchInvocation(unittest.TestCase):
         finally:
             unregister_instances([other_scope_instance])
             for definition_path in definition_paths:
-                safe_remove(definition_path)
+                delete_definitions([definition_path] if definition_path else [])
 
         return result
 

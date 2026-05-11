@@ -26,7 +26,8 @@ public class Program
     {
         var userKey = ResolveCurrentUserKey();
         var dataDirectoryKey = BuildDataDirectoryKey(runtimePathOptions.RootPath);
-        return $"Local\\DevHub_{userKey}_{dataDirectoryKey}";
+        var scope = OperatingSystem.IsWindows() ? "Global" : "Local";
+        return $"{scope}\\DevHub_{userKey}_{dataDirectoryKey}";
     }
 
     /// <summary>

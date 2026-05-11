@@ -24,13 +24,11 @@ public sealed class AppDefinitionValidator
     /// <param name="definitionElement">定义 JSON 对象。</param>
     /// <param name="definition">校验成功时返回解析后的定义。</param>
     /// <param name="validationResult">结构化校验结果。</param>
-    /// <param name="actualFileName">加载已有文件时使用的文件名；为空时跳过文件名约束。</param>
     /// <returns>校验通过返回 <c>true</c>。</returns>
     public bool TryParseAndValidate(
         JsonElement definitionElement,
         out AppDefinition? definition,
-        out AppDefinitionValidationResult validationResult,
-        string? actualFileName = null)
+        out AppDefinitionValidationResult validationResult)
     {
         var issues = new List<ValidationIssue>();
         definition = null;
@@ -49,17 +47,6 @@ public sealed class AppDefinitionValidator
         }
 
         var scope = ReadRequiredScope(definitionElement, issues);
-
-        if (!string.IsNullOrWhiteSpace(actualFileName)
-            && ProtocolIdentifier.IsValidAppId(appId)
-            && ProtocolIdentifier.IsValidScope(scope))
-        {
-            var expectedFileName = AppDefinitionIdentity.Create(appId!, scope!).GetFileName();
-            if (!string.Equals(actualFileName, expectedFileName, StringComparison.Ordinal))
-            {
-                issues.Add(CreateIssue("definition.appId", "file_name_mismatch", $"definition file name must be {expectedFileName}"));
-            }
-        }
 
         var displayName = ReadRequiredString(definitionElement, "displayName", issues, "definition.displayName", "missing_display_name", "displayName is required");
         var description = ReadOptionalString(definitionElement, "description", issues, "definition.description");
@@ -113,26 +100,16 @@ public sealed class AppDefinitionValidator
             return null;
         }
 
-        var exePath = ReadRequiredString(
-            launchElement,
-            "exePath",
-            issues,
-            "definition.launch.exePath",
-            "missing_launch_exe_path",
-            "launch.exePath is required when launch is provided");
-
+        var exePath = ReadOptionalString(launchElement, "exePath", issues, "definition.launch.exePath");
+        var args = ReadOptionalStringArray(launchElement, "args", issues, "definition.launch.args");
         var argsTemplate = ReadOptionalString(launchElement, "argsTemplate", issues, "definition.launch.argsTemplate");
         var workingDirectory = ReadOptionalString(launchElement, "workingDirectory", issues, "definition.launch.workingDirectory");
         var dedupeKeyTemplate = ReadOptionalString(launchElement, "dedupeKeyTemplate", issues, "definition.launch.dedupeKeyTemplate");
 
-        if (issues.Count > 0 && exePath is null)
-        {
-            return null;
-        }
-
         return new LaunchConfiguration
         {
             ExePath = exePath,
+            Args = args,
             ArgsTemplate = argsTemplate,
             WorkingDirectory = workingDirectory,
             DedupeKeyTemplate = dedupeKeyTemplate
@@ -174,7 +151,8 @@ public sealed class AppDefinitionValidator
         ICollection<ValidationIssue> issues,
         string path,
         string code,
-        string missingMessage)
+        string missingMessage,
+        bool allowWhiteSpace = false)
     {
         if (!element.TryGetProperty(propertyName, out var property))
         {
@@ -189,7 +167,7 @@ public sealed class AppDefinitionValidator
         }
 
         var value = property.GetString();
-        if (string.IsNullOrWhiteSpace(value))
+        if (value is null || (!allowWhiteSpace && string.IsNullOrWhiteSpace(value)))
         {
             issues.Add(CreateIssue(path, code, missingMessage));
             return null;
@@ -222,6 +200,46 @@ public sealed class AppDefinitionValidator
         }
 
         return property.GetString();
+    }
+
+    private static List<string>? ReadOptionalStringArray(
+        JsonElement element,
+        string propertyName,
+        ICollection<ValidationIssue> issues,
+        string path)
+    {
+        if (!element.TryGetProperty(propertyName, out var property))
+        {
+            return null;
+        }
+
+        if (property.ValueKind == JsonValueKind.Null)
+        {
+            issues.Add(CreateIssue(path, "invalid_field_type", $"{propertyName} must be an array of strings"));
+            return null;
+        }
+
+        if (property.ValueKind != JsonValueKind.Array)
+        {
+            issues.Add(CreateIssue(path, "invalid_field_type", $"{propertyName} must be an array of strings"));
+            return null;
+        }
+
+        var values = new List<string>();
+        var index = 0;
+        foreach (var item in property.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.String)
+            {
+                issues.Add(CreateIssue($"{path}[{index}]", "invalid_field_type", $"{propertyName} items must be strings"));
+                return null;
+            }
+
+            values.Add(item.GetString() ?? string.Empty);
+            index += 1;
+        }
+
+        return values;
     }
 
     private static string? ReadRequiredScope(

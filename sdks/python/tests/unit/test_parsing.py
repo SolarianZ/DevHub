@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from devhub_sdk import DevHubEventType
@@ -21,17 +23,23 @@ from devhub_sdk._parsing import (
 )
 
 
-def test_parse_app_definition_when_launch_missing_exe_path_should_raise() -> None:
-    with pytest.raises(RuntimeError):
-        parse_app_definition(
-            {
-                "appId": "test.app",
-                "scope": "",
-                "displayName": "Test App",
-                "launch": {},
-            },
-            path="app.definition",
-        )
+def _absolute_test_path(name: str) -> str:
+    return str((Path.cwd() / ".tmp-test-paths" / name).resolve())
+
+
+def test_parse_app_definition_should_allow_launch_without_exe_path() -> None:
+    definition = parse_app_definition(
+        {
+            "appId": "test.app",
+            "scope": "",
+            "displayName": "Test App",
+            "launch": {},
+        },
+        path="app.definition",
+    )
+
+    assert definition.launch is not None
+    assert definition.launch.exe_path is None
 
 
 def test_parse_app_definition_when_app_id_violates_spec_should_raise() -> None:
@@ -129,6 +137,19 @@ def test_parse_app_definition_when_capabilities_rpc_missing_should_apply_rpc_def
     assert definition.capabilities.events is False
 
 
+@pytest.mark.parametrize("display_name", ["", " ", "\t"])
+def test_parse_app_definition_when_display_name_is_blank_should_raise(display_name: str) -> None:
+    with pytest.raises(RuntimeError, match=r"displayName"):
+        parse_app_definition(
+            {
+                "appId": "test.app",
+                "scope": "",
+                "displayName": display_name,
+            },
+            path="app.definition",
+        )
+
+
 def test_parse_app_definition_when_launch_exe_path_empty_should_allow_spec_value() -> None:
     definition = parse_app_definition(
         {
@@ -144,6 +165,40 @@ def test_parse_app_definition_when_launch_exe_path_empty_should_allow_spec_value
 
     assert definition.launch is not None
     assert definition.launch.exe_path == ""
+
+
+def test_parse_app_definition_should_preserve_structured_launch_args() -> None:
+    definition = parse_app_definition(
+        {
+            "appId": "test.app",
+            "scope": "",
+            "displayName": "Test App",
+            "launch": {
+                "args": ["--scope", "{scope}", ""],
+            },
+        },
+        path="app.definition",
+    )
+
+    assert definition.launch is not None
+    assert definition.launch.args == ["--scope", "{scope}", ""]
+    assert definition.launch.exe_path is None
+
+
+@pytest.mark.parametrize("args", [None, "--scope {scope}", [1], ["ok", 1]])
+def test_parse_app_definition_when_launch_args_is_not_string_array_should_raise(args: object) -> None:
+    with pytest.raises(RuntimeError, match=r"args"):
+        parse_app_definition(
+            {
+                "appId": "test.app",
+                "scope": "",
+                "displayName": "Test App",
+                "launch": {
+                    "args": args,
+                },
+            },
+            path="app.definition",
+        )
 
 
 def test_parse_app_definition_should_preserve_literal_global_scope_distinction() -> None:
@@ -176,12 +231,57 @@ def test_parse_hub_runtime_when_http_base_url_empty_should_raise() -> None:
                 "pid": 12345,
                 "httpBaseUrl": "",
                 "wsUrl": "ws://127.0.0.1:47231/ws",
-                "tokenFile": "/tmp/token.txt",
+                "tokenFile": _absolute_test_path("token.txt"),
                 "startedAtUtc": "2026-03-09T00:00:00Z",
                 "runtimeTuning": {
                     "leaseSeconds": 30,
                     "onlineThresholdSeconds": 30,
                     "launchDedupeWindowSeconds": 30,
+                    "launchRegisterTimeoutSeconds": 30,
+                },
+            },
+            source="hub.json",
+        )
+
+
+def test_parse_hub_runtime_should_read_launch_register_timeout_seconds() -> None:
+    runtime = parse_hub_runtime(
+        {
+            "protocolVersion": 1,
+            "pid": 12345,
+            "httpBaseUrl": "http://127.0.0.1:47231",
+            "wsUrl": "ws://127.0.0.1:47231/ws",
+            "tokenFile": _absolute_test_path("token.txt"),
+            "startedAtUtc": "2026-03-09T00:00:00Z",
+            "runtimeTuning": {
+                "leaseSeconds": 30,
+                "onlineThresholdSeconds": 30,
+                "launchDedupeWindowSeconds": 30,
+                "launchRegisterTimeoutSeconds": 45,
+            },
+        },
+        source="hub.json",
+    )
+
+    assert runtime.runtime_tuning.launch_register_timeout_seconds == 45
+
+
+@pytest.mark.parametrize("value", [None, 0, True, "30"])
+def test_parse_hub_runtime_when_launch_register_timeout_seconds_invalid_should_raise(value: object) -> None:
+    with pytest.raises(RuntimeError, match=r"runtimeTuning|launchRegisterTimeoutSeconds"):
+        parse_hub_runtime(
+            {
+                "protocolVersion": 1,
+                "pid": 12345,
+                "httpBaseUrl": "http://127.0.0.1:47231",
+                "wsUrl": "ws://127.0.0.1:47231/ws",
+                "tokenFile": _absolute_test_path("token.txt"),
+                "startedAtUtc": "2026-03-09T00:00:00Z",
+                "runtimeTuning": {
+                    "leaseSeconds": 30,
+                    "onlineThresholdSeconds": 30,
+                    "launchDedupeWindowSeconds": 30,
+                    "launchRegisterTimeoutSeconds": value,
                 },
             },
             source="hub.json",
@@ -266,6 +366,7 @@ def test_parse_launch_result_when_pid_is_bool_should_raise() -> None:
                 "ok": True,
                 "status": "started",
                 "launchId": "launch-1",
+                "dedupeKey": "test.app:global",
                 "pid": True,
             },
             path="hub.apps.launch.result",
@@ -279,10 +380,28 @@ def test_parse_launch_result_when_pid_is_not_positive_should_raise() -> None:
                 "ok": True,
                 "status": "started",
                 "launchId": "launch-1",
+                "dedupeKey": "test.app:global",
                 "pid": 0,
             },
             path="hub.apps.launch.result",
         )
+
+
+def test_parse_launch_result_when_already_running_online_instance_should_accept_instance_id() -> None:
+    result = parse_launch_result(
+        {
+            "ok": True,
+            "status": "already_running",
+            "instanceId": "inst-1",
+            "pid": 12345,
+        },
+        path="hub.apps.launch.result",
+    )
+
+    assert result.status == "already_running"
+    assert result.instance_id == "inst-1"
+    assert result.launch_id is None
+    assert result.dedupe_key is None
 
 
 def test_parse_app_instance_when_pid_is_not_positive_should_raise() -> None:
@@ -392,6 +511,14 @@ def test_parse_app_instance_when_scope_violates_canonical_grammar_should_raise()
         parse_app_instance(payload, path="hub.apps.listInstances.result.instances[0]")
 
 
+def test_parse_app_instance_when_instance_id_exceeds_limit_should_raise() -> None:
+    payload = _app_instance_payload()
+    payload["instanceId"] = "a" * 257
+
+    with pytest.raises(RuntimeError, match=r"instanceId"):
+        parse_app_instance(payload, path="hub.apps.listInstances.result.instances[0]")
+
+
 @pytest.mark.parametrize(
     "value",
     [
@@ -448,6 +575,21 @@ def test_parse_invocation_when_delivery_is_not_positive_should_raise(field_name:
     payload["delivery"][field_name] = value
 
     with pytest.raises(RuntimeError, match=r"必须为正整数。"):
+        parse_invocation(payload, path="hub.invoke.poll.result.items[0]")
+
+
+def test_parse_invocation_should_expose_delivery_lease_token() -> None:
+    invocation = parse_invocation(_invocation_payload(), path="hub.invoke.poll.result.items[0]")
+
+    assert invocation.delivery is not None
+    assert invocation.delivery.lease_token == "lease-1"
+
+
+def test_parse_invocation_when_delivery_lease_token_missing_should_raise() -> None:
+    payload = _invocation_payload()
+    del payload["delivery"]["leaseToken"]  # type: ignore[index]
+
+    with pytest.raises(RuntimeError, match=r"leaseToken"):
         parse_invocation(payload, path="hub.invoke.poll.result.items[0]")
 
 
@@ -602,25 +744,20 @@ def test_parse_event_when_instance_payload_contains_password_should_raise() -> N
         )
 
 
-def test_parse_event_when_instance_payload_omits_scope_should_accept() -> None:
-    event = parse_event(
-        {
-            "subscriptionId": "sub-1",
-            "type": "app.instance.registered",
-            "timeUtc": "2026-03-09T00:00:00Z",
-            "payload": {
-                "appId": "test.app",
-                "instanceId": "inst-1",
+def test_parse_event_when_instance_payload_omits_scope_should_raise() -> None:
+    with pytest.raises(RuntimeError, match=r"scope"):
+        parse_event(
+            {
+                "subscriptionId": "sub-1",
+                "type": "app.instance.registered",
+                "timeUtc": "2026-03-09T00:00:00Z",
+                "payload": {
+                    "appId": "test.app",
+                    "instanceId": "inst-1",
+                },
             },
-        },
-        path="hub.event.params",
-    )
-
-    assert event.type is DevHubEventType.APP_INSTANCE_REGISTERED
-    assert event.payload == {
-        "appId": "test.app",
-        "instanceId": "inst-1",
-    }
+            path="hub.event.params",
+        )
 
 
 def test_parse_event_when_instance_payload_scope_is_null_should_raise() -> None:
@@ -640,11 +777,30 @@ def test_parse_event_when_instance_payload_scope_is_null_should_raise() -> None:
         )
 
 
+def test_parse_event_when_instance_payload_contains_instance_session_token_should_raise() -> None:
+    with pytest.raises(RuntimeError, match=r"instanceSessionToken"):
+        parse_event(
+            {
+                "subscriptionId": "sub-1",
+                "type": "app.instance.unregistered",
+                "timeUtc": "2026-03-09T00:00:00Z",
+                "payload": {
+                    "appId": "test.app",
+                    "instanceId": "inst-1",
+                    "scope": "",
+                    "instanceSessionToken": "token-1",
+                },
+            },
+            path="hub.event.params",
+        )
+
+
 @pytest.mark.parametrize(
     ("mutator",),
     [
         (lambda payload: payload.__setitem__("invocationId", "request-1"),),
         (lambda payload: payload["target"].__setitem__("instanceId", "inst-1."),),
+        (lambda payload: payload["target"].__setitem__("instanceId", "a" * 257),),
         (lambda payload: payload["target"].__setitem__("scope", ".workspace"),),
         (lambda payload: payload["caller"].__setitem__("clientSessionId", "not-a-uuid"),),
     ],
@@ -671,7 +827,7 @@ def test_parse_invocation_when_identifier_violates_spec_should_raise(mutator) ->
             "app.instance.registered",
             {
                 "appId": "Sample.App",
-                "instanceId": ".node-01",
+                "instanceId": "a" * 257,
                 "scope": "",
             },
         ),
@@ -726,8 +882,8 @@ def test_parse_invocation_when_args_contains_unsupported_json_should_raise() -> 
         parse_invocation(payload, path="hub.invoke.poll.result.items[0]")
 
 
-@pytest.mark.parametrize("data", [None, {"callback": lambda: "ignored"}])
-def test_parse_callee_error_when_data_is_not_valid_json_object_should_raise(data) -> None:
+@pytest.mark.parametrize("data", [{"callback": lambda: "ignored"}])
+def test_parse_callee_error_when_data_is_not_valid_json_value_should_raise(data) -> None:
     with pytest.raises(RuntimeError):
         parse_callee_error(
             {
@@ -737,6 +893,20 @@ def test_parse_callee_error_when_data_is_not_valid_json_object_should_raise(data
             },
             path="error.data.calleeError",
         )
+
+
+@pytest.mark.parametrize("data", [None, "invalid-name", ["field", "name"]])
+def test_parse_callee_error_should_preserve_json_value_data(data) -> None:
+    parsed = parse_callee_error(
+        {
+            "code": 1001,
+            "message": "app_error",
+            "data": data,
+        },
+        path="error.data.calleeError",
+    )
+
+    assert parsed.data == data
 
 
 def _app_instance_payload() -> dict[str, object]:
@@ -774,6 +944,7 @@ def _invocation_payload() -> dict[str, object]:
         "delivery": {
             "leaseSeconds": 30,
             "attempt": 1,
+            "leaseToken": "lease-1",
         },
         "caller": {
             "clientId": "client-1",

@@ -21,15 +21,84 @@
     "method": {
       "type": "string"
     },
-    "params": {
-      "oneOf": [
-        {
-          "type": "object"
-        },
-        {
-          "type": "array"
+    "params": {}
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "params"
+        ],
+        "properties": {
+          "method": {
+            "const": "hub.ping"
+          }
         }
-      ]
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "oneOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "params"
+        ],
+        "properties": {
+          "method": {
+            "const": "hub.getVersion"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "oneOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "params"
+        ],
+        "properties": {
+          "method": {
+            "not": {
+              "enum": [
+                "hub.ping",
+                "hub.getVersion"
+              ]
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "type": "object"
+          }
+        }
+      }
     }
-  }
+  ]
 }

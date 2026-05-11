@@ -1,0 +1,63 @@
+{
+  "id": "invocation.request.raw_overlong_target_instance_id_returns_invalid_params",
+  "caseId": "CONF-004",
+  "description": "HTTP 原始协议调用 hub.invoke.request 且 target.instanceId 超长时，Host 必须在路由前返回 invalid_params。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "appId": "invoke.request.raw-overlong-target-id",
+        "scopeEntry": {
+          "scope": "",
+          "displayName": "invoke.request.raw-overlong-target-id"
+        }
+      }
+    ]
+  },
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceRequestRawOverlongTargetId",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000142"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "invoke-request-raw-overlong-target-id",
+    "method": "hub.invoke.request",
+    "params": {
+      "appId": "invoke.request.raw-overlong-target-id",
+      "method": "demo.request.raw-overlong-target-id",
+      "target": {
+        "instanceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "scope": ""
+      },
+      "options": {
+        "queueIfOffline": false,
+        "autoLaunch": false,
+        "ttlMs": 1000,
+        "waitTimeoutMs": 1000
+      }
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "invoke-request-raw-overlong-target-id",
+    "error": {
+      "code": -32602,
+      "message": "invalid_params",
+      "data": {
+        "reason": "invalid_target_instance"
+      }
+    }
+  },
+  "tags": [
+    "invocation",
+    "request",
+    "validation",
+    "http",
+    "raw"
+  ]
+}

@@ -17,6 +17,7 @@ from .constants import (
 )
 from .events import DevHubEventsClient, DevHubEventsClientDependencies
 from .exceptions import DevHubRpcErrorCode, DevHubRpcException
+from .identity import create_instance_id
 from ._ws_session import JsonRpcWsSession, WebSocketJsonRpcSession
 from .models import (
     AbandonedRequestFilter,
@@ -123,6 +124,7 @@ __all__ = [
     "VersionCompatibilityStatus",
     "WebSocketJsonRpcSession",
     "__version__",
+    "create_instance_id",
     "discover_runtime",
     "ensure_supported_event_type",
     "resolve_data_directory",

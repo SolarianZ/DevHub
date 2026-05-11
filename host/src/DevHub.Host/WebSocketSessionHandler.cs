@@ -17,6 +17,7 @@ namespace DevHub.Host;
 public class WebSocketSessionHandler
 {
     private const int MaxInboundTextMessageBytes = 1024 * 1024;
+    private static readonly TimeSpan WebSocketCloseTimeout = TimeSpan.FromSeconds(1);
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
@@ -132,6 +133,20 @@ public class WebSocketSessionHandler
                     break;
                 }
 
+                if (receiveEnvelope.InvalidUtf8)
+                {
+                    _logger.LogWarning("WS text payload UTF-8 decode failed. ConnectionId: {ConnectionId}", connectionId);
+                    await SendWebSocketJsonAsync(webSocket, TransportResponseFactory.CreateErrorResponse(-32700, "parse_error", null), cancellationToken);
+
+                    if (!isAuthenticated)
+                    {
+                        await CloseWebSocketAsync(webSocket, WebSocketCloseStatus.PolicyViolation, "parse_error", cancellationToken);
+                        break;
+                    }
+
+                    continue;
+                }
+
                 var messageText = receiveEnvelope.Text ?? string.Empty;
                 _logger.LogDebug("收到 WS 消息，ConnectionId: {ConnectionId}, 消息长度: {MessageLength}", connectionId, messageText.Length);
 
@@ -225,6 +240,22 @@ public class WebSocketSessionHandler
                         break;
                     }
 
+                    if (JsonRpcEnvelopeParser.IsHubPingScalarParams(rpcRequest))
+                    {
+                        if (rpcRequest.Id is not null)
+                        {
+                            await SendWebSocketJsonAsync(webSocket, TransportResponseFactory.CreateErrorResponse(-32600, "invalid_request", rpcRequest.Id), cancellationToken);
+                        }
+
+                        if (!isAuthenticated)
+                        {
+                            await CloseWebSocketAsync(webSocket, WebSocketCloseStatus.PolicyViolation, "invalid_request", cancellationToken);
+                            break;
+                        }
+
+                        continue;
+                    }
+
                     if (JsonRpcEnvelopeParser.IsHubMethodParamsArray(rpcRequest))
                     {
                         if (rpcRequest.Id is not null)
@@ -238,6 +269,23 @@ public class WebSocketSessionHandler
                             break;
                         }
 
+                        continue;
+                    }
+
+                    if (rpcRequest.Id is null && TransportMethodPolicy.RequiresRequestId(rpcRequest.Method))
+                    {
+                        _logger.LogWarning(
+                            "WS notification 调用了 request-only 方法，返回 invalid_request，ConnectionId: {ConnectionId}, Method: {Method}",
+                            connectionId,
+                            rpcRequest.Method);
+                        await SendWebSocketJsonAsync(
+                            webSocket,
+                            TransportResponseFactory.CreateErrorResponse(
+                                -32600,
+                                "invalid_request",
+                                null,
+                                new { reason = "request_id_required" }),
+                            cancellationToken);
                         continue;
                     }
 
@@ -419,19 +467,19 @@ public class WebSocketSessionHandler
             var receiveResult = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
             if (receiveResult.MessageType == WebSocketMessageType.Close)
             {
-                return new WebSocketReceiveEnvelope(true, false, false, null);
+                return new WebSocketReceiveEnvelope(true, false, false, false, null);
             }
 
             if (receiveResult.MessageType != WebSocketMessageType.Text)
             {
-                return new WebSocketReceiveEnvelope(false, false, false, null);
+                return new WebSocketReceiveEnvelope(false, false, false, false, null);
             }
 
             if (receiveResult.Count > 0)
             {
                 if (stream.Length + receiveResult.Count > MaxInboundTextMessageBytes)
                 {
-                    return new WebSocketReceiveEnvelope(false, true, true, null);
+                    return new WebSocketReceiveEnvelope(false, true, true, false, null);
                 }
 
                 stream.Write(buffer, 0, receiveResult.Count);
@@ -439,7 +487,16 @@ public class WebSocketSessionHandler
 
             if (receiveResult.EndOfMessage)
             {
-                return new WebSocketReceiveEnvelope(false, true, false, Encoding.UTF8.GetString(stream.ToArray()));
+                try
+                {
+                    var text = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true)
+                        .GetString(stream.ToArray());
+                    return new WebSocketReceiveEnvelope(false, true, false, false, text);
+                }
+                catch (DecoderFallbackException)
+                {
+                    return new WebSocketReceiveEnvelope(false, true, false, true, null);
+                }
             }
         }
     }
@@ -469,7 +526,9 @@ public class WebSocketSessionHandler
 
         try
         {
-            await webSocket.CloseAsync(closeStatus, description, cancellationToken);
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(WebSocketCloseTimeout);
+            await webSocket.CloseAsync(closeStatus, description, timeoutCts.Token);
         }
         catch (Exception ex)
         {
@@ -477,5 +536,5 @@ public class WebSocketSessionHandler
         }
     }
 
-    private readonly record struct WebSocketReceiveEnvelope(bool IsCloseFrame, bool IsTextFrame, bool IsMessageTooLarge, string? Text);
+    private readonly record struct WebSocketReceiveEnvelope(bool IsCloseFrame, bool IsTextFrame, bool IsMessageTooLarge, bool InvalidUtf8, string? Text);
 }

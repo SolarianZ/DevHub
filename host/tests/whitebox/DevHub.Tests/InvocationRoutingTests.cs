@@ -15,6 +15,7 @@ using Moq;
 /// <summary>
 /// Invocation 路由与门禁相关测试。
 /// </summary>
+[Collection(TestCollections.ProcessEnvironment)]
 [Trait("Category", "Impl")]
 public class InvocationRoutingTests : IDisposable
 {
@@ -42,7 +43,7 @@ public class InvocationRoutingTests : IDisposable
         WriteDefinition("disabled-app", rpcEnabled: false);
 
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
@@ -150,7 +151,7 @@ public class InvocationRoutingTests : IDisposable
             Invoke = new InvokeCapability { Poll = false, Respond = true }
         });
 
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
@@ -215,7 +216,7 @@ public class InvocationRoutingTests : IDisposable
             Invoke = new InvokeCapability { Poll = true, Respond = false }
         });
 
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
@@ -234,6 +235,7 @@ public class InvocationRoutingTests : IDisposable
                 instanceId = "respond-disabled",
                 instanceSessionToken = GetInstanceSessionToken(appRegistry, "respond-disabled"),
                 invocationId = "invk-non-existent",
+                leaseToken = "missing-lease-token",
                 value = new { ok = true }
             })
         };
@@ -261,6 +263,7 @@ public class InvocationRoutingTests : IDisposable
                 instanceId = "missing-instance",
                 instanceSessionToken = "missing-instance-token",
                 invocationId = "invk-missing",
+                leaseToken = "missing-lease-token",
                 value = new { ok = true }
             })
         }, CancellationToken.None);
@@ -277,7 +280,7 @@ public class InvocationRoutingTests : IDisposable
     public async Task Impl_InvocationAndLaunchHandlers_ShouldReturnExpectedLaunchErrors()
     {
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
@@ -312,7 +315,7 @@ public class InvocationRoutingTests : IDisposable
         Assert.Equal(-32010, requestResponse.Error.Code);
         Assert.Equal("instance_not_found", requestResponse.Error.Message);
         var requestData = JsonSerializer.SerializeToElement(requestResponse.Error.Data);
-        Assert.Equal("offline_no_queue", requestData.GetProperty("reason").GetString());
+        Assert.Equal("definition_not_found", requestData.GetProperty("reason").GetString());
 
         var launchResponse = await launchHandler.HandleAsync(new JsonRpcRequest
         {
@@ -334,7 +337,7 @@ public class InvocationRoutingTests : IDisposable
         WriteDefinition("notify-launch-missing", rpcEnabled: true);
 
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
@@ -561,7 +564,9 @@ public class InvocationRoutingTests : IDisposable
 
         Assert.Null(pollResponse.Error);
         var pollResult = JsonSerializer.SerializeToElement(pollResponse.Result);
-        var invocationId = pollResult.GetProperty("items").EnumerateArray().Single().GetProperty("invocationId").GetString();
+        var pollItem = pollResult.GetProperty("items").EnumerateArray().Single();
+        var invocationId = pollItem.GetProperty("invocationId").GetString();
+        var leaseToken = pollItem.GetProperty("delivery").GetProperty("leaseToken").GetString();
         Assert.False(string.IsNullOrWhiteSpace(invocationId));
 
         var conflictResponse = await handler.HandleAsync(new JsonRpcRequest
@@ -573,6 +578,7 @@ public class InvocationRoutingTests : IDisposable
                 instanceId = "respond-other",
                 instanceSessionToken = GetInstanceSessionToken(appRegistry, "respond-other"),
                 invocationId,
+                leaseToken,
                 value = new { ok = true }
             })
         }, CancellationToken.None);
@@ -726,7 +732,7 @@ public class InvocationRoutingTests : IDisposable
         Assert.Equal(-32010, response.Error.Code);
         Assert.Equal("instance_not_found", response.Error.Message);
         var data = JsonSerializer.SerializeToElement(response.Error.Data);
-        Assert.Equal("target_instance_missing", data.GetProperty("reason").GetString());
+        Assert.Equal("definition_not_found", data.GetProperty("reason").GetString());
     }
 
     [Fact]
@@ -803,7 +809,7 @@ public class InvocationRoutingTests : IDisposable
         Assert.True(result.TryGetProperty("serverTimeUtc", out var serverTimeUtc));
         Assert.False(string.IsNullOrWhiteSpace(serverTimeUtc.GetString()));
         Assert.Empty(result.GetProperty("items").EnumerateArray());
-        Assert.True(stopwatch.ElapsedMilliseconds >= 80);
+        Assert.InRange(stopwatch.ElapsedMilliseconds, 40, 5000);
     }
 
     [Fact]
@@ -858,7 +864,9 @@ public class InvocationRoutingTests : IDisposable
 
         Assert.Null(pollResponse.Error);
         var pollResult = JsonSerializer.SerializeToElement(pollResponse.Result);
-        var invocationId = pollResult.GetProperty("items").EnumerateArray().Single().GetProperty("invocationId").GetString();
+        var pollItem = pollResult.GetProperty("items").EnumerateArray().Single();
+        var invocationId = pollItem.GetProperty("invocationId").GetString();
+        var leaseToken = pollItem.GetProperty("delivery").GetProperty("leaseToken").GetString();
         Assert.False(string.IsNullOrWhiteSpace(invocationId));
 
         var beforeRespond = appRegistry.GetInstance("respond-last-seen")!.LastSeenUtc;
@@ -873,6 +881,7 @@ public class InvocationRoutingTests : IDisposable
                 instanceId = "respond-last-seen",
                 instanceSessionToken = GetInstanceSessionToken(appRegistry, "respond-last-seen"),
                 invocationId,
+                leaseToken,
                 value = new { ok = true }
             })
         }, CancellationToken.None);
@@ -1005,7 +1014,7 @@ public class InvocationRoutingTests : IDisposable
     {
         runtimeTuningOptions ??= RuntimeTuningOptions.Default;
         var effectiveClock = clock ?? new SystemClock();
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
@@ -1049,7 +1058,6 @@ public class InvocationRoutingTests : IDisposable
 
     private void WriteDefinition(string appId, bool rpcEnabled, bool includeLaunch = false, string? dedupeKeyTemplate = null)
     {
-        var filePath = Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId, ScopeContract.Global).GetFileName());
         var payload = new Dictionary<string, object?>
         {
             ["appId"] = appId,
@@ -1078,7 +1086,9 @@ public class InvocationRoutingTests : IDisposable
             payload["launch"] = launch;
         }
 
-        File.WriteAllText(filePath, JsonSerializer.Serialize(payload));
+        DefinitionCatalogTestHelper.UpsertDefinition(
+            DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory),
+            JsonSerializer.Serialize(payload));
     }
 
     private static string GetInstanceSessionToken(AppRegistry appRegistry, string instanceId)

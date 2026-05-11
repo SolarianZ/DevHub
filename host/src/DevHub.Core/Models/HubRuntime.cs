@@ -79,4 +79,10 @@ public class HubRuntimeTuning
     /// </summary>
     [JsonPropertyName("launchDedupeWindowSeconds")]
     public required int LaunchDedupeWindowSeconds { get; set; }
+
+    /// <summary>
+    /// 启动注册截止时间秒数。
+    /// </summary>
+    [JsonPropertyName("launchRegisterTimeoutSeconds")]
+    public required int LaunchRegisterTimeoutSeconds { get; set; }
 }

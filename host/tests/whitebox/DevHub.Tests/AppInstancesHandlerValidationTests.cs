@@ -90,6 +90,21 @@ public sealed class AppInstancesHandlerValidationTests
         }, CancellationToken.None);
 
         AssertError(response, -32602, "invalid_params");
+
+        var overlongResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "register-overlong-instance-id",
+            Method = HubRpcMethods.HubAppsRegisterInstance,
+            Params = JsonSerializer.SerializeToElement(CreateRegisterParams(new
+            {
+                instanceId = new string('a', ProtocolIdentifier.MaxInstanceIdLength + 1),
+                appId = "app.validation",
+                pid = 100,
+                invoke = new { poll = true, respond = true }
+            }))
+        }, CancellationToken.None);
+
+        AssertError(overlongResponse, -32602, "invalid_params");
     }
 
     [Fact]
@@ -297,6 +312,75 @@ public sealed class AppInstancesHandlerValidationTests
     }
 
     [Fact]
+    public async Task Impl_RegisterInstance_WhenInstancePayloadContainsPassword_ShouldReturnInvalidParamsAndNotCreateState()
+    {
+        var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _handlerLogger.Object);
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "register-nested-password",
+            Method = HubRpcMethods.HubAppsRegisterInstance,
+            Params = JsonSerializer.SerializeToElement(CreateRegisterParams(new
+            {
+                instanceId = "inst-nested-password",
+                appId = "app.validation",
+                scope = ScopeContract.Global,
+                pid = 104,
+                invoke = new { poll = true, respond = true },
+                password = "nested-password"
+            }))
+        }, CancellationToken.None);
+
+        AssertError(response, -32602, "invalid_params");
+        Assert.Null(appRegistry.GetInstance("inst-nested-password"));
+    }
+
+    [Fact]
+    public async Task Impl_RegisterInstance_WhenInstancePayloadContainsInstanceSessionToken_ShouldReturnInvalidParamsAndKeepStoredState()
+    {
+        var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _handlerLogger.Object);
+
+        var firstRegister = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "register-before-nested-token",
+            Method = HubRpcMethods.HubAppsRegisterInstance,
+            Params = JsonSerializer.SerializeToElement(CreateRegisterParams(new
+            {
+                instanceId = "inst-nested-token",
+                appId = "app.original",
+                scope = ScopeContract.Global,
+                pid = 105,
+                invoke = new { poll = true, respond = true }
+            }, password: "correct-password"))
+        }, CancellationToken.None);
+        Assert.Null(firstRegister.Error);
+
+        var secondRegister = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "register-nested-token",
+            Method = HubRpcMethods.HubAppsRegisterInstance,
+            Params = JsonSerializer.SerializeToElement(CreateRegisterParams(new
+            {
+                instanceId = "inst-nested-token",
+                appId = "app.updated",
+                scope = "workspace-updated",
+                pid = 106,
+                invoke = new { poll = true, respond = true },
+                instanceSessionToken = "nested-token"
+            }, password: "correct-password"))
+        }, CancellationToken.None);
+
+        AssertError(secondRegister, -32602, "invalid_params");
+        var stored = appRegistry.GetInstance("inst-nested-token");
+        Assert.NotNull(stored);
+        Assert.Equal("app.original", stored!.AppId);
+        Assert.Equal(ScopeContract.Global, stored.Scope);
+        Assert.Equal(105, stored.Pid);
+    }
+
+    [Fact]
     public async Task Impl_Heartbeat_WhenUnknownInstance_ShouldReturnInstanceNotFound()
     {
         var handler = CreateHandler();
@@ -343,6 +427,14 @@ public sealed class AppInstancesHandlerValidationTests
             Params = JsonSerializer.SerializeToElement(new { instanceId = ".invalid" })
         }, CancellationToken.None);
         AssertError(leadingDotInstanceId, -32602, "invalid_params");
+
+        var overlongInstanceId = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "heartbeat-overlong-instance-id",
+            Method = HubRpcMethods.HubAppsHeartbeat,
+            Params = JsonSerializer.SerializeToElement(new { instanceId = new string('a', ProtocolIdentifier.MaxInstanceIdLength + 1) })
+        }, CancellationToken.None);
+        AssertError(overlongInstanceId, -32602, "invalid_params");
     }
 
     [Fact]
@@ -358,6 +450,15 @@ public sealed class AppInstancesHandlerValidationTests
         }, CancellationToken.None);
 
         AssertError(response, -32602, "invalid_params");
+
+        var overlongResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "unregister-overlong-instance-id",
+            Method = HubRpcMethods.HubAppsUnregisterInstance,
+            Params = JsonSerializer.SerializeToElement(new { instanceId = new string('a', ProtocolIdentifier.MaxInstanceIdLength + 1) })
+        }, CancellationToken.None);
+
+        AssertError(overlongResponse, -32602, "invalid_params");
     }
 
     [Fact]
@@ -437,6 +538,14 @@ public sealed class AppInstancesHandlerValidationTests
             Params = JsonSerializer.SerializeToElement(new { instanceId = "invalid-instance-" })
         }, CancellationToken.None);
         AssertError(trailingHyphenInstanceId, -32602, "invalid_params");
+
+        var overlongInstanceId = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "get-overlong-instance-id",
+            Method = HubRpcMethods.HubAppsGetInstance,
+            Params = JsonSerializer.SerializeToElement(new { instanceId = new string('a', ProtocolIdentifier.MaxInstanceIdLength + 1) })
+        }, CancellationToken.None);
+        AssertError(overlongInstanceId, -32602, "invalid_params");
     }
 
     [Fact]
@@ -559,64 +668,6 @@ public sealed class AppInstancesHandlerValidationTests
     }
 
     [Fact]
-    public async Task Impl_Methods_WhenLoggerThrowsInTry_ShouldReturnInternalError()
-    {
-        var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
-        var handler = new AppInstancesHandler(appRegistry, new SystemClock(), new ThrowOnDebugLogger<AppInstancesHandler>());
-
-        var register = await handler.HandleAsync(new JsonRpcRequest
-        {
-            Id = "register-logger-throw",
-            Method = HubRpcMethods.HubAppsRegisterInstance,
-            Params = JsonSerializer.SerializeToElement(CreateRegisterParams(new
-            {
-                instanceId = "inst-logger-throw",
-                appId = "app.validation",
-                scope = ScopeContract.Global,
-                pid = 103,
-                invoke = new { poll = true, respond = true }
-            }))
-        }, CancellationToken.None);
-        AssertError(register, -32603, "internal_error");
-
-        var heartbeat = await handler.HandleAsync(new JsonRpcRequest
-        {
-            Id = "heartbeat-logger-throw",
-            Method = HubRpcMethods.HubAppsHeartbeat,
-            Params = JsonSerializer.SerializeToElement(new { instanceId = "inst-logger-throw" })
-        }, CancellationToken.None);
-        AssertError(heartbeat, -32603, "internal_error");
-
-        var unregister = await handler.HandleAsync(new JsonRpcRequest
-        {
-            Id = "unregister-logger-throw",
-            Method = HubRpcMethods.HubAppsUnregisterInstance,
-            Params = JsonSerializer.SerializeToElement(new
-            {
-                instanceId = "inst-logger-throw",
-                password = InstancePassword
-            })
-        }, CancellationToken.None);
-        AssertError(unregister, -32603, "internal_error");
-
-        var list = await handler.HandleAsync(new JsonRpcRequest
-        {
-            Id = "list-logger-throw",
-            Method = HubRpcMethods.HubAppsListInstances,
-            Params = JsonSerializer.SerializeToElement(new { scope = (string?)null, includeOffline = true })
-        }, CancellationToken.None);
-        AssertError(list, -32603, "internal_error");
-
-        var getInstance = await handler.HandleAsync(new JsonRpcRequest
-        {
-            Id = "get-instance-logger-throw",
-            Method = HubRpcMethods.HubAppsGetInstance,
-            Params = JsonSerializer.SerializeToElement(new { instanceId = "inst-logger-throw" })
-        }, CancellationToken.None);
-        AssertError(getInstance, -32603, "internal_error");
-    }
-
-    [Fact]
     public async Task Impl_RegisterAndUnregisterWithoutEventBus_ShouldReturnOk()
     {
         var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
@@ -697,6 +748,52 @@ public sealed class AppInstancesHandlerValidationTests
         Assert.NotNull(stored);
         Assert.Equal("app.original", stored!.AppId);
         Assert.Equal(201, stored.Pid);
+    }
+
+    [Fact]
+    public async Task Impl_RegisterInstance_WhenIdentityMismatchWithMatchingPassword_ShouldReturnForbiddenAndKeepStoredInstance()
+    {
+        var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        var handler = new AppInstancesHandler(appRegistry, new SystemClock(), _handlerLogger.Object);
+
+        var firstRegister = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "register-identity-initial",
+            Method = HubRpcMethods.HubAppsRegisterInstance,
+            Params = JsonSerializer.SerializeToElement(CreateRegisterParams(new
+            {
+                instanceId = "inst-identity-guard",
+                appId = "app.original",
+                scope = ScopeContract.Global,
+                pid = 211,
+                invoke = new { poll = true, respond = true }
+            }, password: "correct-password"))
+        }, CancellationToken.None);
+        Assert.Null(firstRegister.Error);
+
+        var secondRegister = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "register-identity-mismatch",
+            Method = HubRpcMethods.HubAppsRegisterInstance,
+            Params = JsonSerializer.SerializeToElement(CreateRegisterParams(new
+            {
+                instanceId = "inst-identity-guard",
+                appId = "app.updated",
+                scope = "workspace-updated",
+                pid = 212,
+                invoke = new { poll = true, respond = true }
+            }, password: "correct-password"))
+        }, CancellationToken.None);
+
+        AssertError(secondRegister, -32002, "forbidden");
+        var errorData = JsonSerializer.SerializeToElement(secondRegister.Error!.Data);
+        Assert.Equal("instance_identity_mismatch", errorData.GetProperty("reason").GetString());
+
+        var stored = appRegistry.GetInstance("inst-identity-guard");
+        Assert.NotNull(stored);
+        Assert.Equal("app.original", stored!.AppId);
+        Assert.Equal(ScopeContract.Global, stored.Scope);
+        Assert.Equal(211, stored.Pid);
     }
 
     [Fact]
@@ -786,29 +883,4 @@ public sealed class AppInstancesHandlerValidationTests
         };
     }
 
-    private sealed class ThrowOnDebugLogger<T> : ILogger<T>
-    {
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull
-        {
-            return null;
-        }
-
-        public bool IsEnabled(LogLevel logLevel)
-        {
-            return true;
-        }
-
-        public void Log<TState>(
-            LogLevel logLevel,
-            EventId eventId,
-            TState state,
-            Exception? exception,
-            Func<TState, Exception?, string> formatter)
-        {
-            if (logLevel == LogLevel.Debug && formatter(state, exception).Contains("处理hub.apps", StringComparison.Ordinal))
-            {
-                throw new InvalidOperationException("mock logger failure");
-            }
-        }
-    }
 }

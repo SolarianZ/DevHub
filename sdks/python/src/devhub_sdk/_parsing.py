@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from ipaddress import ip_address
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping
@@ -65,10 +66,16 @@ def parse_hub_runtime(value: Any, *, source: str) -> HubRuntime:
         raise RuntimeError(f"hub.json.pid 非法：{source}")
 
     http_base_url = require_non_empty_string(root, "httpBaseUrl", source)
-    _validate_loopback_url(http_base_url, {"http", "https"}, source, "httpBaseUrl")
+    _validate_loopback_url(
+        http_base_url,
+        {"http", "https"},
+        source,
+        "httpBaseUrl",
+        origin_only=True,
+    )
 
     ws_url = require_non_empty_string(root, "wsUrl", source)
-    _validate_loopback_url(ws_url, {"ws", "wss"}, source, "wsUrl")
+    _validate_websocket_url(ws_url, source)
 
     token_file = require_non_empty_string(root, "tokenFile", source)
     if not Path(token_file).is_absolute():
@@ -79,7 +86,13 @@ def parse_hub_runtime(value: Any, *, source: str) -> HubRuntime:
     lease_seconds = require_int(runtime_tuning, "leaseSeconds", f"{source}.runtimeTuning")
     online_threshold_seconds = require_int(runtime_tuning, "onlineThresholdSeconds", f"{source}.runtimeTuning")
     launch_dedupe_window_seconds = require_int(runtime_tuning, "launchDedupeWindowSeconds", f"{source}.runtimeTuning")
-    if lease_seconds < 1 or online_threshold_seconds < 1 or launch_dedupe_window_seconds < 1:
+    launch_register_timeout_seconds = require_int(runtime_tuning, "launchRegisterTimeoutSeconds", f"{source}.runtimeTuning")
+    if (
+        lease_seconds < 1
+        or online_threshold_seconds < 1
+        or launch_dedupe_window_seconds < 1
+        or launch_register_timeout_seconds < 1
+    ):
         raise RuntimeError(f"hub.json.runtimeTuning 非法：{source}")
 
     hub_version = optional_property_string(root, "hubVersion", source)
@@ -94,6 +107,7 @@ def parse_hub_runtime(value: Any, *, source: str) -> HubRuntime:
             lease_seconds=lease_seconds,
             online_threshold_seconds=online_threshold_seconds,
             launch_dedupe_window_seconds=launch_dedupe_window_seconds,
+            launch_register_timeout_seconds=launch_register_timeout_seconds,
         ),
         hub_version=hub_version,
     )
@@ -174,6 +188,7 @@ def parse_app_definition(value: Any, *, path: str) -> AppDefinition:
     """解析应用定义。"""
 
     root = require_mapping(value, path)
+    display_name = require_non_blank_string(root, "displayName", path)
     capabilities = AppCapabilities(rpc=True)
     if "capabilities" in root:
         capabilities_root = require_mapping(root["capabilities"], f"{path}.capabilities")
@@ -187,7 +202,8 @@ def parse_app_definition(value: Any, *, path: str) -> AppDefinition:
     if "launch" in root:
         launch_root = require_mapping(root["launch"], f"{path}.launch")
         launch = LaunchConfiguration(
-            exe_path=require_string_allow_empty(launch_root, "exePath", f"{path}.launch"),
+            exe_path=optional_property_string(launch_root, "exePath", f"{path}.launch"),
+            args=optional_property_string_list(launch_root, "args", f"{path}.launch"),
             args_template=optional_property_string(launch_root, "argsTemplate", f"{path}.launch"),
             working_directory=optional_property_string(launch_root, "workingDirectory", f"{path}.launch"),
             dedupe_key_template=optional_property_string(launch_root, "dedupeKeyTemplate", f"{path}.launch"),
@@ -195,7 +211,7 @@ def parse_app_definition(value: Any, *, path: str) -> AppDefinition:
 
     return AppDefinition(
         app_id=require_validated_string(root, "appId", path, validate_app_id),
-        display_name=require_string_allow_empty(root, "displayName", path),
+        display_name=display_name,
         scope=require_scope_string(root, "scope", path),
         description=optional_property_string(root, "description", path),
         capabilities=capabilities,
@@ -298,11 +314,22 @@ def parse_launch_result(value: Any, *, path: str) -> LaunchResult:
         pid = root["pid"]
         if not isinstance(pid, int) or isinstance(pid, bool) or pid < 1:
             raise RuntimeError(f"{path}.pid 类型非法。")
+    launch_id = optional_property_string(root, "launchId", path)
+    dedupe_key = optional_property_string(root, "dedupeKey", path)
+    instance_id = optional_property_string(root, "instanceId", path)
+    if status in {"started", "starting"}:
+        if not launch_id or not dedupe_key:
+            raise RuntimeError(f"{path}.launchId 与 {path}.dedupeKey 必须存在。")
+    elif not instance_id and (not launch_id or not dedupe_key):
+        raise RuntimeError(f"{path}.instanceId 或 {path}.launchId + {path}.dedupeKey 必须存在。")
+
     return LaunchResult(
         ok=ok,
         status=status,
-        launch_id=require_non_empty_string(root, "launchId", path),
+        launch_id=launch_id,
         pid=pid,
+        dedupe_key=dedupe_key,
+        instance_id=instance_id,
     )
 
 
@@ -383,6 +410,7 @@ def parse_invocation(value: Any, *, path: str) -> Invocation:
         delivery = InvocationDelivery(
             lease_seconds=require_positive_int(delivery_root, "leaseSeconds", f"{path}.delivery"),
             attempt=require_positive_int(delivery_root, "attempt", f"{path}.delivery"),
+            lease_token=require_non_empty_string(delivery_root, "leaseToken", f"{path}.delivery"),
         )
 
     caller_root = require_mapping(root.get("caller"), f"{path}.caller")
@@ -436,7 +464,7 @@ def parse_callee_error(value: Any, *, path: str) -> DevHubCalleeError:
     """解析被调用方错误对象。"""
 
     root = require_mapping(value, path)
-    data = _require_json_object(root["data"], f"{path}.data") if "data" in root else None
+    data = _require_json_value(root["data"], f"{path}.data") if "data" in root else None
     return DevHubCalleeError(
         code=require_int(root, "code", path),
         message=require_non_empty_string(root, "message", path),
@@ -504,10 +532,11 @@ def _validate_known_event_payload(event_type: str, payload: Any, *, path: str) -
 
         require_validated_string(payload_root, "appId", path, validate_app_id)
         require_validated_string(payload_root, "instanceId", path, validate_instance_id)
-        if "scope" in payload_root:
-            require_scope_string(payload_root, "scope", path)
+        require_scope_string(payload_root, "scope", path)
         if "password" in payload_root:
             raise RuntimeError(f"{path}.password 不得出现。")
+        if "instanceSessionToken" in payload_root:
+            raise RuntimeError(f"{path}.instanceSessionToken 不得出现。")
 
 
 def optional_property_string(root: Mapping[str, Any], name: str, path: str) -> str | None:
@@ -524,6 +553,22 @@ def optional_property_bool(root: Mapping[str, Any], name: str, path: str) -> boo
     if name not in root:
         return None
     return require_bool(root, name, path)
+
+
+def optional_property_string_list(root: Mapping[str, Any], name: str, path: str) -> list[str] | None:
+    """读取“可省略但不可为 null”的字符串数组属性。"""
+
+    if name not in root:
+        return None
+    value = root.get(name)
+    if not isinstance(value, list):
+        raise RuntimeError(f"{path}.{name} 类型非法。")
+    parsed: list[str] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, str):
+            raise RuntimeError(f"{path}.{name}[{index}] 类型非法。")
+        parsed.append(item)
+    return parsed
 
 
 def optional_property_int_at_least(
@@ -576,7 +621,16 @@ def require_non_empty_string(root: Mapping[str, Any], name: str, path: str) -> s
     """读取必填字符串属性。"""
 
     value = root.get(name)
-    if not isinstance(value, str) or not value:
+    if not isinstance(value, str) or not value.strip():
+        raise RuntimeError(f"{path}.{name} 类型非法。")
+    return value
+
+
+def require_non_blank_string(root: Mapping[str, Any], name: str, path: str) -> str:
+    """读取必填非空白字符串属性。"""
+
+    value = root.get(name)
+    if not isinstance(value, str) or not value.strip():
         raise RuntimeError(f"{path}.{name} 类型非法。")
     return value
 
@@ -690,11 +744,71 @@ def parse_datetime(value: str, path: str) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
-def _validate_loopback_url(url: str, schemes: set[str], source: str, field_name: str) -> None:
+def _validate_loopback_url(
+    url: str,
+    schemes: set[str],
+    source: str,
+    field_name: str,
+    *,
+    origin_only: bool = False,
+) -> None:
     parsed = urlparse(url)
-    if not url or url.endswith("/"):
+    if not url or url.strip() != url or url.endswith("/") or "?" in url or "#" in url:
         raise RuntimeError(f"hub.json.{field_name} 非法：{source}")
     if parsed.scheme not in schemes or not parsed.hostname:
         raise RuntimeError(f"hub.json.{field_name} 非法：{source}")
-    if parsed.hostname not in {"127.0.0.1", "localhost", "::1"}:
+    if not _is_loopback_host(parsed.hostname):
         raise RuntimeError(f"hub.json.{field_name} 非法：{source}")
+    if origin_only and (
+        parsed.username
+        or parsed.password
+        or parsed.path
+        or parsed.query
+        or parsed.fragment
+        or parsed.params
+    ):
+        raise RuntimeError(f"hub.json.{field_name} 非法：{source}")
+
+
+def _validate_websocket_url(url: str, source: str) -> None:
+    parsed = urlparse(url)
+    if (
+        not url
+        or url.strip() != url
+        or url.endswith("/")
+        or parsed.scheme not in {"ws", "wss"}
+        or not parsed.hostname
+        or not _is_loopback_host(parsed.hostname)
+        or "@" in parsed.netloc
+        or parsed.username
+        or parsed.password
+        or parsed.path != "/ws"
+        or "?" in url
+        or "#" in url
+        or parsed.query
+        or parsed.fragment
+        or parsed.params
+    ):
+        raise RuntimeError(f"hub.json.wsUrl 非法：{source}")
+
+
+def validate_runtime_endpoints(http_base_url: str, ws_url: str, source: str) -> None:
+    """校验运行时 HTTP 与 WebSocket 端点形状。"""
+
+    _validate_loopback_url(
+        http_base_url,
+        {"http", "https"},
+        source,
+        "httpBaseUrl",
+        origin_only=True,
+    )
+    _validate_websocket_url(ws_url, source)
+
+
+def _is_loopback_host(host: str) -> bool:
+    if host == "localhost":
+        return True
+    try:
+        return ip_address(host).is_loopback
+    except ValueError:
+        return False

@@ -1,0 +1,70 @@
+{
+  "id": "apps.definitions_catalog.delete_existing_returns_ok_and_removes_definition",
+  "caseId": "CONF-003",
+  "description": "删除已存在的 AppDefinition 时，hub.apps.deleteDefinition 必须返回 ok=true，且后续读取返回 app_definition_not_found。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "appId": "apps.delete.existing.app",
+        "scopeEntry": {
+          "scope": "",
+          "displayName": "Apps Delete Existing"
+        }
+      }
+    ]
+  },
+  "orchestration": {
+    "afterCaller": [
+      {
+        "action": "call_rpc",
+        "method": "hub.apps.getDefinition",
+        "requestId": "apps-definitions-delete-get-missing",
+        "params": {
+          "appId": "apps.delete.existing.app",
+          "scope": ""
+        },
+        "expectedError": {
+          "code": -32014,
+          "message": "app_definition_not_found",
+          "data": {
+            "appId": "apps.delete.existing.app",
+            "scope": ""
+          }
+        }
+      }
+    ]
+  },
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceApps",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000037"
+    }
+  },
+  "request": {
+    "kind": "raw.rpc.helper",
+    "jsonrpc": "2.0",
+    "id": "apps-definitions-delete-existing",
+    "method": "hub.apps.deleteDefinition",
+    "params": {
+      "appId": "apps.delete.existing.app",
+      "scope": ""
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "apps-definitions-delete-existing",
+    "result": {
+      "ok": true
+    }
+  },
+  "tags": [
+    "apps",
+    "definitions",
+    "http",
+    "success"
+  ]
+}

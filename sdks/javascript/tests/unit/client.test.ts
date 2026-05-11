@@ -11,6 +11,9 @@ import {
 import type { NormalizedDevHubClientOptions } from "../../src/models.js";
 
 const tempRoots: string[] = [];
+const TEST_DATA_DIR = path.resolve(".tmp-test-paths/devhub-js-sdk-runtime");
+const TEST_RUNTIME_DIRECTORY = path.join(TEST_DATA_DIR, "runtime");
+const TEST_TOKEN_FILE = path.join(TEST_RUNTIME_DIRECTORY, "token.txt");
 
 afterEach(async () => {
   vi.unstubAllGlobals();
@@ -34,7 +37,7 @@ it("dispose should forward to an injected transport and remain idempotent", asyn
   const client = await DevHubClient.fromRuntime(
     {
       clientId: "unit-dispose-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -56,7 +59,7 @@ it("dispose should tolerate transports without a dispose hook", async () => {
   const client = await DevHubClient.fromRuntime(
     {
       clientId: "unit-dispose-optional-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -88,7 +91,7 @@ it("disposed client should reject further RPCs without calling transport", async
   const client = await DevHubClient.fromRuntime(
     {
       clientId: "unit-disposed-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -110,7 +113,7 @@ it("fromRuntime 应支持注入 runtimeResolver 与 transportFactory", async () 
     resolve: vi.fn(async (options: Readonly<NormalizedDevHubClientOptions>) => {
       expect(options).toMatchObject({
         clientId: "unit-injected-client",
-        dataDir: "/tmp/devhub-js-sdk-runtime",
+        dataDir: TEST_DATA_DIR,
         protocolVersion: 1
       });
       expect(options.clientSessionId).toEqual(expect.any(String));
@@ -143,7 +146,7 @@ it("fromRuntime 应支持注入 runtimeResolver 与 transportFactory", async () 
   const client = await DevHubClient.fromRuntime(
     {
       clientId: "unit-injected-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver,
@@ -169,13 +172,37 @@ it("fromRuntime 应支持注入 runtimeResolver 与 transportFactory", async () 
   expect(transport.send).toHaveBeenCalledTimes(1);
 });
 
+it("fromRuntime 应拒绝注入 resolver 返回的非法 WebSocket 端点", async () => {
+  const connection = createConnectionInfo({
+    runtime: {
+      wsUrl: "ws://127.0.0.1:57231/ws?"
+    },
+    websocketEndpoint: "ws://127.0.0.1:57231/ws?"
+  });
+
+  await expect(DevHubClient.fromRuntime(
+    {
+      clientId: "unit-invalid-resolver-client",
+      dataDir: TEST_DATA_DIR
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      transportFactory: () => {
+        throw new Error("transportFactory should not be called.");
+      }
+    }
+  )).rejects.toThrow(/wsUrl/);
+});
+
 it("runtime 应返回脱敏快照", async () => {
   const connection = createConnectionInfo();
 
   const client = await DevHubClient.fromRuntime(
     {
       clientId: "unit-runtime-view-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -211,7 +238,7 @@ it("ping 应拒绝注入 transport 返回的非法 echo JSON", async () => {
   const client = await DevHubClient.fromRuntime(
     {
       clientId: "unit-injected-invalid-echo-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -238,7 +265,7 @@ it("request 应拒绝注入 transport 返回的非法 value JSON", async () => {
   const client = await DevHubClient.fromRuntime(
     {
       clientId: "unit-injected-invalid-value-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -491,6 +518,38 @@ it("listDefinitions 应显式发送请求对象并保留 Global、精确 scope �
   expect(fetchSpy).toHaveBeenCalledTimes(1);
 });
 
+it("listDefinitions should reject blank displayName from transport while preserving blank launch.exePath behavior elsewhere", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
+    const body = parseRequestBody(init);
+    expect(body.method).toBe("hub.apps.listDefinitions");
+
+    return createJsonResponse(body.id, {
+      ok: true,
+      definitions: [
+        {
+          appId: "test.invalid-display-name.app",
+          scope: "",
+          displayName: "   ",
+          launch: {
+            exePath: ""
+          }
+        }
+      ]
+    });
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-list-definitions-invalid-display-name-client",
+    dataDir: runtimeDir
+  });
+
+  await expect(client.listDefinitions({
+    scope: null
+  })).rejects.toThrow("hub.apps.listDefinitions.result.definitions[0].displayName must be a non-empty string.");
+});
+
 it("getDefinition 应将缺省 capabilities.rpc 归一化为 true", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
@@ -628,31 +687,9 @@ it("getInstance should send the exact instanceId and parse a single AppInstance"
   expect(fetchSpy).toHaveBeenCalledTimes(1);
 });
 
-it("validateDefinition 应发送校验请求并返回结构化结果", async () => {
+it("validateDefinition should reject blank displayName before sending the request", async () => {
   const runtimeDir = await createRuntime();
-  const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
-    const body = parseRequestBody(init);
-    expect(body.method).toBe("hub.apps.validateDefinition");
-    expect(body.params).toEqual({
-      definition: {
-        appId: "test.validate.app",
-        scope: "",
-        displayName: ""
-      }
-    });
-
-    return createJsonResponse(body.id, {
-      ok: true,
-      valid: false,
-      errors: [
-        {
-          path: "definition.displayName",
-          code: "missing_display_name",
-          message: "displayName is required"
-        }
-      ]
-    });
-  });
+  const fetchSpy = vi.fn();
   vi.stubGlobal("fetch", fetchSpy);
 
   const client = await DevHubClient.fromRuntime({
@@ -660,24 +697,12 @@ it("validateDefinition 应发送校验请求并返回结构化结果", async () 
     dataDir: runtimeDir
   });
 
-  const result = await client.validateDefinition({
+  await expect(client.validateDefinition({
     appId: "test.validate.app",
     scope: "",
-    displayName: ""
-  });
-
-  expect(result).toEqual({
-    ok: true,
-    valid: false,
-    errors: [
-      {
-        path: "definition.displayName",
-        code: "missing_display_name",
-        message: "displayName is required"
-      }
-    ]
-  });
-  expect(fetchSpy).toHaveBeenCalledTimes(1);
+    displayName: "   "
+  })).rejects.toThrow("definition.displayName 不能为空白字符串。");
+  expect(fetchSpy).not.toHaveBeenCalled();
 });
 
 it("upsertDefinition 应发送写请求并解析返回定义", async () => {
@@ -695,7 +720,8 @@ it("upsertDefinition 应发送写请求并解析返回定义", async () => {
           events: false
         },
         launch: {
-          exePath: process.execPath
+          exePath: process.execPath,
+          args: ["./app.js", "--scope", "{scope}"]
         }
       }
     });
@@ -711,7 +737,8 @@ it("upsertDefinition 应发送写请求并解析返回定义", async () => {
           events: false
         },
         launch: {
-          exePath: process.execPath
+          exePath: process.execPath,
+          args: ["./app.js", "--scope", "{scope}"]
         }
       }
     });
@@ -732,7 +759,8 @@ it("upsertDefinition 应发送写请求并解析返回定义", async () => {
       events: false
     },
     launch: {
-      exePath: process.execPath
+      exePath: process.execPath,
+      args: ["./app.js", "--scope", "{scope}"]
     }
   });
 
@@ -747,12 +775,31 @@ it("upsertDefinition 应发送写请求并解析返回定义", async () => {
     },
     launch: {
       exePath: process.execPath,
+      args: ["./app.js", "--scope", "{scope}"],
       argsTemplate: undefined,
       workingDirectory: undefined,
       dedupeKeyTemplate: undefined
     }
   });
   expect(fetchSpy).toHaveBeenCalledTimes(1);
+});
+
+it("upsertDefinition should reject blank displayName before sending the request", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn();
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-upsert-definition-invalid-display-name-client",
+    dataDir: runtimeDir
+  });
+
+  await expect(client.upsertDefinition({
+    appId: "test.upsert.app",
+    scope: "",
+    displayName: " "
+  })).rejects.toThrow("definition.displayName 不能为空白字符串。");
+  expect(fetchSpy).not.toHaveBeenCalled();
 });
 
 it("deleteDefinition 应发送删除请求", async () => {
@@ -853,6 +900,7 @@ it("registerInstance 应返回 instanceSessionToken，实例拥有者 RPC 应携
         instanceId: "inst-1",
         instanceSessionToken: "session-1",
         invocationId: "invk-1",
+        leaseToken: "lease-1",
         value: {
           ok: true
         }
@@ -906,6 +954,7 @@ it("registerInstance 应返回 instanceSessionToken，实例拥有者 RPC 应携
     instanceId: "inst-1",
     instanceSessionToken: instance.instanceSessionToken,
     invocationId: "invk-1",
+    leaseToken: "lease-1",
     value: {
       ok: true
     }
@@ -914,13 +963,73 @@ it("registerInstance 应返回 instanceSessionToken，实例拥有者 RPC 应携
   expect(fetchSpy).toHaveBeenCalledTimes(5);
 });
 
+it("registerInstance 应把 launchId 作为顶层 params 发送", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
+    const body = parseRequestBody(init);
+    expect(body.method).toBe("hub.apps.registerInstance");
+    expect(body.params).toEqual({
+      password: "secret-1",
+      launchId: "launch-1",
+      instance: {
+        instanceId: "inst-1",
+        appId: "test.app",
+        scope: "",
+        pid: 12345,
+        invoke: {
+          poll: true,
+          respond: true
+        }
+      }
+    });
+
+    return createJsonResponse(body.id, {
+      ok: true,
+      instance: {
+        instanceId: "inst-1",
+        appId: "test.app",
+        scope: "",
+        pid: 12345,
+        registeredAtUtc: "2026-03-09T00:00:00Z",
+        lastSeenUtc: "2026-03-09T00:00:00Z",
+        invoke: {
+          poll: true,
+          respond: true
+        }
+      },
+      instanceSessionToken: "session-1"
+    });
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-register-launch-id-client",
+    dataDir: runtimeDir
+  });
+
+  await expect(client.registerInstance({
+    instanceId: "inst-1",
+    appId: "test.app",
+    scope: "",
+    pid: 12345,
+    invoke: {
+      poll: true,
+      respond: true
+    }
+  }, "secret-1", { launchId: "launch-1" })).resolves.toMatchObject({
+    instanceId: "inst-1",
+    instanceSessionToken: "session-1"
+  });
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
+});
+
 it("registerInstance 应拒绝返回包含 password 的实例结果", async () => {
   const connection = createConnectionInfo();
 
   const client = await DevHubClient.fromRuntime(
     {
       clientId: "unit-instance-password-leak-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -965,7 +1074,7 @@ it("registerInstance 应拒绝缺少 instanceSessionToken 的成功结果", asyn
   const client = await DevHubClient.fromRuntime(
     {
       clientId: "unit-instance-session-token-required-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -1286,6 +1395,44 @@ it("notify 应在本地校验 target.instanceId 类型", async () => {
   expect(fetchSpy).not.toHaveBeenCalled();
 });
 
+it.each([
+  ["notify", (client: DevHubClient) => client.notify({
+    appId: "test.app",
+    method: "test.notify",
+    target: {
+      scope: "",
+      instanceId: "a".repeat(257)
+    },
+    options: {
+      autoLaunch: false
+    }
+  })],
+  ["request", (client: DevHubClient) => client.request({
+    appId: "test.app",
+    method: "test.request",
+    target: {
+      scope: "",
+      instanceId: "a".repeat(257)
+    },
+    options: {
+      autoLaunch: false
+    }
+  })]
+])("%s 应在发送前拒绝超长 target.instanceId", async (_name, act) => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn();
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-target-instanceid-length-client",
+    dataDir: runtimeDir
+  });
+
+  await expect(act(client)).rejects.toThrow(/target\.instanceId/);
+
+  expect(fetchSpy).not.toHaveBeenCalled();
+});
+
 it("launch should reject null waitForRegisterMs before sending the request", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn();
@@ -1362,6 +1509,7 @@ it("poll / respond 应在本地拒绝空 instanceSessionToken", async () => {
     instanceId: "inst-1",
     instanceSessionToken: "",
     invocationId: "invk-1",
+    leaseToken: "lease-1",
     value: {
       ok: true
     }
@@ -1431,19 +1579,43 @@ it("respond 应在本地校验 value 与 error 互斥", async () => {
   await expect(client.respond({
     instanceId: "inst-1",
     instanceSessionToken: "session-1",
-    invocationId: "invk-1"
+    invocationId: "invk-1",
+    leaseToken: "lease-1"
   } as unknown as Parameters<typeof client.respond>[0])).rejects.toThrow("RespondRequest 必须且只能包含 value 或 error 之一。");
 
   await expect(client.respond({
     instanceId: "inst-1",
     instanceSessionToken: "session-1",
     invocationId: "invk-1",
+    leaseToken: "lease-1",
     value: { ok: true },
     error: {
       code: 1001,
       message: "app_error"
     }
   } as unknown as Parameters<typeof client.respond>[0])).rejects.toThrow("RespondRequest 必须且只能包含 value 或 error 之一。");
+
+  expect(fetchSpy).not.toHaveBeenCalled();
+});
+
+it("respond 应在本地要求 leaseToken", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn();
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-respond-lease-token-client",
+    dataDir: runtimeDir
+  });
+
+  await expect(client.respond({
+    instanceId: "inst-1",
+    instanceSessionToken: "session-1",
+    invocationId: "invk-1",
+    value: {
+      ok: true
+    }
+  } as unknown as Parameters<typeof client.respond>[0])).rejects.toThrow("leaseToken 不能为空。");
 
   expect(fetchSpy).not.toHaveBeenCalled();
 });
@@ -1462,6 +1634,7 @@ it("respond should reject an invalid invocationId before sending the request", a
     instanceId: "inst-1",
     instanceSessionToken: "session-1",
     invocationId: "bad-id",
+    leaseToken: "lease-1",
     value: {
       ok: true
     }
@@ -1580,6 +1753,7 @@ it("respond 应在本地拒绝非法 error.data JSON 结构", async () => {
     instanceId: "inst-1",
     instanceSessionToken: "session-1",
     invocationId: "invk-1",
+    leaseToken: "lease-1",
     error: {
       code: 1001,
       message: "app_error",
@@ -1606,6 +1780,7 @@ it("respond 应在本地拒绝非整数 error.code", async () => {
     instanceId: "inst-1",
     instanceSessionToken: "session-1",
     invocationId: "invk-1",
+    leaseToken: "lease-1",
     error: {
       code: 1001.5,
       message: "app_error"
@@ -1615,9 +1790,13 @@ it("respond 应在本地拒绝非整数 error.code", async () => {
   expect(fetchSpy).not.toHaveBeenCalled();
 });
 
-it("respond 应在本地拒绝非对象 error.data", async () => {
+it("respond 应允许标量 error.data", async () => {
   const runtimeDir = await createRuntime();
-  const fetchSpy = vi.fn();
+  const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
+    const body = parseRequestBody(init);
+    expect(body.params.error.data).toBe("boom");
+    return createJsonResponse(body.id, { ok: true });
+  });
   vi.stubGlobal("fetch", fetchSpy);
 
   const client = await DevHubClient.fromRuntime({
@@ -1629,24 +1808,26 @@ it("respond 应在本地拒绝非对象 error.data", async () => {
     instanceId: "inst-1",
     instanceSessionToken: "session-1",
     invocationId: "invk-1",
+    leaseToken: "lease-1",
     error: {
       code: 1001,
       message: "app_error",
-      data: "boom" as any
+      data: "boom"
     }
-  })).rejects.toThrow("error.data 必须为 JSON 对象。");
+  })).resolves.toBeUndefined();
 
-  expect(fetchSpy).not.toHaveBeenCalled();
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
 });
 
-it("launch 应拒绝缺少 launchId 的成功载荷", async () => {
+it("launch 应拒绝 started 缺少 launchId 的成功载荷", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
     const body = parseRequestBody(init);
     return createJsonResponse(body.id, {
       ok: true,
       status: "started",
-      pid: 12345
+      pid: 12345,
+      dedupeKey: "test.app:global"
     });
   });
   vi.stubGlobal("fetch", fetchSpy);
@@ -1919,7 +2100,7 @@ it("poll should reject an invocation item whose waitTimeoutMs exceeds ttlMs", as
   })).rejects.toThrow(/waitTimeoutMs/i);
 });
 
-it("getDefinition should accept spec-valid empty displayName and launch.exePath", async () => {
+it("getDefinition should reject blank displayName even when launch.exePath is blank", async () => {
   const runtimeDir = await createRuntime();
   const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
     const body = parseRequestBody(init);
@@ -1934,7 +2115,7 @@ it("getDefinition should accept spec-valid empty displayName and launch.exePath"
       definition: {
         appId: "test.empty-fields.app",
         scope: "",
-        displayName: "",
+        displayName: " ",
         launch: {
           exePath: ""
         }
@@ -1948,27 +2129,45 @@ it("getDefinition should accept spec-valid empty displayName and launch.exePath"
     dataDir: runtimeDir
   });
 
-  const definition = await client.getDefinition({
+  await expect(client.getDefinition({
     appId: "test.empty-fields.app",
+    scope: ""
+  })).rejects.toThrow("hub.apps.getDefinition.result.definition.displayName must be a non-empty string.");
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
+});
+
+it("getDefinition should continue accepting blank launch.exePath when displayName is valid", async () => {
+  const runtimeDir = await createRuntime();
+  const fetchSpy = vi.fn(async (_input: unknown, init?: RequestInit) => {
+    const body = parseRequestBody(init);
+    expect(body.method).toBe("hub.apps.getDefinition");
+
+    return createJsonResponse(body.id, {
+      ok: true,
+      definition: {
+        appId: "test.blank-launch-exepath.app",
+        scope: "",
+        displayName: "Blank Launch ExePath App",
+        launch: {
+          exePath: ""
+        }
+      }
+    });
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+
+  const client = await DevHubClient.fromRuntime({
+    clientId: "unit-get-definition-blank-launch-exepath-client",
+    dataDir: runtimeDir
+  });
+
+  const definition = await client.getDefinition({
+    appId: "test.blank-launch-exepath.app",
     scope: ""
   });
 
-  expect(definition).toEqual({
-    appId: "test.empty-fields.app",
-    scope: "",
-    displayName: "",
-    description: undefined,
-    capabilities: {
-      rpc: true
-    },
-    launch: {
-      exePath: "",
-      argsTemplate: undefined,
-      workingDirectory: undefined,
-      dedupeKeyTemplate: undefined
-    }
-  });
-  expect(fetchSpy).toHaveBeenCalledTimes(1);
+  expect(definition.launch?.exePath).toBe("");
+  expect(definition.displayName).toBe("Blank Launch ExePath App");
 });
 
 it("getDefinition should reject null capabilities flags", async () => {
@@ -2054,7 +2253,7 @@ it("listInstances 应拒绝注入 transport 返回的非法 meta JSON", async ()
   const client = await DevHubClient.fromRuntime(
     {
       clientId: "unit-injected-invalid-meta-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -2098,7 +2297,7 @@ it("getDefinition 应将非法入站标识符视为 invalid_response", async () 
   const client = await DevHubClient.fromRuntime(
     {
       clientId: "unit-injected-invalid-identifier-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -2179,7 +2378,7 @@ it("getInstance should reject an AppInstance payload containing instanceSessionT
   const client = await DevHubClient.fromRuntime(
     {
       clientId: "unit-get-instance-token-leak-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -2215,7 +2414,7 @@ it("getInstance should reject an AppInstance payload containing password", async
   const client = await DevHubClient.fromRuntime(
     {
       clientId: "unit-get-instance-password-leak-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -2295,7 +2494,7 @@ it("poll 应拒绝注入 transport 返回的非法 args JSON", async () => {
   const client = await DevHubClient.fromRuntime(
     {
       clientId: "unit-injected-invalid-args-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -2336,22 +2535,44 @@ it("poll 应拒绝注入 transport 返回的非法 args JSON", async () => {
   })).rejects.toThrow("hub.invoke.poll.result.items[0].args.callback 包含不支持的 JSON 类型。");
 });
 
-function createConnectionInfo() {
+type TestRuntimeConnectionInfo = ReturnType<typeof createBaseConnectionInfo>;
+
+function createConnectionInfo(overrides: {
+  runtime?: Partial<TestRuntimeConnectionInfo["runtime"]>;
+  rpcEndpoint?: string;
+  websocketEndpoint?: string;
+} = {}): TestRuntimeConnectionInfo {
+  const base = createBaseConnectionInfo();
+  const runtime = {
+    ...base.runtime,
+    ...overrides.runtime
+  };
+
   return {
-    runtimeDirectory: "/tmp/devhub-js-sdk-runtime/runtime",
+    ...base,
+    runtime,
+    rpcEndpoint: overrides.rpcEndpoint ?? `${runtime.httpBaseUrl}/rpc`,
+    websocketEndpoint: overrides.websocketEndpoint ?? runtime.wsUrl
+  };
+}
+
+function createBaseConnectionInfo() {
+  return {
+    runtimeDirectory: TEST_RUNTIME_DIRECTORY,
     token: "token-fake",
     runtime: {
       protocolVersion: 1,
       pid: 12345,
       httpBaseUrl: "http://127.0.0.1:57231",
       wsUrl: "ws://127.0.0.1:57231/ws",
-      tokenFile: "/tmp/devhub-js-sdk-runtime/runtime/token.txt",
+      tokenFile: TEST_TOKEN_FILE,
       startedAtUtc: new Date("2026-03-09T00:00:00Z"),
       hubVersion: "0.7.0-test",
       runtimeTuning: {
         leaseSeconds: 30,
         onlineThresholdSeconds: 30,
-        launchDedupeWindowSeconds: 30
+        launchDedupeWindowSeconds: 30,
+        launchRegisterTimeoutSeconds: 30
       }
     },
     rpcEndpoint: "http://127.0.0.1:57231/rpc",
@@ -2382,7 +2603,8 @@ async function createRuntime(): Promise<string> {
       runtimeTuning: {
         leaseSeconds: 30,
         onlineThresholdSeconds: 30,
-        launchDedupeWindowSeconds: 30
+        launchDedupeWindowSeconds: 30,
+        launchRegisterTimeoutSeconds: 30
       }
     }),
     "utf-8"

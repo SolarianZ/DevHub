@@ -96,6 +96,7 @@ pub struct MonitorRuntimeTuning {
     pub lease_seconds: u32,
     pub online_threshold_seconds: u32,
     pub launch_dedupe_window_seconds: u32,
+    pub launch_register_timeout_seconds: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

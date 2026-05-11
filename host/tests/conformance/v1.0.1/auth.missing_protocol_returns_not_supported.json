@@ -19,7 +19,7 @@
   },
   "expectedResponse": {
     "jsonrpc": "2.0",
-    "id": "auth-missing-protocol",
+    "id": null,
     "error": {
       "code": -32099,
       "message": "not_supported",

@@ -90,7 +90,8 @@ public sealed class ServiceCollectionExtensionsTests
             {
                 LeaseSeconds = 30,
                 OnlineThresholdSeconds = 30,
-                LaunchDedupeWindowSeconds = 30
+                LaunchDedupeWindowSeconds = 30,
+                LaunchRegisterTimeoutSeconds = 30
             }
         };
 

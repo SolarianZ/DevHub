@@ -1,0 +1,55 @@
+{
+  "id": "transport.http_post_origin_error_returns_cors_headers",
+  "caseId": "CONF-008",
+  "description": "带 Origin 的 POST /rpc 错误响应必须返回 Origin CORS 头。",
+  "transport": "http",
+  "request": {
+    "kind": "raw.http",
+    "method": "POST",
+    "path": "/rpc",
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-ClientId": "ConformanceRawHttp",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000201",
+      "Origin": "http://localhost:1420"
+    },
+    "body": {
+      "jsonrpc": "2.0",
+      "id": "transport-cors-error",
+      "method": "hub.ping",
+      "params": {}
+    }
+  },
+  "expectedResponse": {
+    "matchMode": "subset",
+    "phase": "http",
+    "outcome": "success",
+    "actual": {
+      "statusCode": 200,
+      "headers": {
+        "access-control-allow-origin": "http://localhost:1420",
+        "vary": "Origin"
+      },
+      "bodyJson": {
+        "jsonrpc": "2.0",
+        "id": null,
+        "error": {
+          "code": -32099,
+          "message": "not_supported",
+          "data": {
+            "expected": 1,
+            "reason": "missing"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    "http",
+    "transport",
+    "cors",
+    "post",
+    "error"
+  ]
+}

@@ -26,6 +26,11 @@ public sealed class RuntimeTuningOptions
     public const string LaunchDedupeWindowSecondsEnvironmentVariable = "DEVHUB_LAUNCH_DEDUPE_WINDOW_SECONDS";
 
     /// <summary>
+    /// 启动注册截止时间秒数环境变量名。
+    /// </summary>
+    public const string LaunchRegisterTimeoutSecondsEnvironmentVariable = "DEVHUB_LAUNCH_REGISTER_TIMEOUT_SECONDS";
+
+    /// <summary>
     /// 挂起 invocation 总量上限环境变量名。
     /// </summary>
     public const string PendingInvocationsLimitEnvironmentVariable = "DEVHUB_PENDING_INVOCATIONS_LIMIT";
@@ -46,15 +51,26 @@ public sealed class RuntimeTuningOptions
     public const int DefaultLaunchDedupeWindowSeconds = 30;
 
     /// <summary>
+    /// 启动注册截止时间秒数默认值。
+    /// </summary>
+    public const int DefaultLaunchRegisterTimeoutSeconds = 30;
+
+    /// <summary>
     /// 挂起 invocation 总量上限默认值；0 表示不启用该限制。
     /// </summary>
     public const int DefaultPendingInvocationsLimit = 0;
 
-    private RuntimeTuningOptions(int leaseSeconds, int onlineThresholdSeconds, int launchDedupeWindowSeconds, int pendingInvocationsLimit)
+    private RuntimeTuningOptions(
+        int leaseSeconds,
+        int onlineThresholdSeconds,
+        int launchDedupeWindowSeconds,
+        int launchRegisterTimeoutSeconds,
+        int pendingInvocationsLimit)
     {
         LeaseSeconds = leaseSeconds;
         OnlineThresholdSeconds = onlineThresholdSeconds;
         LaunchDedupeWindowSeconds = launchDedupeWindowSeconds;
+        LaunchRegisterTimeoutSeconds = launchRegisterTimeoutSeconds;
         PendingInvocationsLimit = pendingInvocationsLimit;
     }
 
@@ -65,6 +81,7 @@ public sealed class RuntimeTuningOptions
         DefaultLeaseSeconds,
         DefaultOnlineThresholdSeconds,
         DefaultLaunchDedupeWindowSeconds,
+        DefaultLaunchRegisterTimeoutSeconds,
         DefaultPendingInvocationsLimit);
 
     /// <summary>
@@ -81,6 +98,11 @@ public sealed class RuntimeTuningOptions
     /// 启动去重窗口秒数。
     /// </summary>
     public int LaunchDedupeWindowSeconds { get; }
+
+    /// <summary>
+    /// 启动注册截止时间秒数。
+    /// </summary>
+    public int LaunchRegisterTimeoutSeconds { get; }
 
     /// <summary>
     /// 挂起 invocation 总量上限；0 表示不启用。
@@ -106,6 +128,10 @@ public sealed class RuntimeTuningOptions
             LaunchDedupeWindowSecondsEnvironmentVariable,
             DefaultLaunchDedupeWindowSeconds,
             logger);
+        var launchRegisterTimeoutSeconds = ReadPositiveIntOrDefault(
+            LaunchRegisterTimeoutSecondsEnvironmentVariable,
+            DefaultLaunchRegisterTimeoutSeconds,
+            logger);
         var pendingInvocationsLimit = ReadNonNegativeIntOrDefault(
             PendingInvocationsLimitEnvironmentVariable,
             DefaultPendingInvocationsLimit,
@@ -115,6 +141,7 @@ public sealed class RuntimeTuningOptions
             leaseSeconds,
             onlineThresholdSeconds,
             launchDedupeWindowSeconds,
+            launchRegisterTimeoutSeconds,
             pendingInvocationsLimit);
     }
 
@@ -125,6 +152,7 @@ public sealed class RuntimeTuningOptions
         int leaseSeconds,
         int onlineThresholdSeconds,
         int launchDedupeWindowSeconds,
+        int launchRegisterTimeoutSeconds = DefaultLaunchRegisterTimeoutSeconds,
         int pendingInvocationsLimit = DefaultPendingInvocationsLimit)
     {
         if (leaseSeconds < 1)
@@ -142,6 +170,11 @@ public sealed class RuntimeTuningOptions
             throw new ArgumentOutOfRangeException(nameof(launchDedupeWindowSeconds));
         }
 
+        if (launchRegisterTimeoutSeconds < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(launchRegisterTimeoutSeconds));
+        }
+
         if (pendingInvocationsLimit < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(pendingInvocationsLimit));
@@ -151,6 +184,7 @@ public sealed class RuntimeTuningOptions
             leaseSeconds,
             onlineThresholdSeconds,
             launchDedupeWindowSeconds,
+            launchRegisterTimeoutSeconds,
             pendingInvocationsLimit);
     }
 

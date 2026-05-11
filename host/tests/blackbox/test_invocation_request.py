@@ -13,13 +13,13 @@ import unittest
 
 from tests.blackbox.test_base import (
     DiscoveryService,
+    delete_definitions,
     RpcClient,
     RpcAssertions,
     TestResult,
     new_instance_id,
-    safe_remove,
     unregister_instances,
-    write_app_definition,
+    upsert_app_definition,
 )
 
 
@@ -27,7 +27,7 @@ class TestInvocationRequest(unittest.TestCase):
     """Invocation request 测试类"""
 
     def _create_definition(self, app_id, rpc=True):
-        return write_app_definition(app_id, rpc=rpc, events=False)
+        return upsert_app_definition(app_id, rpc=rpc, events=False)
 
     @staticmethod
     def _new_app_id(prefix):
@@ -74,8 +74,9 @@ class TestInvocationRequest(unittest.TestCase):
                     return
 
                 invocation_id = items[0].get("invocationId")
+                lease_token = items[0].get("delivery", {}).get("leaseToken")
                 poll_outcome["invocation_id"] = invocation_id
-                respond_response = client.respond_value(callee_instance_id, invocation_id, {"status": "ok", "count": 1})
+                respond_response = client.respond_value(callee_instance_id, invocation_id, {"status": "ok", "count": 1}, lease_token=lease_token)
                 poll_outcome["respond"] = respond_response
 
             worker = threading.Thread(target=callee_worker, daemon=True)
@@ -117,7 +118,7 @@ class TestInvocationRequest(unittest.TestCase):
             result.mark_failure(str(e))
         finally:
             unregister_instances([callee_instance_id])
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -156,6 +157,7 @@ class TestInvocationRequest(unittest.TestCase):
                 items = poll_response.get("result", {}).get("items", [])
                 if items:
                     poll_holder["invocation_id"] = items[0].get("invocationId")
+                    poll_holder["lease_token"] = items[0].get("delivery", {}).get("leaseToken")
 
             worker = threading.Thread(target=callee_poll_only, daemon=True)
             worker.start()
@@ -189,7 +191,7 @@ class TestInvocationRequest(unittest.TestCase):
                 result.mark_failure(f"❌ timeout 响应缺少 elapsedMs: {request_response}")
                 return result
 
-            late_respond = client.respond_value(callee_instance_id, invocation_id, {"ok": True})
+            late_respond = client.respond_value(callee_instance_id, invocation_id, {"ok": True}, lease_token=poll_holder.get("lease_token"))
             if not RpcAssertions.expect_error(result, late_respond, -32011, "invocation_expired"):
                 return result
 
@@ -198,7 +200,7 @@ class TestInvocationRequest(unittest.TestCase):
             result.mark_failure(str(e))
         finally:
             unregister_instances([callee_instance_id])
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -244,7 +246,7 @@ class TestInvocationRequest(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -306,6 +308,7 @@ class TestInvocationRequest(unittest.TestCase):
                 items = poll_response.get("result", {}).get("items", [])
                 if len(items) == 1:
                     poll_holder["invocationId"] = items[0].get("invocationId")
+                    poll_holder["leaseToken"] = items[0].get("delivery", {}).get("leaseToken")
 
             def caller_worker():
                 try:
@@ -348,7 +351,7 @@ class TestInvocationRequest(unittest.TestCase):
 
             time.sleep(0.35)
 
-            late_respond = client.respond_value(callee_instance_id, invocation_id, {"ok": True})
+            late_respond = client.respond_value(callee_instance_id, invocation_id, {"ok": True}, lease_token=poll_holder.get("leaseToken"))
             if not RpcAssertions.expect_success(result, late_respond):
                 return result
 
@@ -357,7 +360,7 @@ class TestInvocationRequest(unittest.TestCase):
             result.mark_failure(str(e))
         finally:
             unregister_instances([callee_instance_id])
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -419,6 +422,7 @@ class TestInvocationRequest(unittest.TestCase):
                 items = poll_response.get("result", {}).get("items", [])
                 if len(items) == 1:
                     poll_holder["invocationId"] = items[0].get("invocationId")
+                    poll_holder["leaseToken"] = items[0].get("delivery", {}).get("leaseToken")
 
             def caller_worker():
                 try:
@@ -461,7 +465,7 @@ class TestInvocationRequest(unittest.TestCase):
 
             time.sleep(0.45)
 
-            late_respond = client.respond_value(callee_instance_id, invocation_id, {"ok": True})
+            late_respond = client.respond_value(callee_instance_id, invocation_id, {"ok": True}, lease_token=poll_holder.get("leaseToken"))
             if not RpcAssertions.expect_error(result, late_respond, -32011, "invocation_expired"):
                 return result
 
@@ -470,7 +474,7 @@ class TestInvocationRequest(unittest.TestCase):
             result.mark_failure(str(e))
         finally:
             unregister_instances([callee_instance_id])
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -569,7 +573,7 @@ class TestInvocationRequest(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -608,7 +612,43 @@ class TestInvocationRequest(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
+
+        return result
+
+    def test_request_overlong_target_instance_id_should_return_invalid_params(self):
+        """request 超长 target.instanceId 在路由前返回 invalid_params"""
+        result = TestResult("request 超长 target.instanceId 返回 invalid_params")
+        definition_path = None
+
+        try:
+            app_id = self._new_app_id("request-overlong-target-id")
+            definition_path = self._create_definition(app_id)
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            response = client.invoke_request(
+                app_id=app_id,
+                method="asset.build",
+                target_instance_id="a" * 257,
+                options={
+                    "ttlMs": 300000,
+                    "waitTimeoutMs": 120000,
+                    "queueIfOffline": False,
+                    "autoLaunch": False,
+                },
+                request_id="request-overlong-target-id",
+            )
+            if not RpcAssertions.expect_error(result, response, -32602, "invalid_params"):
+                return result
+            if not RpcAssertions.expect_error_data_fields(result, response, {"reason": "invalid_target_instance"}):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -652,7 +692,8 @@ class TestInvocationRequest(unittest.TestCase):
                     return
 
                 invocation_id = items[0].get("invocationId")
-                client.respond_error(callee_instance_id, invocation_id, callee_error)
+                lease_token = items[0].get("delivery", {}).get("leaseToken")
+                client.respond_error(callee_instance_id, invocation_id, callee_error, lease_token=lease_token)
 
             worker = threading.Thread(target=callee_worker, daemon=True)
             worker.start()
@@ -698,7 +739,7 @@ class TestInvocationRequest(unittest.TestCase):
             result.mark_failure(str(e))
         finally:
             unregister_instances([callee_instance_id])
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -736,7 +777,7 @@ class TestInvocationRequest(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -779,11 +820,13 @@ class TestInvocationRequest(unittest.TestCase):
                 item = items[0]
                 request_result_holder["item"] = item
                 invocation_id = item.get("invocationId")
+                lease_token = item.get("delivery", {}).get("leaseToken")
                 if invocation_id:
                     request_result_holder["respond"] = client.respond_value(
                         callee_instance_id,
                         invocation_id,
                         {"handledBy": "defaults"},
+                        lease_token=lease_token,
                     )
 
             worker = threading.Thread(target=callee_worker, daemon=True)
@@ -888,7 +931,7 @@ class TestInvocationRequest(unittest.TestCase):
             result.mark_failure(str(e))
         finally:
             unregister_instances([callee_instance_id])
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -906,6 +949,7 @@ class TestInvocationRequest(unittest.TestCase):
             self.test_request_invalid_target_instance_with_autolaunch_true(),
             self.test_request_offline_without_queue_should_fail(),
             self.test_request_target_instance_missing_should_return_specific_reason(),
+            self.test_request_overlong_target_instance_id_should_return_invalid_params(),
         ]
 
 

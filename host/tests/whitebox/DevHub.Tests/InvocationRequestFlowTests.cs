@@ -6,6 +6,7 @@ using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services;
 using DevHub.Core.Services.Abstractions;
 using DevHub.Core.Services.Invocation;
+using DevHub.Core.Services.Rpc;
 using DevHub.Core.Services.Rpc.Handlers;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -83,7 +84,9 @@ public class InvocationRequestFlowTests : IDisposable
         var pollResult = JsonSerializer.SerializeToElement(pollResponse.Result);
         var item = pollResult.GetProperty("items").EnumerateArray().Single();
         var invocationId = item.GetProperty("invocationId").GetString();
+        var leaseToken = item.GetProperty("delivery").GetProperty("leaseToken").GetString();
         Assert.False(string.IsNullOrWhiteSpace(invocationId));
+        Assert.False(string.IsNullOrWhiteSpace(leaseToken));
 
         var respondResponse = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -94,6 +97,7 @@ public class InvocationRequestFlowTests : IDisposable
                 instanceId,
                 instanceSessionToken = instanceToken,
                 invocationId,
+                leaseToken,
                 value = new { ok = true, version = 1 }
             })
         }, CancellationToken.None);
@@ -157,7 +161,9 @@ public class InvocationRequestFlowTests : IDisposable
 
         Assert.Null(pollResponse.Error);
         var pollResult = JsonSerializer.SerializeToElement(pollResponse.Result);
-        var invocationId = pollResult.GetProperty("items").EnumerateArray().Single().GetProperty("invocationId").GetString();
+        var item = pollResult.GetProperty("items").EnumerateArray().Single();
+        var invocationId = item.GetProperty("invocationId").GetString();
+        var leaseToken = item.GetProperty("delivery").GetProperty("leaseToken").GetString();
 
         var respondResponse = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -168,6 +174,7 @@ public class InvocationRequestFlowTests : IDisposable
                 instanceId,
                 instanceSessionToken = instanceToken,
                 invocationId,
+                leaseToken,
                 value = (object?)null
             })
         }, CancellationToken.None);
@@ -222,7 +229,9 @@ public class InvocationRequestFlowTests : IDisposable
 
         Assert.Null(pollResponse.Error);
         var pollResult = JsonSerializer.SerializeToElement(pollResponse.Result);
-        var invocationId = pollResult.GetProperty("items").EnumerateArray().Single().GetProperty("invocationId").GetString();
+        var item = pollResult.GetProperty("items").EnumerateArray().Single();
+        var invocationId = item.GetProperty("invocationId").GetString();
+        var leaseToken = item.GetProperty("delivery").GetProperty("leaseToken").GetString();
 
         var respondResponse = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -233,6 +242,7 @@ public class InvocationRequestFlowTests : IDisposable
                 instanceId,
                 instanceSessionToken = instanceToken,
                 invocationId,
+                leaseToken,
                 error = new
                 {
                     code = 1001,
@@ -298,7 +308,9 @@ public class InvocationRequestFlowTests : IDisposable
 
         Assert.Null(pollResponse.Error);
         var pollResult = JsonSerializer.SerializeToElement(pollResponse.Result);
-        var invocationId = pollResult.GetProperty("items").EnumerateArray().Single().GetProperty("invocationId").GetString();
+        var item = pollResult.GetProperty("items").EnumerateArray().Single();
+        var invocationId = item.GetProperty("invocationId").GetString();
+        var leaseToken = item.GetProperty("delivery").GetProperty("leaseToken").GetString();
 
         var requestResponse = await requestTask;
         Assert.NotNull(requestResponse.Error);
@@ -318,6 +330,7 @@ public class InvocationRequestFlowTests : IDisposable
                 instanceId,
                 instanceSessionToken = instanceToken,
                 invocationId,
+                leaseToken,
                 value = new { ok = true }
             })
         }, CancellationToken.None);
@@ -337,7 +350,7 @@ public class InvocationRequestFlowTests : IDisposable
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
         var instanceToken = RegisterInstance(appRegistry, appId, instanceId, pid: 6104);
 
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
@@ -377,7 +390,9 @@ public class InvocationRequestFlowTests : IDisposable
 
         Assert.Null(pollResponse.Error);
         var pollResult = JsonSerializer.SerializeToElement(pollResponse.Result);
-        var invocationId = pollResult.GetProperty("items").EnumerateArray().Single().GetProperty("invocationId").GetString();
+        var item = pollResult.GetProperty("items").EnumerateArray().Single();
+        var invocationId = item.GetProperty("invocationId").GetString();
+        var leaseToken = item.GetProperty("delivery").GetProperty("leaseToken").GetString();
 
         cts.Cancel();
 
@@ -394,6 +409,84 @@ public class InvocationRequestFlowTests : IDisposable
                 instanceId,
                 instanceSessionToken = instanceToken,
                 invocationId,
+                leaseToken,
+                value = new { ok = true }
+            })
+        }, CancellationToken.None);
+
+        Assert.Null(respondResponse.Error);
+    }
+
+    [Fact]
+    public async Task Impl_Request_WhenRoutedCallerCanceled_ShouldPropagateCancellationAndKeepInvocationActive()
+    {
+        const string appId = "request-routed-canceled.app";
+        const string instanceId = "request-routed-canceled-instance";
+        WriteDefinition(appId, rpcEnabled: true);
+
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
+        var instanceToken = RegisterInstance(appRegistry, appId, instanceId, pid: 6111);
+
+        var handler = CreateHandler(appRegistry);
+        var router = new RpcRouter([handler], Mock.Of<ILogger<RpcRouter>>());
+        using var cts = new CancellationTokenSource();
+
+        var requestTask = router.RouteAsync(new JsonRpcRequest
+        {
+            Id = "req-routed-canceled",
+            Method = "hub.invoke.request",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId,
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
+                method = "asset.routed.cancel",
+                args = new { x = 3 },
+                options = new
+                {
+                    ttlMs = 5000,
+                    waitTimeoutMs = 3000,
+                    queueIfOffline = true,
+                    autoLaunch = false
+                }
+            })
+        }, cts.Token);
+
+        var pollResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "poll-routed-canceled",
+            Method = "hub.invoke.poll",
+            Params = JsonSerializer.SerializeToElement(new { instanceId, instanceSessionToken = instanceToken, maxCount = 1, waitMs = 1000 })
+        }, CancellationToken.None);
+
+        Assert.Null(pollResponse.Error);
+        var invocationId = JsonSerializer.SerializeToElement(pollResponse.Result)
+            .GetProperty("items")
+            .EnumerateArray()
+            .Single()
+            .GetProperty("invocationId")
+            .GetString();
+        var leaseToken = JsonSerializer.SerializeToElement(pollResponse.Result)
+            .GetProperty("items")
+            .EnumerateArray()
+            .Single()
+            .GetProperty("delivery")
+            .GetProperty("leaseToken")
+            .GetString();
+
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await requestTask);
+
+        var respondResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "respond-routed-canceled",
+            Method = "hub.invoke.respond",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instanceId,
+                instanceSessionToken = instanceToken,
+                invocationId,
+                leaseToken,
                 value = new { ok = true }
             })
         }, CancellationToken.None);
@@ -412,7 +505,7 @@ public class InvocationRequestFlowTests : IDisposable
         var appRegistry = new AppRegistry(clock, _registryLogger.Object);
         var instanceToken = RegisterInstance(appRegistry, appId, instanceId, pid: 6105);
 
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
@@ -456,6 +549,13 @@ public class InvocationRequestFlowTests : IDisposable
             .Single()
             .GetProperty("invocationId")
             .GetString();
+        var leaseToken = JsonSerializer.SerializeToElement(pollResponse.Result)
+            .GetProperty("items")
+            .EnumerateArray()
+            .Single()
+            .GetProperty("delivery")
+            .GetProperty("leaseToken")
+            .GetString();
 
         cts.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await requestTask);
@@ -472,6 +572,7 @@ public class InvocationRequestFlowTests : IDisposable
                 instanceId,
                 instanceSessionToken = instanceToken,
                 invocationId,
+                leaseToken,
                 value = new { ok = true }
             })
         }, CancellationToken.None);
@@ -479,6 +580,70 @@ public class InvocationRequestFlowTests : IDisposable
         Assert.NotNull(lateRespondResponse.Error);
         Assert.Equal(-32011, lateRespondResponse.Error.Code);
         Assert.Equal("invocation_expired", lateRespondResponse.Error.Message);
+    }
+
+    [Fact]
+    public async Task Impl_Request_WhenCallerCanceledAndTimeoutLaterElapsed_ShouldNotDeliverOnLaterPoll()
+    {
+        const string appId = "request-canceled-timeout-poll.app";
+        const string instanceId = "request-canceled-timeout-poll-instance";
+        WriteDefinition(appId, rpcEnabled: true);
+
+        var clock = new MutableClock(DateTime.UtcNow);
+        var appRegistry = new AppRegistry(clock, _registryLogger.Object);
+        var instanceToken = RegisterInstance(appRegistry, appId, instanceId, pid: 6106);
+
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), _definitionLogger.Object);
+        var definitionProvider = new DefinitionProvider(definitionLoader);
+        definitionProvider.Refresh();
+        var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
+        var store = new InvocationStore(_storeLogger.Object, routingService, clock);
+        var waiter = new InvocationRequestWaiter(_waiterLogger.Object);
+        var runtimeHttpBaseUrlProvider = new RuntimeHttpBaseUrlProvider(Mock.Of<ILogger<RuntimeHttpBaseUrlProvider>>(), RuntimePathOptions.Resolve());
+        var launchCoordinator = new LaunchCoordinator(definitionProvider, appRegistry, runtimeHttpBaseUrlProvider, new ProcessLauncher(), clock, _launchLogger.Object);
+        var handler = new InvocationHandler(appRegistry, definitionProvider, routingService, store, waiter, launchCoordinator, clock, _invocationHandlerLogger.Object);
+        using var cts = new CancellationTokenSource();
+
+        var requestTask = handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "req-canceled-timeout-poll",
+            Method = "hub.invoke.request",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId,
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
+                method = "asset.cancel.timeout.poll",
+                options = new
+                {
+                    ttlMs = 5000,
+                    waitTimeoutMs = 300,
+                    queueIfOffline = true,
+                    autoLaunch = false
+                }
+            })
+        }, cts.Token);
+
+        cts.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await requestTask);
+
+        clock.Advance(TimeSpan.FromMilliseconds(500));
+
+        var pollResponse = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "poll-after-canceled-timeout",
+            Method = "hub.invoke.poll",
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instanceId,
+                instanceSessionToken = instanceToken,
+                maxCount = 1,
+                waitMs = 0
+            })
+        }, CancellationToken.None);
+
+        Assert.Null(pollResponse.Error);
+        var items = JsonSerializer.SerializeToElement(pollResponse.Result).GetProperty("items").EnumerateArray();
+        Assert.Empty(items);
     }
 
     [Fact]
@@ -556,7 +721,7 @@ public class InvocationRequestFlowTests : IDisposable
         var appRegistry = new AppRegistry(clock, _registryLogger.Object, runtimeTuningOptions);
         _ = RegisterInstance(appRegistry, appId, "request-default-options-instance", pid: 6110);
 
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
@@ -597,7 +762,7 @@ public class InvocationRequestFlowTests : IDisposable
 
     private InvocationHandler CreateHandler(AppRegistry appRegistry)
     {
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
@@ -610,18 +775,19 @@ public class InvocationRequestFlowTests : IDisposable
 
     private void WriteDefinition(string appId, bool rpcEnabled)
     {
-        var filePath = Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId, ScopeContract.Global).GetFileName());
-        File.WriteAllText(filePath, JsonSerializer.Serialize(new
-        {
-            appId,
-            scope = ScopeContract.Global,
-            displayName = appId,
-            capabilities = new
+        DefinitionCatalogTestHelper.UpsertDefinition(
+            DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory),
+            JsonSerializer.Serialize(new
             {
-                rpc = rpcEnabled,
-                events = false
-            }
-        }));
+                appId,
+                scope = ScopeContract.Global,
+                displayName = appId,
+                capabilities = new
+                {
+                    rpc = rpcEnabled,
+                    events = false
+                }
+            }));
     }
 
     private static string RegisterInstance(AppRegistry appRegistry, string appId, string instanceId, int pid)

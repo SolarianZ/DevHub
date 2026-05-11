@@ -16,6 +16,9 @@ conformance 的目标不是替代单元测试，而是从“第三方消费者�
 
 这些向量与 [`docs/specification/protocol/Specification.md`](../../../docs/specification/protocol/Specification.md) §10.1 / §10.2 对齐，是当前仓库公开发布的最小符合性基线。
 
+- conformance 仅覆盖 Specification 定义的公开契约。
+- 仓库内部 fault injection、测试专用刷新机制等私有测试钩子不属于 conformance 基线。
+
 ## 2. 目录结构
 
 ```text
@@ -54,7 +57,7 @@ python host/tests/conformance/vector_runner.py
 dotnet build sdks/dotnet/DevHub.DotNetSdk.slnx -c Release
 npm --prefix sdks/javascript ci
 npm --prefix sdks/javascript run build
-python -m pip install -e "./sdks/python[test]" requests
+python -m pip install -e "./sdks/python[test]"
 ```
 
 如果同机还要并行跑三套 SDK 集成测试，或者希望官方适配器统一复用同一份 Host 构建产物，请先把 Host 构建到隔离输出目录，再通过共享环境变量 `DEVHUB_SDK_HOST_ASSEMBLY` 指向该目录下的 `DevHub.Host.dll`；如需只覆盖单语言调试，再额外设置对应语言特定变量：
@@ -153,6 +156,9 @@ adapter 启动后会收到一个 `execution-context.json` 路径。该文件至�
 
 - `vector` 中的 `${HOST_*}` / `${VECTOR_*}` 占位符在 runner 调用 adapter 前都已解析完成。
 - adapter 必须把 `dataDir/runtime/hub.json` 当作运行时发现入口，禁止硬编码端口或 URL。
+- 若向量包含 `setup.definitions`，runner 会直接物化 suite Host 的 `${HOST_DEFINITIONS_CATALOG}`，即 `${HOST_APPS_DIR}/definitions.json` 版本化目录索引。
+- `setup.definitions` 采用完整 Definition 记录模型：可通过 `appId + scopeEntry/rawScopeEntry` 生成带显式 `appId` 的 Definition 记录，也可通过 `appEntry/rawAppEntry` 直接写入完整 Definition 记录，以覆盖无效记录的加载语义。
+- 当 `setup.definitions` 需要原样物化无效 catalog 片段时，runner 会重启 suite Host 以重新加载 Definition 快照；该过程不依赖额外 RPC 刷新入口。
 
 ### 6.2 输出
 
@@ -183,6 +189,7 @@ adapter 必须向标准输出打印一条 JSON 对象；runner 会读取最后�
 
 - Discovery 向量：`phase` 必须为 `discovery`
 - 原始 HTTP JSON-RPC 向量：`phase` 必须为 `rpc`
+- 原始 HTTP 传输向量：`phase` 必须为 `http`
 - SDK Invocation 向量：`phase` 必须为 `sdk-invocation`，且 `operation` 必须为 `notify` 或 `request`
 - SDK Events 向量：`phase` 必须为 `sdk-events`
 - Raw WebSocket 向量：`phase` 必须为 `ws`

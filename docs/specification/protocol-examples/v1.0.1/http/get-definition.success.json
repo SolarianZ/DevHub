@@ -9,6 +9,15 @@
       "displayName": "Sample App",
       "capabilities": {
         "rpc": true
+      },
+      "launch": {
+        "exePath": "/opt/devhub-samples/sample-app",
+        "args": [
+          "--app",
+          "{appId}",
+          "--scope",
+          "{scopeOrGlobal}"
+        ]
       }
     }
   }

@@ -11,9 +11,15 @@ import { SDK_VERSION } from "../../src/index.js";
 declare const httpClient: DevHubClient;
 declare const eventsClient: DevHubEventsClient;
 declare const eventSession: JsonRpcEventSession;
+declare const registration: Parameters<DevHubClient["registerInstance"]>[0];
 
 const httpInstance: Promise<AppInstance> = httpClient.getInstance("inst-1");
 const eventsInstance: Promise<AppInstance> = eventsClient.getInstance("inst-1");
+const registeredFromLaunch: ReturnType<DevHubClient["registerInstance"]> = httpClient.registerInstance(
+  registration,
+  "secret-1",
+  { launchId: "launch-1" }
+);
 const httpHostVersion: Promise<string> = httpClient.getHostVersion();
 const eventsHostVersion: Promise<string> = eventsClient.getHostVersion();
 const httpCompatibility: Promise<VersionCompatibilityResult> = httpClient.checkVersionCompatibility();
@@ -47,6 +53,7 @@ void eventsClient.clearAbandonedRequests({ method: 123 });
 
 void httpInstance;
 void eventsInstance;
+void registeredFromLaunch;
 void httpHostVersion;
 void eventsHostVersion;
 void httpCompatibility;

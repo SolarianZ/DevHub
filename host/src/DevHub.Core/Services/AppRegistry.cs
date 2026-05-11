@@ -49,7 +49,7 @@ public class AppRegistry : IDisposable
     /// <summary>
     /// 清理过期实例（lastSeenUtc 超过 1 小时）
     /// </summary>
-    public void CleanupExpiredInstances()
+    public IReadOnlyList<AppInstance> CleanupExpiredInstances()
     {
         _logger.LogDebug("开始执行过期实例清理任务");
 
@@ -57,6 +57,7 @@ public class AppRegistry : IDisposable
         {
             var now = _clock.UtcNow;
             _logger.LogDebug("当前实例数量: {Count}", _instances.Count);
+            var removedInstances = new List<AppInstance>();
 
             var expiredInstanceIds = _instances.Values
                 .Where(i => now - i.LastSeenUtc > _cleanupThreshold)
@@ -71,6 +72,7 @@ public class AppRegistry : IDisposable
                 {
                     _passwordStates.TryRemove(instanceId, out _);
                     _sessionStates.TryRemove(instanceId, out _);
+                    removedInstances.Add(CloneInstance(removedInstance));
                     _logger.LogInformation("已清理过期应用程序实例: {InstanceId} (AppId: {AppId}, Scope: {Scope}, PID: {PID}, LastSeen: {LastSeen})",
                         instanceId, removedInstance.AppId, removedInstance.Scope, removedInstance.Pid, removedInstance.LastSeenUtc);
                 }
@@ -84,6 +86,8 @@ public class AppRegistry : IDisposable
             {
                 _logger.LogDebug("没有发现过期实例需要清理");
             }
+
+            return removedInstances;
         }
     }
 
@@ -93,9 +97,9 @@ public class AppRegistry : IDisposable
     }
 
     /// <summary>
-    /// 注册或更新应用程序实例
+    /// 注册或更新应用程序实例（仅供白盒测试构造运行态）。
     /// </summary>
-    public AppInstance RegisterInstance(AppInstance instance)
+    internal AppInstance RegisterInstance(AppInstance instance)
     {
         ArgumentNullException.ThrowIfNull(instance);
         ValidateInstance(instance);
@@ -118,14 +122,14 @@ public class AppRegistry : IDisposable
     /// <param name="instance">待注册的实例。</param>
     /// <param name="password">实例密码。</param>
     /// <param name="registeredInstance">成功时返回最新实例快照。</param>
-    /// <param name="passwordMismatch">密码不匹配时返回 <c>true</c>。</param>
+    /// <param name="validationStatus">注册所有权校验结果。</param>
     /// <returns>成功注册或更新返回 <c>true</c>。</returns>
     public bool TryRegisterInstance(
         AppInstance instance,
         string password,
         out AppInstance registeredInstance,
         out string instanceSessionToken,
-        out bool passwordMismatch)
+        out InstanceRegistrationValidationStatus validationStatus)
     {
         ArgumentNullException.ThrowIfNull(instance);
         ArgumentException.ThrowIfNullOrWhiteSpace(password);
@@ -136,35 +140,55 @@ public class AppRegistry : IDisposable
         {
             if (_instances.TryGetValue(instance.InstanceId, out var existing))
             {
-                if (_passwordStates.TryGetValue(instance.InstanceId, out var passwordState) && !MatchesSecret(passwordState, password))
+                if (_passwordStates.TryGetValue(instance.InstanceId, out var passwordState))
                 {
-                    registeredInstance = CloneInstance(existing);
-                    passwordMismatch = true;
-                    return false;
+                    if (!MatchesSecret(passwordState, password))
+                    {
+                        registeredInstance = CloneInstance(existing);
+                        validationStatus = InstanceRegistrationValidationStatus.PasswordMismatch;
+                        return false;
+                    }
+
+                    if (!IsSameRegisteredIdentity(existing, instance))
+                    {
+                        registeredInstance = CloneInstance(existing);
+                        validationStatus = InstanceRegistrationValidationStatus.IdentityMismatch;
+                        return false;
+                    }
+
+                    var updatedInstance = RegisterOrUpdateInstance(instance);
+                    instanceSessionToken = RotateSessionTokenState(instance.InstanceId);
+                    registeredInstance = CloneInstance(updatedInstance);
+                    validationStatus = InstanceRegistrationValidationStatus.Accepted;
+                    return true;
                 }
 
-                if (!_passwordStates.ContainsKey(instance.InstanceId))
+                if (_instances.TryRemove(instance.InstanceId, out var removedLegacyInstance))
                 {
-                    _passwordStates[instance.InstanceId] = CreateSecretState(password);
+                    _sessionStates.TryRemove(instance.InstanceId, out _);
+                    _logger.LogInformation(
+                        "已丢弃无密码状态的应用程序实例: {InstanceId} (AppId: {AppId}, Scope: {Scope}, PID: {PID})",
+                        instance.InstanceId,
+                        removedLegacyInstance.AppId,
+                        removedLegacyInstance.Scope,
+                        removedLegacyInstance.Pid);
                 }
             }
-            else
-            {
-                _passwordStates[instance.InstanceId] = CreateSecretState(password);
-            }
+
+            _passwordStates[instance.InstanceId] = CreateSecretState(password);
 
             var storedInstance = RegisterOrUpdateInstance(instance);
             instanceSessionToken = RotateSessionTokenState(instance.InstanceId);
             registeredInstance = CloneInstance(storedInstance);
-            passwordMismatch = false;
+            validationStatus = InstanceRegistrationValidationStatus.Accepted;
             return true;
         }
     }
 
     /// <summary>
-    /// 更新实例的最后更新时间（心跳）
+    /// 更新实例的最后更新时间（仅供白盒测试构造运行态）。
     /// </summary>
-    public bool Heartbeat(string instanceId, out DateTime lastSeenUtc)
+    internal bool Heartbeat(string instanceId, out DateTime lastSeenUtc)
     {
         ProtocolIdentifier.EnsureInstanceId(instanceId, nameof(instanceId));
         _logger.LogDebug("尝试更新实例心跳: {InstanceId}", instanceId);
@@ -187,9 +211,9 @@ public class AppRegistry : IDisposable
     }
 
     /// <summary>
-    /// 注销应用程序实例
+    /// 注销应用程序实例（仅供白盒测试构造运行态）。
     /// </summary>
-    public bool UnregisterInstance(string instanceId)
+    internal bool UnregisterInstance(string instanceId)
     {
         ProtocolIdentifier.EnsureInstanceId(instanceId, nameof(instanceId));
         _logger.LogDebug("尝试注销应用程序实例: {InstanceId}", instanceId);
@@ -496,6 +520,12 @@ public class AppRegistry : IDisposable
         return instanceToRegister;
     }
 
+    private static bool IsSameRegisteredIdentity(AppInstance existing, AppInstance candidate)
+    {
+        return string.Equals(existing.AppId, candidate.AppId, StringComparison.Ordinal)
+            && string.Equals(existing.Scope, candidate.Scope, StringComparison.Ordinal);
+    }
+
     private static AppInstance CloneInstance(AppInstance instance)
     {
         return new AppInstance
@@ -625,4 +655,25 @@ public enum InstanceSessionValidationStatus
     /// 凭据不匹配。
     /// </summary>
     TokenMismatch
+}
+
+/// <summary>
+/// 实例注册所有权校验结果。
+/// </summary>
+public enum InstanceRegistrationValidationStatus
+{
+    /// <summary>
+    /// 注册请求被接受。
+    /// </summary>
+    Accepted,
+
+    /// <summary>
+    /// 实例密码不匹配。
+    /// </summary>
+    PasswordMismatch,
+
+    /// <summary>
+    /// 同一实例身份绑定的 appId 或 scope 不匹配。
+    /// </summary>
+    IdentityMismatch
 }

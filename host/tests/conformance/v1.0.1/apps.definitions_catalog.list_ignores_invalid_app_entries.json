@@ -1,0 +1,57 @@
+{
+  "id": "apps.definitions_catalog.list_ignores_invalid_app_entries",
+  "caseId": "CONF-003",
+  "description": "definitions.json 存在无效 app 分组时，hub.apps.listDefinitions 必须忽略这些无效分组并仅返回合法 Definition。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "appId": "apps.list.valid-only.app",
+        "scopeEntry": {
+          "scope": "",
+          "displayName": "Apps List Valid Only"
+        }
+      },
+      {
+        "rawAppEntry": "{\"appId\":null,\"scopes\":[]}"
+      }
+    ]
+  },
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceApps",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000022"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "apps-definitions-list-ignore-invalid",
+    "method": "hub.apps.listDefinitions",
+    "params": {
+      "scope": null
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "apps-definitions-list-ignore-invalid",
+    "result": {
+      "ok": true,
+      "definitions": [
+        {
+          "appId": "apps.list.valid-only.app",
+          "scope": "",
+          "displayName": "Apps List Valid Only"
+        }
+      ]
+    }
+  },
+  "tags": [
+    "apps",
+    "definitions",
+    "http",
+    "invalid-definition"
+  ]
+}

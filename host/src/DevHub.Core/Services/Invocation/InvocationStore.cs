@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Security.Cryptography;
 using DevHub.Core.Models;
 using DevHub.Core.Services;
 using DevHub.Core.Services.Abstractions;
@@ -77,12 +78,27 @@ public class InvocationStore
     }
 
     /// <summary>
+    /// 判断当前活动 invocation 数量是否已经达到挂起上限。
+    /// </summary>
+    /// <param name="pendingInvocationsLimit">挂起 invocation 总量上限；0 表示不启用。</param>
+    /// <param name="activeInvocationCount">当前活动 invocation 数量。</param>
+    /// <returns>已经达到上限时返回 <see langword="true" />。</returns>
+    public bool IsPendingLimitReached(int pendingInvocationsLimit, out int activeInvocationCount)
+    {
+        lock (_syncRoot)
+        {
+            activeInvocationCount = CountActiveInvocationsUnsafe();
+            return pendingInvocationsLimit > 0 && activeInvocationCount >= pendingInvocationsLimit;
+        }
+    }
+
+    /// <summary>
     /// 获取调用。
     /// </summary>
     public bool TryGet(string invocationId, out InvocationModel? invocation)
     {
         var exists = _all.TryGetValue(invocationId, out var found);
-        invocation = found;
+        invocation = found is null ? null : CloneInvocation(found);
         return exists;
     }
 
@@ -100,15 +116,29 @@ public class InvocationStore
     /// <summary>
     /// 由实例执行 poll。
     /// </summary>
-    public async Task<IReadOnlyList<InvocationModel>> PollAsync(AppInstance instance, int maxCount, int waitMs, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<InvocationModel>> PollAsync(
+        AppInstance instance,
+        int maxCount,
+        int waitMs,
+        CancellationToken cancellationToken,
+        InvocationRequestWaiter? requestWaiter = null)
     {
         var startAt = _clock.UtcNow;
 
         while (true)
         {
             var now = _clock.UtcNow;
-            SweepExpiredLeases(now);
-            var leased = TryLease(instance, maxCount, now);
+            var transitions = new List<InvocationSweepTransition>();
+            List<InvocationModel> leased;
+            lock (_syncRoot)
+            {
+                SweepExpiredLeasesUnsafe(now, transitions);
+                AdvanceTimeoutAndExpirationUnsafe(now, transitions);
+                leased = TryLeaseUnsafe(instance, maxCount, now);
+            }
+
+            CompleteRequestWaiters(requestWaiter, transitions);
+
             if (leased.Count > 0)
             {
                 PublishDeliveredEvents(leased, instance, now);
@@ -129,11 +159,14 @@ public class InvocationStore
     /// <summary>
     /// 响应调用。
     /// </summary>
-    public InvocationRespondStatus Respond(string instanceId, string invocationId, object? value, object? error)
+    public InvocationRespondStatus Respond(string instanceId, string invocationId, string leaseToken, object? value, object? error)
     {
+        ProtocolIdentifier.EnsureInstanceId(instanceId, nameof(instanceId));
+        ArgumentException.ThrowIfNullOrWhiteSpace(leaseToken);
+
         lock (_syncRoot)
         {
-            SweepExpiredLeases(_clock.UtcNow);
+            SweepExpiredLeasesUnsafe(_clock.UtcNow);
 
             if (!_all.TryGetValue(invocationId, out var invocation))
             {
@@ -143,7 +176,15 @@ public class InvocationStore
             var now = _clock.UtcNow;
             if (now > invocation.CreatedAtUtc.AddMilliseconds(invocation.Options.TtlMs))
             {
-                invocation.State = InvocationState.Expired;
+                MarkTerminalUnsafe(invocation, InvocationSweepOutcome.Expired, now);
+                return InvocationRespondStatus.Expired;
+            }
+
+            if (invocation.Kind == InvocationKind.Request &&
+                invocation.Options.WaitTimeoutMs.HasValue &&
+                now >= invocation.CreatedAtUtc.AddMilliseconds(invocation.Options.WaitTimeoutMs.Value))
+            {
+                MarkTerminalUnsafe(invocation, InvocationSweepOutcome.Timeout, now);
                 return InvocationRespondStatus.Expired;
             }
 
@@ -167,6 +208,11 @@ public class InvocationStore
                 return InvocationRespondStatus.DeliveryConflict;
             }
 
+            if (!string.Equals(invocation.Delivery.LeaseToken, leaseToken, StringComparison.Ordinal))
+            {
+                return InvocationRespondStatus.DeliveryConflict;
+            }
+
             if (invocation.LeaseExpireAtUtc.HasValue && now > invocation.LeaseExpireAtUtc.Value)
             {
                 return InvocationRespondStatus.DeliveryConflict;
@@ -174,6 +220,9 @@ public class InvocationStore
 
             invocation.State = error is null ? InvocationState.Completed : InvocationState.Failed;
             invocation.CompletedAtUtc = now;
+            invocation.LeaseHolderInstanceId = null;
+            invocation.LeaseExpireAtUtc = null;
+            invocation.Delivery.LeaseToken = string.Empty;
             invocation.ResponseValue = value;
             invocation.ResponseError = error;
             return InvocationRespondStatus.Success;
@@ -199,8 +248,7 @@ public class InvocationStore
                 return false;
             }
 
-            invocation.State = InvocationState.Timeout;
-            invocation.CompletedAtUtc = now;
+            MarkTerminalUnsafe(invocation, InvocationSweepOutcome.Timeout, now);
             return true;
         }
     }
@@ -224,8 +272,7 @@ public class InvocationStore
                 return false;
             }
 
-            invocation.State = InvocationState.Expired;
-            invocation.CompletedAtUtc = now;
+            MarkTerminalUnsafe(invocation, InvocationSweepOutcome.Expired, now);
             return true;
         }
     }
@@ -240,51 +287,8 @@ public class InvocationStore
 
         lock (_syncRoot)
         {
-            SweepExpiredLeases(now, transitions);
-
-            var timeoutOrExpiredCandidates = _all.Values
-                .Where(i => i.State is InvocationState.Queued or InvocationState.Pending or InvocationState.Delivered)
-                .ToList();
-
-            foreach (var invocation in timeoutOrExpiredCandidates)
-            {
-                var ttlElapsed = now > invocation.CreatedAtUtc.AddMilliseconds(invocation.Options.TtlMs);
-                if (ttlElapsed)
-                {
-                    invocation.State = InvocationState.Expired;
-                    invocation.CompletedAtUtc = now;
-                    invocation.LeaseHolderInstanceId = null;
-                    invocation.LeaseExpireAtUtc = null;
-
-                    transitions.Add(new InvocationSweepTransition
-                    {
-                        InvocationId = invocation.InvocationId,
-                        Kind = invocation.Kind,
-                        Outcome = InvocationSweepOutcome.Expired,
-                        ElapsedMs = (int)Math.Max(0, (now - invocation.CreatedAtUtc).TotalMilliseconds)
-                    });
-
-                    continue;
-                }
-
-                if (invocation.Kind == InvocationKind.Request &&
-                    invocation.Options.WaitTimeoutMs.HasValue &&
-                    now > invocation.CreatedAtUtc.AddMilliseconds(invocation.Options.WaitTimeoutMs.Value))
-                {
-                    invocation.State = InvocationState.Timeout;
-                    invocation.CompletedAtUtc = now;
-                    invocation.LeaseHolderInstanceId = null;
-                    invocation.LeaseExpireAtUtc = null;
-
-                    transitions.Add(new InvocationSweepTransition
-                    {
-                        InvocationId = invocation.InvocationId,
-                        Kind = invocation.Kind,
-                        Outcome = InvocationSweepOutcome.Timeout,
-                        ElapsedMs = (int)Math.Max(0, (now - invocation.CreatedAtUtc).TotalMilliseconds)
-                    });
-                }
-            }
+            SweepExpiredLeasesUnsafe(now, transitions);
+            AdvanceTimeoutAndExpirationUnsafe(now, transitions);
 
             CleanupTerminalInvocations(now);
         }
@@ -292,27 +296,26 @@ public class InvocationStore
         return transitions;
     }
 
-    private List<InvocationModel> TryLease(AppInstance instance, int maxCount, DateTime now)
+    private List<InvocationModel> TryLeaseUnsafe(AppInstance instance, int maxCount, DateTime now)
     {
-        lock (_syncRoot)
+        var candidates = _all.Values
+            .Where(i => i.State is InvocationState.Queued or InvocationState.Pending)
+            .Where(i => now <= i.CreatedAtUtc.AddMilliseconds(i.Options.TtlMs))
+            .Where(i => i.Kind != InvocationKind.Request || !i.Options.WaitTimeoutMs.HasValue || now <= i.CreatedAtUtc.AddMilliseconds(i.Options.WaitTimeoutMs.Value))
+            .Where(i => _routingService.IsEligibleForInstance(i, instance))
+            .OrderBy(i => i.CreatedAtUtc)
+            .Take(maxCount)
+            .ToList();
+
+        foreach (var invocation in candidates)
         {
-            var candidates = _all.Values
-                .Where(i => i.State is InvocationState.Queued or InvocationState.Pending)
-                .Where(i => now <= i.CreatedAtUtc.AddMilliseconds(i.Options.TtlMs))
-                .Where(i => _routingService.IsEligibleForInstance(i, instance))
-                .OrderBy(i => i.CreatedAtUtc)
-                .Take(maxCount)
-                .ToList();
-
-            foreach (var invocation in candidates)
-            {
-                invocation.State = InvocationState.Delivered;
-                invocation.LeaseHolderInstanceId = instance.InstanceId;
-                invocation.LeaseExpireAtUtc = now.AddSeconds(invocation.Delivery.LeaseSeconds);
-            }
-
-            return candidates;
+            invocation.State = InvocationState.Delivered;
+            invocation.LeaseHolderInstanceId = instance.InstanceId;
+            invocation.LeaseExpireAtUtc = now.AddSeconds(invocation.Delivery.LeaseSeconds);
+            invocation.Delivery.LeaseToken = GenerateLeaseToken();
         }
+
+        return candidates;
     }
 
     private void PublishDeliveredEvents(IReadOnlyList<InvocationModel> leased, AppInstance instance, DateTime deliveredAtUtc)
@@ -333,64 +336,147 @@ public class InvocationStore
                     invocationId = invocation.InvocationId,
                     appId = invocation.AppId,
                     instanceId = instance.InstanceId,
-                    scope = invocation.Target.Scope
+                    target = invocation.Target,
+                    scope = invocation.Target.Scope,
+                    method = invocation.Method,
+                    kind = invocation.Kind.ToString().ToLowerInvariant(),
+                    delivery = new
+                    {
+                        attempt = invocation.Delivery.Attempt
+                    }
                 }
             });
         }
     }
 
-    private void SweepExpiredLeases(DateTime now, List<InvocationSweepTransition>? transitions = null)
+    private void SweepExpiredLeasesUnsafe(DateTime now, List<InvocationSweepTransition>? transitions = null)
     {
-        lock (_syncRoot)
+        var expiredDelivered = _all.Values
+            .Where(i => i.State == InvocationState.Delivered)
+            .Where(i => i.LeaseExpireAtUtc.HasValue && now > i.LeaseExpireAtUtc.Value)
+            .ToList();
+
+        foreach (var invocation in expiredDelivered)
         {
-            var expiredDelivered = _all.Values
-                .Where(i => i.State == InvocationState.Delivered)
-                .Where(i => i.LeaseExpireAtUtc.HasValue && now > i.LeaseExpireAtUtc.Value)
-                .ToList();
-
-            foreach (var invocation in expiredDelivered)
+            var ttlExpireAt = invocation.CreatedAtUtc.AddMilliseconds(invocation.Options.TtlMs);
+            if (now > ttlExpireAt)
             {
-                var ttlExpireAt = invocation.CreatedAtUtc.AddMilliseconds(invocation.Options.TtlMs);
-                if (now > ttlExpireAt)
-                {
-                    invocation.State = InvocationState.Expired;
-                    invocation.CompletedAtUtc = now;
+                MarkTerminalUnsafe(invocation, InvocationSweepOutcome.Expired, now, transitions);
+                continue;
+            }
 
-                    transitions?.Add(new InvocationSweepTransition
-                    {
-                        InvocationId = invocation.InvocationId,
-                        Kind = invocation.Kind,
-                        Outcome = InvocationSweepOutcome.Expired,
-                        ElapsedMs = (int)Math.Max(0, (now - invocation.CreatedAtUtc).TotalMilliseconds)
-                    });
+            if (invocation.Kind == InvocationKind.Request &&
+                invocation.Options.WaitTimeoutMs.HasValue &&
+                now > invocation.CreatedAtUtc.AddMilliseconds(invocation.Options.WaitTimeoutMs.Value))
+            {
+                MarkTerminalUnsafe(invocation, InvocationSweepOutcome.Timeout, now, transitions);
+                continue;
+            }
 
-                    continue;
-                }
+            invocation.LeaseHolderInstanceId = null;
+            invocation.LeaseExpireAtUtc = null;
+            invocation.Delivery.LeaseToken = string.Empty;
+            invocation.Delivery.Attempt += 1;
 
-                invocation.LeaseHolderInstanceId = null;
-                invocation.LeaseExpireAtUtc = null;
-                invocation.Delivery.Attempt += 1;
+            var hasOnlineCandidates = _routingService
+                .GetOnlineCandidates(invocation.AppId, invocation.Target)
+                .Count > 0;
+            invocation.State = hasOnlineCandidates ? InvocationState.Queued : InvocationState.Pending;
 
-                var hasOnlineCandidates = _routingService
-                    .GetOnlineCandidates(invocation.AppId, invocation.Target)
-                    .Count > 0;
-                invocation.State = hasOnlineCandidates ? InvocationState.Queued : InvocationState.Pending;
+            _logger.LogInformation(
+                "Invocation 租约到期已回收并重投递，InvocationId: {InvocationId}, Attempt: {Attempt}, NextState: {State}",
+                invocation.InvocationId,
+                invocation.Delivery.Attempt,
+                invocation.State);
 
-                _logger.LogInformation(
-                    "Invocation 租约到期已回收并重投递，InvocationId: {InvocationId}, Attempt: {Attempt}, NextState: {State}",
-                    invocation.InvocationId,
-                    invocation.Delivery.Attempt,
-                    invocation.State);
+            transitions?.Add(new InvocationSweepTransition
+            {
+                InvocationId = invocation.InvocationId,
+                Kind = invocation.Kind,
+                Outcome = InvocationSweepOutcome.Requeued,
+                ElapsedMs = GetElapsedMs(invocation, now)
+            });
+        }
+    }
 
-                transitions?.Add(new InvocationSweepTransition
-                {
-                    InvocationId = invocation.InvocationId,
-                    Kind = invocation.Kind,
-                    Outcome = InvocationSweepOutcome.Requeued,
-                    ElapsedMs = (int)Math.Max(0, (now - invocation.CreatedAtUtc).TotalMilliseconds)
-                });
+    private void AdvanceTimeoutAndExpirationUnsafe(DateTime now, List<InvocationSweepTransition> transitions)
+    {
+        var timeoutOrExpiredCandidates = _all.Values
+            .Where(i => i.State is InvocationState.Queued or InvocationState.Pending or InvocationState.Delivered)
+            .ToList();
+
+        foreach (var invocation in timeoutOrExpiredCandidates)
+        {
+            var ttlElapsed = now > invocation.CreatedAtUtc.AddMilliseconds(invocation.Options.TtlMs);
+            if (ttlElapsed)
+            {
+                MarkTerminalUnsafe(invocation, InvocationSweepOutcome.Expired, now, transitions);
+                continue;
+            }
+
+            if (invocation.Kind == InvocationKind.Request &&
+                invocation.Options.WaitTimeoutMs.HasValue &&
+                now > invocation.CreatedAtUtc.AddMilliseconds(invocation.Options.WaitTimeoutMs.Value))
+            {
+                MarkTerminalUnsafe(invocation, InvocationSweepOutcome.Timeout, now, transitions);
             }
         }
+    }
+
+    private static void MarkTerminalUnsafe(
+        InvocationModel invocation,
+        InvocationSweepOutcome outcome,
+        DateTime now,
+        List<InvocationSweepTransition>? transitions = null)
+    {
+        invocation.State = outcome == InvocationSweepOutcome.Expired
+            ? InvocationState.Expired
+            : InvocationState.Timeout;
+        invocation.CompletedAtUtc = now;
+        invocation.LeaseHolderInstanceId = null;
+        invocation.LeaseExpireAtUtc = null;
+        invocation.Delivery.LeaseToken = string.Empty;
+
+        transitions?.Add(new InvocationSweepTransition
+        {
+            InvocationId = invocation.InvocationId,
+            Kind = invocation.Kind,
+            Outcome = outcome,
+            ElapsedMs = GetElapsedMs(invocation, now)
+        });
+    }
+
+    private static void CompleteRequestWaiters(InvocationRequestWaiter? requestWaiter, IReadOnlyList<InvocationSweepTransition> transitions)
+    {
+        if (requestWaiter is null || transitions.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var transition in transitions)
+        {
+            if (transition.Kind != InvocationKind.Request)
+            {
+                continue;
+            }
+
+            switch (transition.Outcome)
+            {
+                case InvocationSweepOutcome.Timeout:
+                    requestWaiter.CompleteTimeout(transition.InvocationId, transition.ElapsedMs);
+                    break;
+                case InvocationSweepOutcome.Expired:
+                    requestWaiter.CompleteExpired(transition.InvocationId, transition.ElapsedMs);
+                    break;
+                case InvocationSweepOutcome.Requeued:
+                    break;
+            }
+        }
+    }
+
+    private static int GetElapsedMs(InvocationModel invocation, DateTime now)
+    {
+        return (int)Math.Max(0, (now - invocation.CreatedAtUtc).TotalMilliseconds);
     }
 
     private void CleanupTerminalInvocations(DateTime now)
@@ -416,13 +502,66 @@ public class InvocationStore
     private InvocationModel CreateInvocationCore(InvocationModel invocation, bool hasOnlineCandidates)
     {
         invocation.State = hasOnlineCandidates ? InvocationState.Queued : InvocationState.Pending;
+        invocation.Delivery.LeaseToken = string.Empty;
         _all[invocation.InvocationId] = invocation;
         return invocation;
+    }
+
+    private static string GenerateLeaseToken()
+    {
+        Span<byte> bytes = stackalloc byte[32];
+        RandomNumberGenerator.Fill(bytes);
+        return Convert.ToBase64String(bytes)
+            .TrimEnd('=')
+            .Replace('+', '-')
+            .Replace('/', '_');
     }
 
     private int CountActiveInvocationsUnsafe()
     {
         return _all.Values.Count(static invocation => invocation.State is InvocationState.Queued or InvocationState.Pending or InvocationState.Delivered);
+    }
+
+    private static InvocationModel CloneInvocation(InvocationModel invocation)
+    {
+        return new InvocationModel
+        {
+            InvocationId = invocation.InvocationId,
+            AppId = invocation.AppId,
+            Target = new InvocationTarget
+            {
+                Scope = invocation.Target.Scope,
+                InstanceId = invocation.Target.InstanceId
+            },
+            Method = invocation.Method,
+            Args = invocation.Args,
+            Kind = invocation.Kind,
+            CreatedAtUtc = invocation.CreatedAtUtc,
+            Options = new InvocationOptions
+            {
+                TtlMs = invocation.Options.TtlMs,
+                WaitTimeoutMs = invocation.Options.WaitTimeoutMs,
+                QueueIfOffline = invocation.Options.QueueIfOffline,
+                AutoLaunch = invocation.Options.AutoLaunch
+            },
+            Delivery = new InvocationDelivery
+            {
+                LeaseSeconds = invocation.Delivery.LeaseSeconds,
+                Attempt = invocation.Delivery.Attempt,
+                LeaseToken = invocation.Delivery.LeaseToken
+            },
+            Caller = new InvocationCaller
+            {
+                ClientId = invocation.Caller.ClientId,
+                ClientSessionId = invocation.Caller.ClientSessionId
+            },
+            State = invocation.State,
+            LeaseHolderInstanceId = invocation.LeaseHolderInstanceId,
+            LeaseExpireAtUtc = invocation.LeaseExpireAtUtc,
+            CompletedAtUtc = invocation.CompletedAtUtc,
+            ResponseValue = invocation.ResponseValue,
+            ResponseError = invocation.ResponseError
+        };
     }
 }
 

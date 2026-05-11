@@ -36,7 +36,7 @@ internal sealed class ClientWebSocketConnectionFactory : IWebSocketConnectionFac
     public async Task<IWebSocketConnection> ConnectAsync(Uri uri, CancellationToken cancellationToken)
     {
         var clientWebSocket = new ClientWebSocket();
-        await clientWebSocket.ConnectAsync(uri, cancellationToken);
+        await clientWebSocket.ConnectAsync(uri, cancellationToken).ConfigureAwait(false);
         return new ClientWebSocketConnection(clientWebSocket);
     }
 }
@@ -55,7 +55,7 @@ internal sealed class ClientWebSocketConnection : IWebSocketConnection
     public async Task SendTextAsync(string text, CancellationToken cancellationToken)
     {
         var bytes = Encoding.UTF8.GetBytes(text);
-        await _clientWebSocket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, endOfMessage: true, cancellationToken);
+        await _clientWebSocket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, endOfMessage: true, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<WebSocketReceiveMessage> ReceiveAsync(CancellationToken cancellationToken)
@@ -65,7 +65,7 @@ internal sealed class ClientWebSocketConnection : IWebSocketConnection
 
         while (true)
         {
-            var result = await _clientWebSocket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
+            var result = await _clientWebSocket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken).ConfigureAwait(false);
             if (result.MessageType == WebSocketMessageType.Close)
             {
                 return new WebSocketReceiveMessage
@@ -78,7 +78,7 @@ internal sealed class ClientWebSocketConnection : IWebSocketConnection
 
             if (result.Count > 0)
             {
-                await stream.WriteAsync(buffer, 0, result.Count, cancellationToken);
+                await stream.WriteAsync(buffer, 0, result.Count, cancellationToken).ConfigureAwait(false);
             }
 
             if (result.EndOfMessage)
@@ -96,7 +96,7 @@ internal sealed class ClientWebSocketConnection : IWebSocketConnection
     {
         if (_clientWebSocket.State is WebSocketState.Open or WebSocketState.CloseReceived)
         {
-            await _clientWebSocket.CloseAsync(closeStatus, statusDescription, cancellationToken);
+            await _clientWebSocket.CloseAsync(closeStatus, statusDescription, cancellationToken).ConfigureAwait(false);
         }
     }
 

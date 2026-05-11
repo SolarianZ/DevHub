@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import type { NormalizedDevHubClientOptions } from "./models.js";
 import { parseDateTimeString } from "./validation.js";
+import { validateHttpBaseUrl, validateWebSocketUrl } from "./runtime-validation.js";
 
 export const DATA_DIR_ENV = "DEVHUB_DATA_DIR";
 
@@ -10,6 +11,7 @@ export interface HubRuntimeTuning {
   leaseSeconds: number;
   onlineThresholdSeconds: number;
   launchDedupeWindowSeconds: number;
+  launchRegisterTimeoutSeconds: number;
 }
 
 export interface HubRuntime {
@@ -186,55 +188,18 @@ function parseRuntimeTuning(payload: unknown, source: string): HubRuntimeTuning 
   const leaseSeconds = readInteger(payload, "leaseSeconds", source, "hub.json.runtimeTuning 非法");
   const onlineThresholdSeconds = readInteger(payload, "onlineThresholdSeconds", source, "hub.json.runtimeTuning 非法");
   const launchDedupeWindowSeconds = readInteger(payload, "launchDedupeWindowSeconds", source, "hub.json.runtimeTuning 非法");
+  const launchRegisterTimeoutSeconds = readInteger(payload, "launchRegisterTimeoutSeconds", source, "hub.json.runtimeTuning 非法");
 
-  if (leaseSeconds < 1 || onlineThresholdSeconds < 1 || launchDedupeWindowSeconds < 1) {
+  if (leaseSeconds < 1 || onlineThresholdSeconds < 1 || launchDedupeWindowSeconds < 1 || launchRegisterTimeoutSeconds < 1) {
     throw new Error(`hub.json.runtimeTuning 非法：${source}`);
   }
 
   return {
     leaseSeconds,
     onlineThresholdSeconds,
-    launchDedupeWindowSeconds
+    launchDedupeWindowSeconds,
+    launchRegisterTimeoutSeconds
   };
-}
-
-function validateHttpBaseUrl(value: string, source: string): void {
-  if (!value || value.endsWith("/")) {
-    throw new Error(`hub.json.httpBaseUrl 非法：${source}`);
-  }
-
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    throw new Error(`hub.json.httpBaseUrl 非法：${source}`);
-  }
-
-  if ((url.protocol !== "http:" && url.protocol !== "https:") || !isLoopbackHost(url.hostname)) {
-    throw new Error(`hub.json.httpBaseUrl 非法：${source}`);
-  }
-}
-
-function validateWebSocketUrl(value: string, source: string): void {
-  if (!value || value.endsWith("/")) {
-    throw new Error(`hub.json.wsUrl 非法：${source}`);
-  }
-
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    throw new Error(`hub.json.wsUrl 非法：${source}`);
-  }
-
-  if ((url.protocol !== "ws:" && url.protocol !== "wss:") || !isLoopbackHost(url.hostname)) {
-    throw new Error(`hub.json.wsUrl 非法：${source}`);
-  }
-}
-
-function isLoopbackHost(host: string): boolean {
-  const normalized = host.replace(/^\[(.*)\]$/, "$1").toLowerCase();
-  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1";
 }
 
 async function fileExists(target: string): Promise<boolean> {

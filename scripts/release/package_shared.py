@@ -42,6 +42,20 @@ MONITOR_VERSION_METADATA = MONITOR_DIR / "src" / "generated" / "version-metadata
 DEFAULT_HOST_RIDS = ("win-x64", "linux-x64", "osx-arm64")
 NPM_COMMAND = "npm.cmd" if os.name == "nt" else "npm"
 SAFE_RELEASE_LABEL_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$")
+MONITOR_PUBLISHABLE_BUNDLE_VARIANT_EXTENSIONS: dict[str, tuple[str, ...]] = {
+    "bundle-appimage": (".AppImage",),
+    "bundle-deb": (".deb",),
+    "bundle-dmg": (".dmg",),
+    "bundle-msi": (".msi",),
+    "bundle-nsis": (".exe",),
+    "bundle-rpm": (".rpm",),
+}
+MONITOR_NON_PUBLISHABLE_BUNDLE_VARIANTS = frozenset(
+    {
+        "bundle-macos",
+        "bundle-share",
+    }
+)
 
 
 def current_utc_timestamp() -> str:
@@ -382,6 +396,20 @@ def asset_target(path: Path) -> str:
     if path.suffixes[-2:] == [".tar", ".gz"]:
         return "python-sdist"
     return "n/a"
+
+
+def is_publishable_monitor_asset(*, category: str, name: str) -> bool:
+    if not category.startswith("bundle-"):
+        return False
+
+    allowed_suffixes = MONITOR_PUBLISHABLE_BUNDLE_VARIANT_EXTENSIONS.get(category)
+    if allowed_suffixes is not None:
+        return any(name.endswith(suffix) for suffix in allowed_suffixes)
+
+    if category in MONITOR_NON_PUBLISHABLE_BUNDLE_VARIANTS:
+        return False
+
+    raise RuntimeError(f"未识别的 Monitor bundle 资产分类：category={category!r}, name={name!r}")
 
 
 def format_command(command: Sequence[str]) -> str:

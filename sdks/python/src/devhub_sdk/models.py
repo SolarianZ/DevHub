@@ -96,6 +96,7 @@ class LaunchConfiguration:
     """应用启动配置。"""
 
     exe_path: str | None = None
+    args: list[str] | None = None
     args_template: str | None = None
     working_directory: str | None = None
     dedupe_key_template: str | None = None
@@ -113,9 +114,10 @@ class AppDefinition:
     scope: str = field(kw_only=True)
 
     def __post_init__(self) -> None:
-        """校验 Definition 复合身份中的 scope。"""
+        """校验 Definition 的关键字段。"""
 
         self.app_id = require_app_id(self.app_id, "app_id")
+        self.display_name = require_non_empty_string(self.display_name, "display_name")
         self.scope = require_scoped_string(self.scope, "scope")
 
 
@@ -193,6 +195,7 @@ class HubRuntimeTuning:
     lease_seconds: int
     online_threshold_seconds: int
     launch_dedupe_window_seconds: int
+    launch_register_timeout_seconds: int
 
 
 @dataclass(slots=True, frozen=True)
@@ -293,8 +296,10 @@ class LaunchResult:
 
     ok: bool
     status: str
-    launch_id: str
+    launch_id: str | None = None
     pid: int | None = None
+    dedupe_key: str | None = None
+    instance_id: str | None = None
 
 
 @dataclass(slots=True)
@@ -412,6 +417,7 @@ class InvocationDelivery:
 
     lease_seconds: int
     attempt: int
+    lease_token: str
 
 
 @dataclass(slots=True)
@@ -472,6 +478,7 @@ class RespondRequest:
     instance_id: str
     instance_session_token: str
     invocation_id: str
+    lease_token: str
     value: Any = None
     error: DevHubCalleeError | None = None
     _has_value: bool = field(init=False, repr=False, compare=False)
@@ -481,12 +488,14 @@ class RespondRequest:
         instance_id: str,
         instance_session_token: str,
         invocation_id: str,
+        lease_token: str,
         value: Any = _RESPOND_VALUE_UNSET,
         error: DevHubCalleeError | None = None,
     ) -> None:
         self.instance_id = instance_id
         self.instance_session_token = instance_session_token
         self.invocation_id = invocation_id
+        self.lease_token = lease_token
         self.value = None if value is _RESPOND_VALUE_UNSET else value
         self.error = error
         self._has_value = value is not _RESPOND_VALUE_UNSET

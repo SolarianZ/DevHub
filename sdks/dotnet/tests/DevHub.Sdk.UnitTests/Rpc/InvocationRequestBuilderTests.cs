@@ -247,6 +247,7 @@ public sealed class InvocationRequestBuilderTests
             InstanceId = "inst-1",
             InstanceSessionToken = "session-1",
             InvocationId = "invk-1",
+            LeaseToken = "lease-1",
             Value = null
         });
 
@@ -263,6 +264,7 @@ public sealed class InvocationRequestBuilderTests
             InstanceId = "inst-1",
             InstanceSessionToken = "session-1",
             InvocationId = "invk-1",
+            LeaseToken = "lease-1",
             Value = new Dictionary<string, object?>
             {
                 ["FooBar"] = true,
@@ -289,6 +291,7 @@ public sealed class InvocationRequestBuilderTests
             InstanceId = "inst-1",
             InstanceSessionToken = "session-1",
             InvocationId = "invk-1",
+            LeaseToken = "lease-1",
             Value = new Dictionary<string, object?>
             {
                 ["Payload"] = valueDocument.RootElement.Clone()
@@ -363,7 +366,9 @@ public sealed class InvocationRequestBuilderTests
         Assert.Throws<ArgumentException>(() => RequestPayloadFactory.BuildRespondParams(new RespondRequest
         {
             InstanceId = "inst-1",
+            InstanceSessionToken = "session-1",
             InvocationId = "invk-1",
+            LeaseToken = "lease-1",
             Error = new DevHubCalleeError
             {
                 Code = 1001,
@@ -380,6 +385,7 @@ public sealed class InvocationRequestBuilderTests
             InstanceId = "inst-1",
             InstanceSessionToken = "session-1",
             InvocationId = "invk-1",
+            LeaseToken = "lease-1",
             Error = new DevHubCalleeError
             {
                 Code = 1001,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 
 import pytest
 
@@ -10,11 +11,21 @@ from devhub_sdk import (
     APP_INSTANCE_REGISTERED,
     AppDefinition,
     AppInstanceRegistration,
+    DevHubCalleeError,
+    DevHubEvent,
     DevHubRpcErrorCode,
     DevHubRpcException,
+    INVOCATION_COMPLETED,
+    INVOCATION_DELIVERED,
+    INVOCATION_FAILED,
+    INVOCATION_QUEUED,
     InvokeCapability,
+    InvokeRequest,
+    InvocationTarget,
     ListDefinitionsRequest,
     ListInstancesRequest,
+    PollRequest,
+    RespondRequest,
     SDK_VERSION,
     VersionCompatibilityStatus,
 )
@@ -305,6 +316,124 @@ async def test_ws_should_receive_definition_lifecycle_events() -> None:
 
 
 @pytest.mark.asyncio
+async def test_ws_should_receive_invocation_lifecycle_events() -> None:
+    with DevHubHostFixture.start() as host:
+        host.write_definition({"appId": "events.invocation.app", "displayName": "events.invocation.app"})
+
+        events_client = await host.create_events_client("events-invocation-client")
+        try:
+            await events_client.authenticate()
+            subscription_id = await events_client.subscribe([
+                INVOCATION_QUEUED,
+                INVOCATION_DELIVERED,
+                INVOCATION_COMPLETED,
+            ])
+            reader = events_client.read_events()
+
+            http_client = host.create_client("events-invocation-http-client")
+            instance_session_token = _register_instance(
+                http_client,
+                app_id="events.invocation.app",
+                instance_id="events-invocation-inst-1",
+            )
+            request_future = _call_request(http_client, app_id="events.invocation.app")
+
+            queued = await _read_event_of_type(reader, INVOCATION_QUEUED)
+            invocation = _wait_for_single_invocation(
+                http_client,
+                "events-invocation-inst-1",
+                instance_session_token,
+            )
+            delivered = await _read_event_of_type(reader, INVOCATION_DELIVERED)
+
+            http_client.respond(
+                RespondRequest(
+                    instance_id="events-invocation-inst-1",
+                    instance_session_token=instance_session_token,
+                    invocation_id=invocation.invocation_id,
+                    lease_token=_lease_token(invocation),
+                    value={"ok": True},
+                )
+            )
+            request_result = request_future()
+            completed = await _read_event_of_type(reader, INVOCATION_COMPLETED)
+            await reader.aclose()
+        finally:
+            await events_client.close()
+
+    assert request_result.invocation_id == invocation.invocation_id
+    assert queued.subscription_id == subscription_id
+    assert queued.payload["invocationId"] == invocation.invocation_id
+    assert queued.payload["appId"] == "events.invocation.app"
+    assert queued.payload["target"]["scope"] == ""
+    assert queued.payload["method"] == "test.request"
+    assert queued.payload["kind"] == "request"
+
+    assert delivered.subscription_id == subscription_id
+    assert delivered.payload["invocationId"] == invocation.invocation_id
+    assert delivered.payload["appId"] == "events.invocation.app"
+    assert delivered.payload["target"]["scope"] == ""
+    assert delivered.payload["instanceId"] == "events-invocation-inst-1"
+    assert delivered.payload["delivery"]["attempt"] == invocation.delivery.attempt
+    assert "leaseToken" not in delivered.payload["delivery"]
+
+    assert completed.subscription_id == subscription_id
+    assert completed.payload["invocationId"] == invocation.invocation_id
+    assert completed.payload["appId"] == "events.invocation.app"
+    assert completed.payload["target"]["scope"] == ""
+    assert completed.payload["instanceId"] == "events-invocation-inst-1"
+
+
+@pytest.mark.asyncio
+async def test_ws_should_receive_invocation_failed_event() -> None:
+    with DevHubHostFixture.start() as host:
+        host.write_definition({"appId": "events.invocation.failed.app", "displayName": "events.invocation.failed.app"})
+
+        events_client = await host.create_events_client("events-invocation-failed-client")
+        try:
+            await events_client.authenticate()
+            subscription_id = await events_client.subscribe([INVOCATION_FAILED])
+            reader = events_client.read_events()
+
+            http_client = host.create_client("events-invocation-failed-http-client")
+            instance_session_token = _register_instance(
+                http_client,
+                app_id="events.invocation.failed.app",
+                instance_id="events-invocation-failed-inst-1",
+            )
+            request_future = _call_request(http_client, app_id="events.invocation.failed.app")
+            invocation = _wait_for_single_invocation(
+                http_client,
+                "events-invocation-failed-inst-1",
+                instance_session_token,
+            )
+
+            http_client.respond(
+                RespondRequest(
+                    instance_id="events-invocation-failed-inst-1",
+                    instance_session_token=instance_session_token,
+                    invocation_id=invocation.invocation_id,
+                    lease_token=_lease_token(invocation),
+                    error=DevHubCalleeError.create(1001, "app_error", {"reason": "boom"}),
+                )
+            )
+            failed = await _read_event_of_type(reader, INVOCATION_FAILED)
+            await reader.aclose()
+        finally:
+            await events_client.close()
+
+    request_error = request_future.expect_error()
+    assert request_error.code == DevHubRpcErrorCode.INVOCATION_FAILED
+    assert request_error.invocation_id == invocation.invocation_id
+    assert failed.subscription_id == subscription_id
+    assert failed.payload["invocationId"] == invocation.invocation_id
+    assert failed.payload["appId"] == "events.invocation.failed.app"
+    assert failed.payload["target"]["scope"] == ""
+    assert failed.payload["instanceId"] == "events-invocation-failed-inst-1"
+    assert failed.payload["reason"]
+
+
+@pytest.mark.asyncio
 async def test_two_hosts_with_different_data_dirs_should_isolate_event_streams() -> None:
     with DevHubHostFixture.start() as host_a, DevHubHostFixture.start() as host_b:
         host_a.write_definition({"appId": "parallel.events.app", "displayName": "parallel.events.app.a"})
@@ -367,6 +496,101 @@ async def test_two_hosts_with_different_data_dirs_should_isolate_event_streams()
 
 def _instance_password(instance_id: str) -> str:
     return f"python-sdk-{instance_id}"
+
+
+def _register_instance(client, *, app_id: str, instance_id: str) -> str:
+    registered = client.register_instance(
+        AppInstanceRegistration(
+            instance_id=instance_id,
+            app_id=app_id,
+            pid=99990,
+            invoke=InvokeCapability(poll=True, respond=True),
+            scope="",
+        ),
+        _instance_password(instance_id),
+    )
+    if registered.instance_session_token is None:
+        raise AssertionError(f"实例 {instance_id} 缺少 instance_session_token。")
+    return registered.instance_session_token
+
+
+class _RequestFuture:
+    def __init__(self, client, app_id: str) -> None:
+        self._holder = {}
+        self._thread = threading.Thread(target=self._run, args=(client, app_id), daemon=True)
+        self._thread.start()
+
+    def _run(self, client, app_id: str) -> None:
+        try:
+            self._holder["result"] = client.request(
+                InvokeRequest(
+                    app_id=app_id,
+                    method="test.request",
+                    target=InvocationTarget(scope=""),
+                )
+            )
+        except Exception as exc:  # noqa: BLE001
+            self._holder["error"] = exc
+
+    def __call__(self):
+        self._thread.join(timeout=10)
+        if self._thread.is_alive():
+            raise TimeoutError("request 调用未在 10 秒内结束。")
+        if "error" in self._holder:
+            raise self._holder["error"]
+        return self._holder["result"]
+
+    def expect_error(self) -> DevHubRpcException:
+        self._thread.join(timeout=10)
+        if self._thread.is_alive():
+            raise TimeoutError("request 调用未在 10 秒内结束。")
+        error = self._holder.get("error")
+        if not isinstance(error, DevHubRpcException):
+            raise AssertionError(f"request 应返回 DevHubRpcException，实际为 {error!r}。")
+        return error
+
+
+def _call_request(client, *, app_id: str) -> _RequestFuture:
+    return _RequestFuture(client, app_id)
+
+
+def _wait_for_single_invocation(client, instance_id: str, instance_session_token: str, timeout_ms: int = 3000):
+    import time
+
+    deadline = time.time() + timeout_ms / 1000
+    last_count = 0
+    while time.time() < deadline:
+        remaining_ms = max(0, int((deadline - time.time()) * 1000))
+        poll_result = client.poll(
+            PollRequest(
+                instance_id=instance_id,
+                instance_session_token=instance_session_token,
+                wait_ms=min(remaining_ms, 250),
+            )
+        )
+        last_count = len(poll_result.items)
+        if last_count == 1:
+            return poll_result.items[0]
+        if last_count > 1:
+            raise AssertionError("轮询结果返回了多条调用。")
+    raise TimeoutError(f"在 {timeout_ms}ms 内未等到实例 {instance_id} 的单条调用，最后一轮返回 {last_count} 项。")
+
+
+def _lease_token(invocation) -> str:
+    if invocation.delivery is None:
+        raise AssertionError("poll item 缺少 delivery。")
+    return invocation.delivery.lease_token
+
+
+async def _read_event_of_type(reader, event_type, timeout: float = 3) -> DevHubEvent:
+    deadline = asyncio.get_running_loop().time() + timeout
+    while True:
+        remaining = deadline - asyncio.get_running_loop().time()
+        if remaining <= 0:
+            raise TimeoutError(f"未在 {timeout}s 内读取到 {event_type} 事件。")
+        event = await asyncio.wait_for(anext(reader), timeout=remaining)
+        if event.type == event_type:
+            return event
 
 
 def _expected_version_status(

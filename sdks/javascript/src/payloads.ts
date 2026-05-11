@@ -7,6 +7,7 @@ import type {
   LaunchRequest,
   ListInstancesRequest,
   PollRequest,
+  RegisterInstanceOptions,
   RespondRequest
 } from "./models.js";
 import {
@@ -22,6 +23,7 @@ import {
   ensureOptionalInputIntegerInRange,
   ensureOptionalInputRecord,
   ensureOptionalInputString,
+  ensureRequiredNonBlankInputString,
   ensureRequiredInputString,
   ensureRequiredInputStringValue,
   ensureScopedString
@@ -55,16 +57,31 @@ export function buildDeleteDefinitionParams(identity: AppDefinitionIdentity): Re
 
 export function buildRegisterInstanceParams(
   instance: AppInstanceRegistration,
-  password: string
+  password: string,
+  options?: RegisterInstanceOptions
 ): Record<string, unknown> {
   if (!instance) {
     throw new Error("instance cannot be empty.");
+  }
+
+  if (typeof instance !== "object" || Array.isArray(instance)) {
+    throw new Error("instance must be an object.");
+  }
+
+  if ("password" in instance) {
+    throw new Error("instance.password must not be present.");
+  }
+
+  if ("instanceSessionToken" in instance) {
+    throw new Error("instance.instanceSessionToken must not be present.");
   }
 
   const instanceId = ensureInstanceId(instance.instanceId, "instanceId");
   const appId = ensureAppId(instance.appId, "appId");
   const scope = ensureScopedString(instance.scope, "scope");
   const normalizedPassword = ensureRequiredInputString(password, "password");
+  const normalizedOptions = ensureOptionalInputRecord(options, "options");
+  const normalizedLaunchId = ensureOptionalInputString(normalizedOptions?.launchId, "launchId", false);
 
   if (!instance.invoke) {
     throw new Error("invoke cannot be empty.");
@@ -93,6 +110,10 @@ export function buildRegisterInstanceParams(
 
   if (instance.meta !== undefined) {
     (payload.instance as Record<string, unknown>).meta = ensureJsonObject(instance.meta, "meta");
+  }
+
+  if (normalizedLaunchId !== undefined) {
+    payload.launchId = normalizedLaunchId;
   }
 
   return payload;
@@ -303,6 +324,7 @@ export function buildRespondParams(request: RespondRequest): Record<string, unkn
   const instanceId = ensureInstanceId(request.instanceId, "instanceId");
   const instanceSessionToken = ensureRequiredInputString(request.instanceSessionToken, "instanceSessionToken");
   const invocationId = ensureInvocationId(request.invocationId, "invocationId");
+  const leaseToken = ensureRequiredInputString(request.leaseToken, "leaseToken");
 
   const hasValue = request.value !== undefined;
   const hasError = request.error !== undefined;
@@ -313,7 +335,8 @@ export function buildRespondParams(request: RespondRequest): Record<string, unkn
   const payload: Record<string, unknown> = {
     instanceId,
     instanceSessionToken,
-    invocationId
+    invocationId,
+    leaseToken
   };
 
   if (hasValue) {
@@ -330,7 +353,7 @@ export function buildRespondParams(request: RespondRequest): Record<string, unkn
     };
 
     if (request.error?.data !== undefined) {
-      errorPayload.data = ensureJsonObject(request.error.data, "error.data");
+      errorPayload.data = ensureJsonValue(request.error.data, "error.data");
     }
 
     payload.error = errorPayload;
@@ -347,7 +370,7 @@ function buildDefinitionPayload(definition: AppDefinition): Record<string, unkno
   const payload: Record<string, unknown> = {
     appId: ensureAppId(definition.appId, "definition.appId"),
     scope: ensureScopedString(definition.scope, "definition.scope"),
-    displayName: ensureRequiredInputStringValue(definition.displayName, "definition.displayName")
+    displayName: ensureRequiredNonBlankInputString(definition.displayName, "definition.displayName")
   };
 
   if (definition.description !== undefined) {
@@ -374,9 +397,22 @@ function buildDefinitionPayload(definition: AppDefinition): Record<string, unkno
       throw new Error("definition.launch must be an object.");
     }
 
-    const launchPayload: Record<string, unknown> = {
-      exePath: ensureRequiredInputStringValue(definition.launch.exePath, "definition.launch.exePath")
-    };
+    const launchPayload: Record<string, unknown> = {};
+
+    if (definition.launch.exePath !== undefined) {
+      launchPayload.exePath = ensureRequiredInputStringValue(definition.launch.exePath, "definition.launch.exePath");
+    }
+
+    if (definition.launch.args !== undefined) {
+      if (!Array.isArray(definition.launch.args)) {
+        throw new Error("definition.launch.args must be an array.");
+      }
+
+      launchPayload.args = definition.launch.args.map((item, index) => ensureRequiredInputStringValue(
+        item,
+        `definition.launch.args[${index}]`
+      ));
+    }
 
     if (definition.launch.argsTemplate !== undefined) {
       launchPayload.argsTemplate = ensureRequiredInputStringValue(

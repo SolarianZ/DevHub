@@ -6,9 +6,8 @@
   "setup": {
     "definitions": [
       {
-        "fileName": "events.unsubscribe.existing--global.json",
-        "definition": {
-          "appId": "events.unsubscribe.existing",
+        "appId": "events.unsubscribe.existing",
+        "scopeEntry": {
           "scope": "",
           "displayName": "events.unsubscribe.existing"
         }

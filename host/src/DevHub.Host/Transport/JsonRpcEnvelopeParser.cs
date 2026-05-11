@@ -1,6 +1,6 @@
-using System.Text.Json;
 using DevHub.Core.Models.Rpc;
 using DevHub.Core.Services;
+using System.Text.Json;
 
 namespace DevHub.Host.Transport;
 
@@ -9,6 +9,17 @@ namespace DevHub.Host.Transport;
 /// </summary>
 internal static class JsonRpcEnvelopeParser
 {
+    /// <summary>
+    /// 尝试提取可安全回传到 JSON-RPC 错误响应的请求 ID。
+    /// </summary>
+    internal static bool TryExtractResponseId(JsonElement root, out object? requestId)
+    {
+        requestId = null;
+
+        return root.ValueKind == JsonValueKind.Object
+            && TryExtractRequestId(root, out requestId);
+    }
+
     /// <summary>
     /// 将 JSON 根节点解析为 JSON-RPC 请求模型。
     /// </summary>
@@ -47,12 +58,6 @@ internal static class JsonRpcEnvelopeParser
 
         if (root.TryGetProperty("params", out var paramsElement))
         {
-            if (!IsAcceptedParamsValue(method, paramsElement))
-            {
-                errorResponse = TransportResponseFactory.CreateErrorResponse(-32600, "invalid_request", requestId);
-                return false;
-            }
-
             requestParams = paramsElement.Clone();
         }
 
@@ -80,14 +85,15 @@ internal static class JsonRpcEnvelopeParser
         return request.Params is JsonElement paramsElement && paramsElement.ValueKind == JsonValueKind.Array;
     }
 
-    private static bool IsAcceptedParamsValue(string method, JsonElement paramsElement)
+    internal static bool IsHubPingScalarParams(JsonRpcRequest request)
     {
-        if (string.Equals(method, HubRpcMethods.HubGetVersion, StringComparison.Ordinal))
+        if (!string.Equals(request.Method, HubRpcMethods.HubPing, StringComparison.Ordinal))
         {
-            return paramsElement.ValueKind != JsonValueKind.Undefined;
+            return false;
         }
 
-        return paramsElement.ValueKind is JsonValueKind.Object or JsonValueKind.Array;
+        return request.Params is JsonElement paramsElement
+            && paramsElement.ValueKind is JsonValueKind.String or JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False;
     }
 
     private static bool TryExtractRequestId(JsonElement root, out object? requestId)
@@ -113,12 +119,6 @@ internal static class JsonRpcEnvelopeParser
                 if (idElement.TryGetInt64(out var int64Value))
                 {
                     id = int64Value;
-                    return true;
-                }
-
-                if (idElement.TryGetDouble(out var doubleValue))
-                {
-                    id = doubleValue;
                     return true;
                 }
 

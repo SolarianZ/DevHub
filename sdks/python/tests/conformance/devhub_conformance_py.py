@@ -9,10 +9,11 @@ import asyncio
 import json
 import os
 import sys
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Any
 
-import requests
 import websockets
 
 
@@ -35,8 +36,28 @@ from devhub_sdk import (  # type: ignore  # noqa: E402
     InvokeCapability,
     InvokeRequest,
     LaunchConfiguration,
+    ListDefinitionsRequest,
     discover_runtime,
 )
+
+
+def post_raw_json(
+    url: str,
+    *,
+    body: bytes,
+    headers: dict[str, str],
+    timeout: float = 30,
+) -> dict[str, Any]:
+    request = urllib.request.Request(url, data=body, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            response_body = response.read()
+    except urllib.error.HTTPError as error:
+        response_body = error.read()
+    except urllib.error.URLError as error:
+        raise RuntimeError(f"RPC request failed: {error}") from error
+
+    return json.loads(response_body.decode("utf-8"))
 
 
 def main() -> int:
@@ -61,6 +82,8 @@ def main() -> int:
         kind = request.get("kind") if isinstance(request, dict) else None
         if "expectedDiscovery" in vector:
             result = run_discovery(context)
+        elif kind == "raw.http":
+            result = run_http(context)
         elif kind in {"sdk.notify", "sdk.request"}:
             result = run_invocation(context)
         elif kind == "sdk.events":
@@ -104,9 +127,18 @@ def run_discovery(context: dict[str, Any]) -> dict[str, Any]:
             "token": connection.token,
             "runtime": {
                 "protocolVersion": connection.runtime.protocol_version,
+                "pid": connection.runtime.pid,
                 "httpBaseUrl": connection.runtime.http_base_url,
                 "wsUrl": connection.runtime.ws_url,
                 "tokenFile": connection.runtime.token_file,
+                "startedAtUtc": connection.runtime.started_at_utc.isoformat().replace("+00:00", "Z"),
+                "runtimeTuning": {
+                    "leaseSeconds": connection.runtime.runtime_tuning.lease_seconds,
+                    "onlineThresholdSeconds": connection.runtime.runtime_tuning.online_threshold_seconds,
+                    "launchDedupeWindowSeconds": connection.runtime.runtime_tuning.launch_dedupe_window_seconds,
+                    "launchRegisterTimeoutSeconds": connection.runtime.runtime_tuning.launch_register_timeout_seconds,
+                },
+                "hubVersion": connection.runtime.hub_version,
             },
         }
         return {
@@ -146,8 +178,8 @@ def run_invocation(context: dict[str, Any]) -> dict[str, Any]:
         )
     )
 
-    invoke_request = build_invoke_request(request.get("invokeRequest"))
     try:
+        invoke_request = build_invoke_request(request.get("invokeRequest"))
         if operation == "notify":
             result = client.notify(invoke_request)
             actual = {
@@ -181,6 +213,18 @@ def run_invocation(context: dict[str, Any]) -> dict[str, Any]:
             "actual": normalize_invocation_error(exc),
             "error": None,
         }
+    except ValueError:
+        if not expects_invalid_params(vector):
+            raise
+        return {
+            "sdk": "python",
+            "vectorId": vector["id"],
+            "phase": "sdk-invocation",
+            "operation": operation,
+            "outcome": "error",
+            "actual": normalize_local_invalid_params_error(),
+            "error": None,
+        }
 
 
 def run_rpc(context: dict[str, Any]) -> dict[str, Any]:
@@ -194,17 +238,74 @@ def run_rpc(context: dict[str, Any]) -> dict[str, Any]:
 
     headers = dict(vector.get("http", {}).get("headers", {}))
     body = normalize_raw_request_body(vector["request"])
-    response = requests.post(
+    actual = post_raw_json(
         f"{connection.runtime.http_base_url}/rpc",
-        data=body.encode("utf-8"),
+        body=body.encode("utf-8"),
         headers=headers,
         timeout=30,
     )
-    actual = json.loads(response.text)
     return {
         "sdk": "python",
         "vectorId": vector["id"],
         "phase": "rpc",
+        "outcome": "success",
+        "actual": actual,
+        "error": None,
+    }
+
+
+def run_http(context: dict[str, Any]) -> dict[str, Any]:
+    vector = context["vector"]
+    request = require_mapping(vector["request"], "request")
+    connection = discover_runtime(
+        DevHubClientOptions(
+            client_id=request.get("clientId") or "ConformanceHttpAdapter",
+            data_dir=context["dataDir"],
+        )
+    )
+
+    method = require_string(request.get("method"), "request.method").upper()
+    path = request.get("path", "/rpc")
+    if not isinstance(path, str) or not path.startswith("/"):
+        raise ValueError("request.path 必须为以 / 开头的字符串。")
+
+    headers = {str(key): str(value) for key, value in require_mapping(request.get("headers", {}), "request.headers").items()}
+    body_value = request.get("body", None)
+    body = None if body_value is None else normalize_raw_request_body(body_value).encode("utf-8")
+    http_request = urllib.request.Request(
+        f"{connection.runtime.http_base_url}{path}",
+        data=body,
+        headers=headers,
+        method=method,
+    )
+
+    try:
+        with urllib.request.urlopen(http_request, timeout=30) as response:
+            status_code = response.status
+            response_body = response.read()
+            response_headers = response.headers
+    except urllib.error.HTTPError as error:
+        status_code = error.code
+        response_body = error.read()
+        response_headers = error.headers
+    except urllib.error.URLError as error:
+        raise RuntimeError(f"HTTP request failed: {error}") from error
+
+    body_text = response_body.decode("utf-8", errors="replace")
+    actual: dict[str, Any] = {
+        "statusCode": status_code,
+        "headers": normalize_http_headers(response_headers.items()),
+        "bodyText": body_text,
+    }
+    try:
+        actual["bodyJson"] = json.loads(body_text) if body_text else None
+    except json.JSONDecodeError:
+        pass
+
+    return {
+        "sdk": "python",
+        "vectorId": vector["id"],
+        "phase": "http",
         "outcome": "success",
         "actual": actual,
         "error": None,
@@ -282,7 +383,12 @@ async def run_events(context: dict[str, Any]) -> dict[str, Any]:
                     index,
                     default=_default_instance_password(instance.instance_id),
                 )
-                registered = require_http_client(http_clients, client_name, index).register_instance(instance, password)
+                launch_id = resolve_launch_id(step, captures, index)
+                registered = require_http_client(http_clients, client_name, index).register_instance(
+                    instance,
+                    password,
+                    launch_id=launch_id,
+                )
                 instance_session_token = require_string(
                     registered.instance_session_token,
                     f"request.steps[{index}].registerInstance.instanceSessionToken",
@@ -358,17 +464,14 @@ async def run_events(context: dict[str, Any]) -> dict[str, Any]:
                 continue
 
             if action == "get_definition":
-                result = read_raw_result(
-                    send_raw_rpc(
-                        raw_rpc_connection,
-                        request_id=f"sdk-events-get-definition-{index}",
-                        method="hub.apps.getDefinition",
-                        params=build_definition_identity_params(step, captures, index),
-                    ),
-                    path=f"request.steps[{index}]",
-                )
+                client_name = require_string(step.get("client"), f"request.steps[{index}].client")
                 capture_as = require_string(step.get("captureAs"), f"request.steps[{index}].captureAs")
-                captures[capture_as] = require_mapping(result.get("definition"), f"request.steps[{index}].captureAs")
+                app_id = require_string(resolve_capture_value(step, captures, index, "appId"), f"request.steps[{index}].appId")
+                scope = resolve_capture_value(step, captures, index, "scope")
+                if not isinstance(scope, str):
+                    raise ValueError(f"request.steps[{index}].scope 必须为字符串。")
+                definition = await require_events_client(event_clients, client_name, index).get_definition(app_id, scope)
+                captures[capture_as] = normalize_app_definition(definition)
                 continue
 
             if action == "get_instance":
@@ -384,21 +487,17 @@ async def run_events(context: dict[str, Any]) -> dict[str, Any]:
                 continue
 
             if action == "list_definitions":
-                params: dict[str, Any] = {"scope": resolve_capture_value(step, captures, index, "scope")}
+                client_name = require_string(step.get("client"), f"request.steps[{index}].client")
+                scope = resolve_capture_value(step, captures, index, "scope")
                 app_id = resolve_capture_value(step, captures, index, "appId")
-                if app_id is not None:
-                    params["appId"] = require_string(app_id, f"request.steps[{index}].appId")
-                result = read_raw_result(
-                    send_raw_rpc(
-                        raw_rpc_connection,
-                        request_id=f"sdk-events-list-definitions-{index}",
-                        method="hub.apps.listDefinitions",
-                        params=params,
-                    ),
-                    path=f"request.steps[{index}]",
-                )
                 capture_as = require_string(step.get("captureAs"), f"request.steps[{index}].captureAs")
-                captures[capture_as] = require_list(result.get("definitions"), f"request.steps[{index}].captureAs")
+                definitions = await require_events_client(event_clients, client_name, index).list_definitions(
+                    ListDefinitionsRequest(
+                        scope=scope,
+                        app_id=None if app_id is None else require_string(app_id, f"request.steps[{index}].appId"),
+                    )
+                )
+                captures[capture_as] = [normalize_app_definition(definition) for definition in definitions]
                 continue
 
             if action == "read_event":
@@ -606,6 +705,7 @@ def build_app_definition(payload: dict[str, Any]) -> AppDefinition:
         launch_root = require_mapping(launch_payload, "definition.launch")
         launch = LaunchConfiguration(
             exe_path=launch_root.get("exePath"),
+            args=launch_root.get("args"),
             args_template=launch_root.get("argsTemplate"),
             working_directory=launch_root.get("workingDirectory"),
             dedupe_key_template=launch_root.get("dedupeKeyTemplate"),
@@ -630,20 +730,41 @@ def normalize_invocation_error(exc: DevHubRpcException) -> dict[str, Any]:
         actual["reason"] = exc.reason
     if exc.invocation_id is not None:
         actual["invocationId"] = exc.invocation_id
-    if exc.callee_error is not None:
+    callee_error_payload = exc.data.get("calleeError") if isinstance(exc.data, dict) else None
+    if isinstance(callee_error_payload, dict):
         actual["calleeError"] = {
-            "code": exc.callee_error.code,
-            "message": exc.callee_error.message,
+            "code": callee_error_payload.get("code"),
+            "message": callee_error_payload.get("message"),
         }
-        if exc.callee_error.data is not None:
-            actual["calleeError"]["data"] = exc.callee_error.data
+        if "data" in callee_error_payload:
+            actual["calleeError"]["data"] = callee_error_payload["data"]
     return actual
+
+
+def normalize_local_invalid_params_error() -> dict[str, Any]:
+    return {
+        "code": -32602,
+        "message": "invalid_params",
+        "source": "sdk_local_validation",
+    }
+
+
+def expects_invalid_params(vector: dict[str, Any]) -> bool:
+    expected_response = vector.get("expectedResponse")
+    if not isinstance(expected_response, dict):
+        return False
+    actual = expected_response.get("actual")
+    if not isinstance(actual, dict):
+        return False
+    return actual.get("code") == -32602 and actual.get("message") == "invalid_params"
 
 
 def normalize_discovery_error(explicit_data_dir: str | None, exc: Exception) -> dict[str, Any]:
     reason = "discovery_failed"
     if explicit_data_dir and Path(explicit_data_dir).name.lower() == "runtime":
         reason = "runtime_subdirectory_rejected"
+    elif "hub.json" in str(exc):
+        reason = "invalid_runtime"
 
     return {
         "reason": reason,
@@ -674,7 +795,9 @@ def normalize_app_definition(definition: AppDefinition) -> dict[str, Any]:
     }
     if definition.description is not None:
         actual["description"] = definition.description
-    if definition.capabilities is not None:
+    if definition.capabilities is not None and (
+        definition.capabilities.rpc is not True or definition.capabilities.events is not None
+    ):
         capabilities: dict[str, Any] = {}
         if definition.capabilities.rpc is not None:
             capabilities["rpc"] = definition.capabilities.rpc
@@ -682,7 +805,11 @@ def normalize_app_definition(definition: AppDefinition) -> dict[str, Any]:
             capabilities["events"] = definition.capabilities.events
         actual["capabilities"] = capabilities
     if definition.launch is not None:
-        launch: dict[str, Any] = {"exePath": definition.launch.exe_path}
+        launch: dict[str, Any] = {}
+        if definition.launch.exe_path is not None:
+            launch["exePath"] = definition.launch.exe_path
+        if definition.launch.args is not None:
+            launch["args"] = definition.launch.args
         if definition.launch.args_template is not None:
             launch["argsTemplate"] = definition.launch.args_template
         if definition.launch.working_directory is not None:
@@ -718,9 +845,9 @@ def send_raw_rpc(
     method: str,
     params: dict[str, Any],
 ) -> dict[str, Any]:
-    response = requests.post(
+    return post_raw_json(
         f"{connection.runtime.http_base_url}/rpc",
-        data=json.dumps(
+        body=json.dumps(
             {
                 "jsonrpc": "2.0",
                 "id": request_id,
@@ -739,7 +866,6 @@ def send_raw_rpc(
         },
         timeout=30,
     )
-    return json.loads(response.text)
 
 
 def read_raw_result(response: dict[str, Any], *, path: str) -> dict[str, Any]:
@@ -768,6 +894,18 @@ def normalize_raw_request_body(request: Any) -> str:
     if isinstance(request, str):
         return request
     return json.dumps(request, ensure_ascii=False, separators=(",", ":"))
+
+
+def normalize_http_headers(items: Any) -> dict[str, str]:
+    headers: dict[str, str] = {}
+    for key, value in items:
+        normalized_key = str(key).lower()
+        text = str(value)
+        if normalized_key in headers:
+            headers[normalized_key] = f"{headers[normalized_key]}, {text}"
+        else:
+            headers[normalized_key] = text
+    return headers
 
 
 def parse_ws_payload(payload: Any) -> Any:
@@ -811,6 +949,13 @@ def resolve_password(
     if value is None:
         return default
     return require_string(value, f"request.steps[{index}].password")
+
+
+def resolve_launch_id(step: dict[str, Any], captures: dict[str, Any], index: int) -> str | None:
+    value = resolve_capture_value(step, captures, index, "launchId")
+    if value is None:
+        return None
+    return require_string(value, f"request.steps[{index}].launchId")
 
 
 def resolve_instance_session_token(

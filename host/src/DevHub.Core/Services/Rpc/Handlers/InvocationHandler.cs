@@ -310,6 +310,7 @@ public class InvocationHandler : IRpcHandler
 
         var candidates = _routingService.GetOnlineCandidates(appId, target);
         LogRouteDecision(request.Method, appId, target, candidates.Count);
+
         if (candidates.Count == 0)
         {
             if (!options.QueueIfOffline)
@@ -331,11 +332,23 @@ public class InvocationHandler : IRpcHandler
                         request.Id,
                         -32010,
                         "instance_not_found",
-                        new { reason = ResolveNoCandidateReason(target) }));
+                        new
+                        {
+                            reason = "definition_not_found",
+                            appId,
+                            scope = target.Scope
+                        }));
             }
 
             if (options.AutoLaunch)
             {
+                if (_store.IsPendingLimitReached(_runtimeTuningOptions.PendingInvocationsLimit, out var preLaunchActiveInvocationCount))
+                {
+                    return new InvocationBuildResult(
+                        null,
+                        BuildPendingInvocationsLimitError(request.Id, preLaunchActiveInvocationCount));
+                }
+
                 var launchResult = await _launchCoordinator.LaunchAsync(
                     appId,
                     target.Scope,
@@ -363,7 +376,7 @@ public class InvocationHandler : IRpcHandler
             Target = target,
             Method = method,
             Args = paramsElement.TryGetProperty("args", out var argsElement)
-                ? JsonSerializer.Deserialize<object>(argsElement.GetRawText())
+                ? argsElement.Clone()
                 : null,
             Kind = mode == InvocationMode.Notify ? InvocationKind.Notify : InvocationKind.Request,
             CreatedAtUtc = _clock.UtcNow,
@@ -403,20 +416,25 @@ public class InvocationHandler : IRpcHandler
 
             return new InvocationBuildResult(
                 null,
-                RpcErrorFactory.Create(
-                    request.Id,
-                    -32040,
-                    "rate_limited",
-                    new
-                    {
-                        reason = "pending_invocations_limit_exceeded",
-                        limit = _runtimeTuningOptions.PendingInvocationsLimit,
-                        active = activeInvocationCount
-                    }));
+                BuildPendingInvocationsLimitError(request.Id, activeInvocationCount));
         }
 
         PublishInvocationLifecycleEvent(HubEventTypes.InvocationQueued, invocation, null, error: null);
         return new InvocationBuildResult(invocation, null, waiterTask);
+    }
+
+    private JsonRpcResponse BuildPendingInvocationsLimitError(object? requestId, int activeInvocationCount)
+    {
+        return RpcErrorFactory.Create(
+            requestId,
+            -32040,
+            "rate_limited",
+            new
+            {
+                reason = "pending_invocations_limit_exceeded",
+                limit = _runtimeTuningOptions.PendingInvocationsLimit,
+                active = activeInvocationCount
+            });
     }
 
     private static JsonRpcResponse BuildRequestCompletionResponse(object? requestId, string invocationId, InvocationRequestCompletion completion)
@@ -502,7 +520,7 @@ public class InvocationHandler : IRpcHandler
             return RpcErrorFactory.Create(request.Id, -32002, "forbidden", new { reason = "poll_not_enabled", instanceId });
         }
 
-        var items = await _store.PollAsync(instance, maxCount, waitMs, cancellationToken);
+        var items = await _store.PollAsync(instance, maxCount, waitMs, cancellationToken, _requestWaiter);
         return new JsonRpcResponse
         {
             Id = request.Id,
@@ -548,6 +566,11 @@ public class InvocationHandler : IRpcHandler
             return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
         }
 
+        if (!RpcParamReader.TryGetRequiredString(paramsElement, "leaseToken", out var leaseToken))
+        {
+            return Task.FromResult(RpcErrorFactory.InvalidParams(request.Id));
+        }
+
         var hasValue = paramsElement.TryGetProperty("value", out var valueElement);
         var hasError = paramsElement.TryGetProperty("error", out var errorElement);
         if (hasValue == hasError)
@@ -586,7 +609,7 @@ public class InvocationHandler : IRpcHandler
             return Task.FromResult(RpcErrorFactory.Create(request.Id, -32002, "forbidden", new { reason = "respond_not_enabled", instanceId }));
         }
 
-        var status = _store.Respond(instanceId, invocationId, value, error);
+        var status = _store.Respond(instanceId, invocationId, leaseToken, value, error);
 
         if (_store.TryGet(invocationId, out var invocation) && invocation is not null)
         {
@@ -677,10 +700,72 @@ public class InvocationHandler : IRpcHandler
                 invocationId = invocation.InvocationId,
                 appId = invocation.AppId,
                 instanceId,
+                target = invocation.Target,
                 scope = invocation.Target.Scope,
+                method = invocation.Method,
+                kind = invocation.Kind.ToString().ToLowerInvariant(),
+                delivery = new
+                {
+                    attempt = invocation.Delivery.Attempt
+                },
+                reason = eventType == HubEventTypes.InvocationFailed
+                    ? ResolveInvocationFailureReason(error)
+                    : null,
                 error
             }
         });
+    }
+
+    private static string? ResolveInvocationFailureReason(object? error)
+    {
+        if (error is null)
+        {
+            return null;
+        }
+
+        var errorElement = JsonSerializer.SerializeToElement(error);
+        if (errorElement.ValueKind != JsonValueKind.Object)
+        {
+            return "callee_error";
+        }
+
+        if (TryGetNonEmptyString(errorElement, "reason", out var reason))
+        {
+            return reason;
+        }
+
+        if (errorElement.TryGetProperty("data", out var dataElement)
+            && dataElement.ValueKind == JsonValueKind.Object
+            && TryGetNonEmptyString(dataElement, "reason", out var dataReason))
+        {
+            return dataReason;
+        }
+
+        if (TryGetNonEmptyString(errorElement, "message", out var message))
+        {
+            return message;
+        }
+
+        return "callee_error";
+    }
+
+    private static bool TryGetNonEmptyString(JsonElement element, string propertyName, out string value)
+    {
+        value = string.Empty;
+        if (!element.TryGetProperty(propertyName, out var property)
+            || property.ValueKind != JsonValueKind.String)
+        {
+            return false;
+        }
+
+        var text = property.GetString();
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        value = text;
+        return true;
     }
 
     private static bool TryParseInvocationOptions(

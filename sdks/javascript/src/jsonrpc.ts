@@ -165,6 +165,12 @@ export function readResponseId(root: Record<string, unknown>, location: string):
   }
 
   if (typeof id === "number") {
+    // Protocol numeric ids are signed Int64 values. JavaScript cannot preserve every Int64 exactly,
+    // so the SDK only accepts safe integers and rejects the rest as invalid response ids.
+    if (!Number.isSafeInteger(id)) {
+      throw new Error(`${location}.id must be a string or a supported integer.`);
+    }
+
     return String(id);
   }
 

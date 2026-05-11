@@ -1,5 +1,6 @@
 namespace DevHub.Tests;
 
+using System.Diagnostics;
 using System.Text.Json;
 using DevHub.Core.Models;
 using DevHub.Core.Services;
@@ -11,6 +12,7 @@ using Moq;
 /// <summary>
 /// LaunchCoordinator 行为测试。
 /// </summary>
+[Collection(TestCollections.ProcessEnvironment)]
 [Trait("Category", "Impl")]
 public class LaunchCoordinatorTests : IDisposable
 {
@@ -39,7 +41,7 @@ public class LaunchCoordinatorTests : IDisposable
     [Fact]
     public async Task Impl_LaunchAsync_WhenDefinitionMissing_ShouldReturnAppDefinitionNotFound()
     {
-        var definitionLoader = new DefinitionLoader(_definitionsDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
@@ -65,7 +67,7 @@ public class LaunchCoordinatorTests : IDisposable
     {
         WriteDefinition("launch-missing.app", includeLaunch: false);
 
-        var definitionLoader = new DefinitionLoader(_definitionsDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
@@ -109,6 +111,7 @@ public class LaunchCoordinatorTests : IDisposable
         Assert.NotNull(result.Pid);
         Assert.True(result.Pid > 0);
         Assert.False(string.IsNullOrWhiteSpace(result.LaunchId));
+        Assert.Equal("launch-started.app:global", result.DedupeKey);
         processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Once);
     }
 
@@ -135,6 +138,7 @@ public class LaunchCoordinatorTests : IDisposable
         Assert.NotNull(result.Pid);
         Assert.True(result.Pid > 0);
         Assert.False(string.IsNullOrWhiteSpace(result.LaunchId));
+        Assert.Equal("launch-starting.app:global", result.DedupeKey);
         processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Once);
     }
 
@@ -166,6 +170,9 @@ public class LaunchCoordinatorTests : IDisposable
         Assert.True(result.Ok);
         Assert.Equal("already_running", result.Status);
         Assert.Equal(6510, result.Pid);
+        Assert.Null(result.LaunchId);
+        Assert.Null(result.DedupeKey);
+        Assert.Equal("launch-online-instance-1", result.InstanceId);
         processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Never);
     }
 
@@ -203,6 +210,7 @@ public class LaunchCoordinatorTests : IDisposable
         Assert.True(second.Ok);
         Assert.Equal("already_running", second.Status);
         Assert.Equal(first.LaunchId, second.LaunchId);
+        Assert.Equal(first.DedupeKey, second.DedupeKey);
         processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Once);
     }
 
@@ -254,7 +262,7 @@ public class LaunchCoordinatorTests : IDisposable
             dedupeKeyTemplate: "{appId}:{scopeOrGlobal}");
 
         var clock = new MutableClock(DateTime.UtcNow);
-        var definitionLoader = new DefinitionLoader(_definitionsDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var appRegistry = new AppRegistry(clock, _registryLogger.Object, tuningOptions);
@@ -306,6 +314,55 @@ public class LaunchCoordinatorTests : IDisposable
         Assert.True(third.Ok);
         Assert.Equal("already_running", third.Status);
         Assert.Equal(first.LaunchId, third.LaunchId);
+    }
+
+    [Fact]
+    public async Task Impl_LaunchAsync_WhenLaunchRegisteredWithinDedupeWindow_ShouldReturnAlreadyRunning()
+    {
+        WriteDefinition("launch-registered-dedupe.app", includeLaunch: true);
+
+        var clock = new MutableClock(DateTime.UtcNow);
+        var processLauncher = new Mock<IProcessLauncher>();
+        processLauncher
+            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Returns(System.Diagnostics.Process.GetCurrentProcess());
+        var coordinator = CreateCoordinator(clock, processLauncher.Object);
+
+        var first = await coordinator.LaunchAsync(
+            appId: "launch-registered-dedupe.app",
+            scope: ScopeContract.Global,
+            dedupeKey: "registered-window",
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        Assert.True(first.Ok);
+        Assert.Equal("started", first.Status);
+        Assert.False(string.IsNullOrWhiteSpace(first.LaunchId));
+
+        var instance = new AppInstance
+        {
+            InstanceId = "launch-registered-dedupe-instance",
+            AppId = "launch-registered-dedupe.app",
+            Scope = ScopeContract.Global,
+            Pid = 6502,
+            RegisteredAtUtc = clock.UtcNow,
+            LastSeenUtc = clock.UtcNow,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        };
+        coordinator.RecordSuccessfulRegistration(first.LaunchId, instance);
+
+        var second = await coordinator.LaunchAsync(
+            appId: "launch-registered-dedupe.app",
+            scope: ScopeContract.Global,
+            dedupeKey: "registered-window",
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        Assert.True(second.Ok);
+        Assert.Equal("already_running", second.Status);
+        Assert.Equal(first.LaunchId, second.LaunchId);
+        Assert.Equal(first.DedupeKey, second.DedupeKey);
+        processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Once);
     }
 
     [Fact]
@@ -484,6 +541,130 @@ public class LaunchCoordinatorTests : IDisposable
     }
 
     [Fact]
+    public async Task Impl_LaunchAsync_StructuredArgs_ShouldRenderEachArgumentAndOverrideArgsTemplate()
+    {
+        WriteDefinition(
+            "launch-structured-args.app",
+            includeLaunch: true,
+            exePath: "dotnet",
+            argsTemplate: "--ignored {appId}",
+            args: ["--app", "{appId}", "--scope", "{scopeOrGlobal}", "{unknown}"]);
+
+        LaunchConfiguration? capturedLaunchConfig = null;
+        string? capturedArguments = "sentinel";
+        var processLauncher = new Mock<IProcessLauncher>();
+        processLauncher
+            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Callback<LaunchConfiguration, string?>((launchConfig, args) =>
+            {
+                capturedLaunchConfig = launchConfig;
+                capturedArguments = args;
+            })
+            .Returns(System.Diagnostics.Process.GetCurrentProcess());
+
+        var coordinator = CreateCoordinator(processLauncher: processLauncher.Object);
+
+        var result = await coordinator.LaunchAsync(
+            appId: "launch-structured-args.app",
+            scope: ScopeContract.Global,
+            dedupeKey: null,
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        Assert.True(result.Ok);
+        Assert.Equal("started", result.Status);
+        Assert.Null(capturedArguments);
+        Assert.NotNull(capturedLaunchConfig);
+        Assert.Equal(new[] { "--app", "launch-structured-args.app", "--scope", "global", "{unknown}" }, capturedLaunchConfig!.Args);
+    }
+
+    [Fact]
+    public async Task Impl_LaunchAsync_ArgsTemplate_ShouldSplitQuotedArgumentsForProcessStart()
+    {
+        const string windowsStylePath = @"C:\Program Files\DevHub\config.json";
+        const string unquotedWindowsLiteral = @"C:\Temp\literal.txt";
+
+        WriteDefinition(
+            "launch-args-template-split.app",
+            includeLaunch: true,
+            exePath: "dotnet",
+            argsTemplate: $"--name \"hello world\" '--literal value' plain\\ value \"{windowsStylePath}\" {unquotedWindowsLiteral}");
+
+        LaunchConfiguration? capturedLaunchConfig = null;
+        var processLauncher = new Mock<IProcessLauncher>();
+        processLauncher
+            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Callback<LaunchConfiguration, string?>((launchConfig, _) => capturedLaunchConfig = launchConfig)
+            .Returns(System.Diagnostics.Process.GetCurrentProcess());
+
+        var coordinator = CreateCoordinator(processLauncher: processLauncher.Object);
+
+        var result = await coordinator.LaunchAsync(
+            appId: "launch-args-template-split.app",
+            scope: ScopeContract.Global,
+            dedupeKey: null,
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        Assert.True(result.Ok);
+        Assert.Equal(new[] { "--name", "hello world", "--literal value", "plain value", windowsStylePath, unquotedWindowsLiteral }, capturedLaunchConfig!.Args);
+    }
+
+    [Fact]
+    public async Task Impl_LaunchAsync_ArgsTemplate_WhenMalformed_ShouldReturnInvalidParams()
+    {
+        WriteDefinition(
+            "launch-args-template-malformed.app",
+            includeLaunch: true,
+            exePath: "dotnet",
+            argsTemplate: "foo\\");
+
+        var processLauncher = new Mock<IProcessLauncher>();
+        var coordinator = CreateCoordinator(processLauncher: processLauncher.Object);
+
+        var result = await coordinator.LaunchAsync(
+            appId: "launch-args-template-malformed.app",
+            scope: ScopeContract.Global,
+            dedupeKey: null,
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        Assert.False(result.Ok);
+        Assert.Equal(-32602, result.ErrorCode);
+        Assert.Equal("invalid_params", result.ErrorMessage);
+        var errorData = JsonSerializer.SerializeToElement(result.ErrorData);
+        Assert.Equal("invalid_launch_args_template", errorData.GetProperty("reason").GetString());
+        processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Impl_LaunchAsync_ArgsTemplate_WhenQuoteUnterminated_ShouldReturnInvalidParams()
+    {
+        WriteDefinition(
+            "launch-args-template-unterminated-quote.app",
+            includeLaunch: true,
+            exePath: "dotnet",
+            argsTemplate: "\"unterminated");
+
+        var processLauncher = new Mock<IProcessLauncher>();
+        var coordinator = CreateCoordinator(processLauncher: processLauncher.Object);
+
+        var result = await coordinator.LaunchAsync(
+            appId: "launch-args-template-unterminated-quote.app",
+            scope: ScopeContract.Global,
+            dedupeKey: null,
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        Assert.False(result.Ok);
+        Assert.Equal(-32602, result.ErrorCode);
+        Assert.Equal("invalid_params", result.ErrorMessage);
+        var errorData = JsonSerializer.SerializeToElement(result.ErrorData);
+        Assert.Equal("invalid_launch_args_template", errorData.GetProperty("reason").GetString());
+        processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Never);
+    }
+
+    [Fact]
     public async Task Impl_LaunchAsync_WhenProcessLauncherReturnsNull_ShouldReturnLaunchFailed()
     {
         WriteDefinition("launch-null-process.app", includeLaunch: true);
@@ -580,6 +761,144 @@ public class LaunchCoordinatorTests : IDisposable
     }
 
     [Fact]
+    public async Task Impl_LaunchAsync_WhenBackgroundRegisterDeadlineElapsed_ShouldReleaseDedupeForRetry()
+    {
+        WriteDefinition("launch-register-timeout.app", includeLaunch: true);
+
+        var clock = new MutableClock(DateTime.UtcNow);
+        var tuningOptions = RuntimeTuningOptions.Create(
+            leaseSeconds: 30,
+            onlineThresholdSeconds: 30,
+            launchDedupeWindowSeconds: 30,
+            launchRegisterTimeoutSeconds: 1);
+        var processLauncher = new Mock<IProcessLauncher>();
+        processLauncher
+            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Returns(System.Diagnostics.Process.GetCurrentProcess());
+        var coordinator = CreateCoordinator(clock, processLauncher.Object, runtimeTuningOptions: tuningOptions);
+
+        var launchTask = coordinator.LaunchAsync(
+            appId: "launch-register-timeout.app",
+            scope: ScopeContract.Global,
+            dedupeKey: "register-timeout",
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        var result = await launchTask;
+        Assert.True(result.Ok);
+        Assert.Equal("started", result.Status);
+
+        clock.Advance(TimeSpan.FromSeconds(2));
+
+        var retry = await coordinator.LaunchAsync(
+            appId: "launch-register-timeout.app",
+            scope: ScopeContract.Global,
+            dedupeKey: "register-timeout",
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        Assert.True(retry.Ok);
+        Assert.Equal("started", retry.Status);
+        Assert.NotEqual(result.LaunchId, retry.LaunchId);
+        processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task Impl_LaunchAsync_WhenEffectiveRegisterDeadlineEqualsWaitDeadline_ShouldReturnLaunchRegisterTimeout()
+    {
+        WriteDefinition("launch-wait-budget.app", includeLaunch: true);
+
+        var clock = new MutableClock(DateTime.UtcNow);
+        var tuningOptions = RuntimeTuningOptions.Create(
+            leaseSeconds: 30,
+            onlineThresholdSeconds: 30,
+            launchDedupeWindowSeconds: 30,
+            launchRegisterTimeoutSeconds: 1);
+        var launchStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var processLauncher = new Mock<IProcessLauncher>();
+        processLauncher
+            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Callback(() => launchStarted.TrySetResult())
+            .Returns(System.Diagnostics.Process.GetCurrentProcess());
+        var coordinator = CreateCoordinator(clock, processLauncher.Object, runtimeTuningOptions: tuningOptions);
+
+        var launchTask = coordinator.LaunchAsync(
+            appId: "launch-wait-budget.app",
+            scope: ScopeContract.Global,
+            dedupeKey: "wait-budget",
+            waitForRegisterMs: 5000,
+            CancellationToken.None);
+
+        await launchStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        clock.Advance(TimeSpan.FromSeconds(2));
+        Assert.False(launchTask.IsCompleted);
+
+        clock.Advance(TimeSpan.FromSeconds(3));
+        var result = await launchTask.WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.False(result.Ok);
+        Assert.Equal(-32020, result.ErrorCode);
+        Assert.Equal("launch_failed", result.ErrorMessage);
+        var errorData = JsonSerializer.SerializeToElement(result.ErrorData);
+        Assert.Equal("launch_register_timeout", errorData.GetProperty("reason").GetString());
+        processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Impl_LaunchAsync_WhenProcessExitsBeforeRegister_ShouldReturnLaunchFailedAndReleaseDedupe()
+    {
+        WriteDefinition("launch-exit-before-register.app", includeLaunch: true);
+
+        var processStatusProvider = new Mock<IProcessStatusProvider>();
+        processStatusProvider
+            .Setup(provider => provider.IsProcessRunning(It.IsAny<int>()))
+            .Returns(false);
+        var processLauncher = new Mock<IProcessLauncher>();
+        processLauncher
+            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Returns<LaunchConfiguration, string?>((launchConfiguration, _) =>
+            {
+                Assert.NotNull(launchConfiguration.EnvironmentVariables);
+                var hasLaunchId = launchConfiguration.EnvironmentVariables.TryGetValue(
+                    LaunchCoordinator.LaunchIdEnvironmentVariable,
+                    out var launchId);
+                Assert.True(hasLaunchId, $"Launch configuration did not contain '{LaunchCoordinator.LaunchIdEnvironmentVariable}'.");
+                Assert.False(string.IsNullOrWhiteSpace(launchId));
+
+                return Process.GetCurrentProcess();
+            });
+        var coordinator = CreateCoordinator(
+            processLauncher: processLauncher.Object,
+            processStatusProvider: processStatusProvider.Object);
+
+        var result = await coordinator.LaunchAsync(
+            appId: "launch-exit-before-register.app",
+            scope: ScopeContract.Global,
+            dedupeKey: "exit-before-register",
+            waitForRegisterMs: 1200,
+            CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.False(result.Ok);
+        Assert.Equal(-32020, result.ErrorCode);
+        Assert.Equal("launch_failed", result.ErrorMessage);
+        var errorData = JsonSerializer.SerializeToElement(result.ErrorData);
+        Assert.Equal("process_exited_before_register", errorData.GetProperty("reason").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(errorData.GetProperty("launchId").GetString()));
+
+        var retry = await coordinator.LaunchAsync(
+            appId: "launch-exit-before-register.app",
+            scope: ScopeContract.Global,
+            dedupeKey: "exit-before-register",
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        Assert.True(retry.Ok);
+        Assert.Equal("started", retry.Status);
+        processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Exactly(2));
+        processStatusProvider.Verify(provider => provider.IsProcessRunning(It.IsAny<int>()), Times.AtLeastOnce);
+    }
+
+    [Fact]
     public async Task Impl_LaunchAsync_WhenArgsTemplateMissing_ShouldPassNullArgumentsToProcessLauncher()
     {
         WriteDefinitionWithoutArgsTemplate("launch-null-args-template.app");
@@ -621,10 +940,12 @@ public class LaunchCoordinatorTests : IDisposable
     private LaunchCoordinator CreateCoordinator(
         IClock? clock = null,
         IProcessLauncher? processLauncher = null,
-        AppRegistry? appRegistry = null)
+        AppRegistry? appRegistry = null,
+        RuntimeTuningOptions? runtimeTuningOptions = null,
+        IProcessStatusProvider? processStatusProvider = null)
     {
         var effectiveClock = clock ?? new SystemClock();
-        var definitionLoader = new DefinitionLoader(_definitionsDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var effectiveAppRegistry = appRegistry ?? new AppRegistry(effectiveClock, _registryLogger.Object);
@@ -634,7 +955,9 @@ public class LaunchCoordinatorTests : IDisposable
             effectiveAppRegistry,
             provider,
             processLauncher ?? new ProcessLauncher(),
+            processStatusProvider ?? new ProcessStatusProvider(),
             effectiveClock,
+            runtimeTuningOptions ?? RuntimeTuningOptions.Default,
             _launchLogger.Object);
     }
 
@@ -656,7 +979,8 @@ public class LaunchCoordinatorTests : IDisposable
             {
                 leaseSeconds = 30,
                 onlineThresholdSeconds = 30,
-                launchDedupeWindowSeconds = 30
+                launchDedupeWindowSeconds = 30,
+                launchRegisterTimeoutSeconds = 30
             }
         };
 
@@ -669,6 +993,7 @@ public class LaunchCoordinatorTests : IDisposable
         bool includeLaunch,
         string? dedupeKeyTemplate = null,
         string? argsTemplate = null,
+        string[]? args = null,
         string? exePath = null,
         string? definitionScope = ScopeContract.Global)
     {
@@ -693,6 +1018,11 @@ public class LaunchCoordinatorTests : IDisposable
                 ["argsTemplate"] = argsTemplate ?? "--version"
             };
 
+            if (args is not null)
+            {
+                launch["args"] = args;
+            }
+
             if (!string.IsNullOrWhiteSpace(dedupeKeyTemplate))
             {
                 launch["dedupeKeyTemplate"] = dedupeKeyTemplate;
@@ -701,8 +1031,9 @@ public class LaunchCoordinatorTests : IDisposable
             payload["launch"] = launch;
         }
 
-        var filePath = Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, normalizedScope).GetFileName());
-        File.WriteAllText(filePath, JsonSerializer.Serialize(payload));
+        DefinitionCatalogTestHelper.UpsertDefinition(
+            DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory),
+            JsonSerializer.Serialize(payload));
     }
 
     private void WriteDefinitionWithoutArgsTemplate(string appId)
@@ -723,8 +1054,9 @@ public class LaunchCoordinatorTests : IDisposable
             }
         };
 
-        var filePath = Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, ScopeContract.Global).GetFileName());
-        File.WriteAllText(filePath, JsonSerializer.Serialize(payload));
+        DefinitionCatalogTestHelper.UpsertDefinition(
+            DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory),
+            JsonSerializer.Serialize(payload));
     }
 
     private sealed class MutableClock : IClock
@@ -741,5 +1073,32 @@ public class LaunchCoordinatorTests : IDisposable
             UtcNow = UtcNow.Add(duration);
         }
     }
-}
 
+    private static string ResolvePythonExecutable()
+    {
+        var configured = Environment.GetEnvironmentVariable("DEVHUB_TEST_PYTHON");
+        if (!string.IsNullOrWhiteSpace(configured))
+        {
+            return configured;
+        }
+
+        return "python3";
+    }
+
+    private static string ResolveSharedAssetPath(string fileName)
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory != null)
+        {
+            var candidate = Path.Combine(directory.FullName, "host", "tests", "assets", fileName);
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new InvalidOperationException($"无法定位共享测试资产：{fileName}。");
+    }
+}

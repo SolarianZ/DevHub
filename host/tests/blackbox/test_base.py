@@ -12,10 +12,12 @@ import subprocess
 import sys
 import threading
 import time
-import requests
+import urllib.error
+import urllib.request
 import uuid
 from contextlib import contextmanager
 from datetime import datetime
+from http.client import HTTPMessage
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, TypeVar
 
@@ -145,11 +147,16 @@ class DiscoveryService:
         return hub_info["httpBaseUrl"], token
 
 
-def get_definitions_dir() -> str:
-    """获取应用定义目录（按 Spec 与环境变量约定）。"""
-    definitions_dir = os.path.join(DiscoveryService.get_data_directory(), "apps", "definitions")
-    os.makedirs(definitions_dir, exist_ok=True)
-    return definitions_dir
+def get_apps_dir() -> str:
+    """获取应用目录（按 Spec 与环境变量约定）。"""
+    apps_dir = os.path.join(DiscoveryService.get_data_directory(), "apps")
+    os.makedirs(apps_dir, exist_ok=True)
+    return apps_dir
+
+
+def get_definitions_catalog_path() -> str:
+    """获取 Definition 目录索引文件路径。"""
+    return os.path.join(get_apps_dir(), "definitions.json")
 
 
 def get_data_directory() -> str:
@@ -200,6 +207,99 @@ def paths_refer_to_same_location(left: str, right: str) -> bool:
         return os.path.samefile(left, right)
     except (FileNotFoundError, OSError, ValueError):
         return normalize_path_for_comparison(left) == normalize_path_for_comparison(right)
+
+
+class TestHttpResponse:
+    """封装测试所需的 HTTP 响应字段，避免黑盒测试依赖第三方 HTTP 客户端。"""
+
+    def __init__(self, status_code: int, body: bytes, headers: HTTPMessage):
+        self.status_code = status_code
+        self._body = body
+        self.headers = headers
+
+    @property
+    def text(self) -> str:
+        """按响应头字符集解码响应体。"""
+        charset = self.headers.get_content_charset() or "utf-8"
+        return self._body.decode(charset, errors="replace")
+
+    def json(self) -> Any:
+        """将响应体解析为 JSON。"""
+        return json.loads(self.text)
+
+
+def http_request(
+    method: str,
+    url: str,
+    *,
+    json_body: Any = _UNSET,
+    data: Optional[bytes | str] = None,
+    headers: Optional[Dict[str, str]] = None,
+    timeout: float = 30,
+) -> TestHttpResponse:
+    """发送测试 HTTP 请求并返回轻量响应对象。"""
+    request_headers = dict(headers or {})
+    body: Optional[bytes]
+    if json_body is not _UNSET:
+        body = json.dumps(json_body, ensure_ascii=False).encode("utf-8")
+    elif isinstance(data, str):
+        body = data.encode("utf-8")
+    else:
+        body = data
+
+    request = urllib.request.Request(url, data=body, headers=request_headers, method=method.upper())
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return TestHttpResponse(response.status, response.read(), response.headers)
+    except urllib.error.HTTPError as error:
+        return TestHttpResponse(error.code, error.read(), error.headers)
+    except urllib.error.URLError as error:
+        raise Exception(f"HTTP request failed: {error}") from error
+
+
+def http_post(
+    url: str,
+    *,
+    json_body: Any = _UNSET,
+    data: Optional[bytes | str] = None,
+    headers: Optional[Dict[str, str]] = None,
+    timeout: float = 30,
+) -> TestHttpResponse:
+    """发送 POST 请求。"""
+    return http_request("POST", url, json_body=json_body, data=data, headers=headers, timeout=timeout)
+
+
+def http_options(
+    url: str,
+    *,
+    headers: Optional[Dict[str, str]] = None,
+    timeout: float = 30,
+) -> TestHttpResponse:
+    """发送 OPTIONS 请求。"""
+    return http_request("OPTIONS", url, headers=headers, timeout=timeout)
+
+
+def build_json_rpc_request(method: str, request_id: Any = "1", params: Any = _UNSET) -> Dict[str, Any]:
+    """构造 JSON-RPC 请求负载，保留 params 的原始形态。"""
+    payload: Dict[str, Any] = {
+        "jsonrpc": "2.0",
+        "id": request_id,
+        "method": method,
+    }
+    if params is not _UNSET:
+        payload["params"] = params
+    return payload
+
+
+def build_json_rpc_notification(method: str, params: Any = _UNSET) -> Dict[str, Any]:
+    """构造 JSON-RPC notification 负载，保留 params 的原始形态。"""
+    payload: Dict[str, Any] = {
+        "jsonrpc": "2.0",
+        "method": method,
+    }
+    if params is not _UNSET:
+        payload["params"] = params
+    return payload
 
 
 def _parse_command_string(raw_command: str) -> List[str]:
@@ -694,38 +794,11 @@ def validate_current_user_only_file_access(path: str) -> Tuple[bool, str]:
     return True, f"权限位为 0o{permission:o}"
 
 
-def write_definition(app_id: str, payload: Dict[str, Any]) -> str:
-    """写入测试 AppDefinition 并返回文件路径。"""
-    normalized_scope = normalize_definition_scope(payload.get("scope"))
-    payload = dict(payload)
-    payload["scope"] = normalized_scope
-    definition_path = os.path.join(
-        get_definitions_dir(),
-        build_definition_file_name(app_id, normalized_scope),
-    )
-    with open(definition_path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, indent=2)
-    return definition_path
-
-
 def normalize_definition_scope(scope: Optional[str]) -> str:
     """规范化 Definition scope（Global 统一编码为空字符串）。"""
     if scope in (None, ""):
         return ""
     return scope
-
-
-def encode_definition_scope_segment(scope: str) -> str:
-    """把 Definition scope 编码为无冲突文件名片段。"""
-    if scope == "":
-        return "global"
-
-    return f"scope-{scope}"
-
-
-def build_definition_file_name(app_id: str, scope: Optional[str] = "") -> str:
-    """构造 Definition 复合键文件名。"""
-    return f"{app_id}--{encode_definition_scope_segment(normalize_definition_scope(scope))}.json"
 
 
 def build_definition_identity_params(app_id: str, scope: Optional[str] = "") -> Dict[str, Any]:
@@ -761,31 +834,6 @@ def build_app_definition(
     if launch is not None:
         payload["launch"] = launch
     return payload
-
-
-def write_app_definition(
-    app_id: str,
-    *,
-    scope: Optional[str] = "",
-    display_name: Optional[str] = None,
-    description: Optional[str] = None,
-    rpc: bool = True,
-    events: bool = False,
-    launch: Optional[Dict[str, Any]] = None,
-) -> str:
-    """按统一结构写入 AppDefinition。"""
-    return write_definition(
-        app_id,
-        build_app_definition(
-            app_id=app_id,
-            scope=scope,
-            display_name=display_name,
-            description=description,
-            rpc=rpc,
-            events=events,
-            launch=launch,
-        ),
-    )
 
 
 def safe_remove(path: Optional[str]):
@@ -828,6 +876,50 @@ def unregister_instances(instance_ids: Iterable[Optional[str] | Tuple[str, str]]
             client.unregister_instance(instance_id, instance_session_token=instance_session_token)
     except Exception:
         pass
+
+
+def delete_definitions(definition_ids: Iterable[Tuple[str, Optional[str]]]):
+    """按 appId + scope 列表执行幂等 Definition 删除。"""
+    targets = [(app_id, scope) for app_id, scope in definition_ids if app_id]
+    if not targets:
+        return
+
+    try:
+        base_url, token = DiscoveryService.get_hub_info()
+        client = RpcClient(base_url, token)
+        for app_id, scope in targets:
+            client.delete_definition(app_id, scope=scope)
+    except Exception:
+        pass
+
+
+def upsert_app_definition(
+    app_id: str,
+    *,
+    scope: Optional[str] = "",
+    display_name: Optional[str] = None,
+    description: Optional[str] = None,
+    rpc: bool = True,
+    events: bool = False,
+    launch: Optional[Dict[str, Any]] = None,
+) -> Tuple[str, str]:
+    """经公开 RPC 写入测试 AppDefinition，并返回其复合标识。"""
+    base_url, token = DiscoveryService.get_hub_info()
+    client = RpcClient(base_url, token)
+    definition = build_app_definition(
+        app_id=app_id,
+        scope=scope,
+        display_name=display_name,
+        description=description,
+        rpc=rpc,
+        events=events,
+        launch=launch,
+    )
+    response = client.upsert_definition(definition)
+    error = response.get("error") if isinstance(response, dict) else None
+    if error is not None:
+        raise RuntimeError(f"upsertDefinition failed: {response}")
+    return app_id, normalize_definition_scope(scope)
 
 
 def get_runtime_hub_info() -> Tuple[str, str, str]:
@@ -875,26 +967,24 @@ class RpcClient:
         """发送 JSON body 并返回 (status_code, parsed_json)。"""
         request_headers = headers or self.headers
         url = f"{self.base_url}/rpc"
-        try:
-            response = requests.post(url, json=payload, headers=request_headers, timeout=timeout)
-            return response.status_code, response.json()
-        except requests.exceptions.RequestException as e:
-            raise Exception(f"RPC request failed: {e}")
+        response = http_post(url, json_body=payload, headers=request_headers, timeout=timeout)
+        return response.status_code, response.json()
 
     def post_raw(self, body, headers=None, timeout=30):
         """发送原始 body 并返回 (status_code, parsed_json/text)。"""
         request_headers = headers or self.headers
         url = f"{self.base_url}/rpc"
+        response = http_post(url, data=body, headers=request_headers, timeout=timeout)
         try:
-            response = requests.post(url, data=body, headers=request_headers, timeout=timeout)
-            try:
-                return response.status_code, response.json()
-            except Exception:
-                return response.status_code, response.text
-        except requests.exceptions.RequestException as e:
-            raise Exception(f"RPC request failed: {e}")
+            return response.status_code, response.json()
+        except Exception:
+            return response.status_code, response.text
 
-    def call(self, method, params=None, request_id="1"):
+    def _build_request_payload(self, method, request_id="1", params=_UNSET):
+        """构造 JSON-RPC request payload。"""
+        return build_json_rpc_request(method, request_id=request_id, params=params)
+
+    def call(self, method, params=_UNSET, request_id="1"):
         """
         调用 JSON-RPC 方法
         :param method: 方法名
@@ -902,38 +992,12 @@ class RpcClient:
         :param request_id: 请求 ID
         :return: 响应字典
         """
-        if isinstance(params, dict):
-            params = self._with_default_instance_credentials(method, params)
-
-        payload = {
-            "jsonrpc": "2.0",
-            "id": request_id,
-            "method": method,
-            "params": params or {}
-        }
+        payload = self._build_request_payload(method, request_id=request_id, params=params)
 
         _, response = self.post_json(payload, headers=self.headers, timeout=30)
         if isinstance(params, dict) and isinstance(response, dict):
             self._record_instance_session_state(method, params, response)
         return response
-
-    @staticmethod
-    def _with_default_instance_credentials(method, params):
-        if method == "hub.apps.registerInstance" and "password" not in params and isinstance(params.get("instance"), dict):
-            enriched = dict(params)
-            enriched["password"] = DEFAULT_INSTANCE_PASSWORD
-            return enriched
-
-        if (
-            method in {"hub.apps.heartbeat", "hub.apps.unregisterInstance", "hub.invoke.poll", "hub.invoke.respond"}
-            and "instanceSessionToken" not in params
-            and isinstance(params.get("instanceId"), str)
-        ):
-            enriched = dict(params)
-            enriched["instanceSessionToken"] = resolve_instance_session_token(params.get("instanceId"))
-            return enriched
-
-        return params
 
     @staticmethod
     def _record_instance_session_state(method, params, response):
@@ -951,19 +1015,14 @@ class RpcClient:
             if isinstance(instance_id, str):
                 forget_instance_session_token(instance_id)
 
-    def call_with_invalid_headers(self, method, invalid_headers, params=None, request_id="1"):
+    def call_with_invalid_headers(self, method, invalid_headers, params=_UNSET, request_id="1"):
         """
         使用无效的请求头调用方法（用于测试鉴权）
         """
         headers = self.headers.copy()
         headers.update(invalid_headers)
 
-        payload = {
-            "jsonrpc": "2.0",
-            "id": request_id,
-            "method": method,
-            "params": params or {}
-        }
+        payload = self._build_request_payload(method, request_id=request_id, params=params)
 
         _, response = self.post_json(payload, headers=headers, timeout=30)
         return response
@@ -975,22 +1034,26 @@ class RpcClient:
         status_code, response = self.post_json(requests_list, headers=self.headers, timeout=30)
         return response, status_code
 
-    def call_with_timeout(self, method, params=None, timeout_sec=30, request_id="1"):
+    def call_with_timeout(self, method, params=_UNSET, timeout_sec=30, request_id="1"):
         """带超时的 JSON-RPC 调用。"""
-        if isinstance(params, dict):
-            params = self._with_default_instance_credentials(method, params)
-
-        payload = {
-            "jsonrpc": "2.0",
-            "id": request_id,
-            "method": method,
-            "params": params or {}
-        }
+        payload = self._build_request_payload(method, request_id=request_id, params=params)
 
         _, response = self.post_json(payload, headers=self.headers, timeout=timeout_sec)
         if isinstance(params, dict) and isinstance(response, dict):
             self._record_instance_session_state(method, params, response)
         return response
+
+    def upsert_definition(self, definition, request_id="1"):
+        """调用 hub.apps.upsertDefinition。"""
+        return self.call("hub.apps.upsertDefinition", {"definition": definition}, request_id=request_id)
+
+    def delete_definition(self, app_id, *, scope="", request_id="1"):
+        """调用 hub.apps.deleteDefinition。"""
+        return self.call(
+            "hub.apps.deleteDefinition",
+            build_definition_identity_params(app_id, scope),
+            request_id=request_id,
+        )
 
     def register_instance(
         self,
@@ -1023,16 +1086,18 @@ class RpcClient:
 
     def heartbeat_instance(self, instance_id, instance_session_token=None):
         """发送实例心跳。"""
-        params = {"instanceId": instance_id}
-        if instance_session_token is not None:
-            params["instanceSessionToken"] = instance_session_token
+        params = {
+            "instanceId": instance_id,
+            "instanceSessionToken": instance_session_token or resolve_instance_session_token(instance_id),
+        }
         return self.call("hub.apps.heartbeat", params)
 
     def unregister_instance(self, instance_id, instance_session_token=None):
         """注销实例。"""
-        params = {"instanceId": instance_id}
-        if instance_session_token is not None:
-            params["instanceSessionToken"] = instance_session_token
+        params = {
+            "instanceId": instance_id,
+            "instanceSessionToken": instance_session_token or resolve_instance_session_token(instance_id),
+        }
         return self.call("hub.apps.unregisterInstance", params)
 
     def poll_once(self, instance_id, max_count=10, wait_ms=25000, timeout_sec=None, instance_session_token=None):
@@ -1043,34 +1108,35 @@ class RpcClient:
         params = {
             "instanceId": instance_id,
             "maxCount": max_count,
-            "waitMs": wait_ms
+            "waitMs": wait_ms,
+            "instanceSessionToken": instance_session_token or resolve_instance_session_token(instance_id),
         }
-        if instance_session_token is not None:
-            params["instanceSessionToken"] = instance_session_token
 
         return self.call_with_timeout("hub.invoke.poll", params, timeout_sec=timeout_sec)
 
-    def respond_value(self, instance_id, invocation_id, value, instance_session_token=None):
+    def respond_value(self, instance_id, invocation_id, value, instance_session_token=None, lease_token=None):
         """回传 value。"""
         params = {
             "instanceId": instance_id,
             "invocationId": invocation_id,
-            "value": value
+            "value": value,
+            "instanceSessionToken": instance_session_token or resolve_instance_session_token(instance_id),
         }
-        if instance_session_token is not None:
-            params["instanceSessionToken"] = instance_session_token
+        if lease_token is not None:
+            params["leaseToken"] = lease_token
 
         return self.call("hub.invoke.respond", params)
 
-    def respond_error(self, instance_id, invocation_id, error, instance_session_token=None):
+    def respond_error(self, instance_id, invocation_id, error, instance_session_token=None, lease_token=None):
         """回传 error。"""
         params = {
             "instanceId": instance_id,
             "invocationId": invocation_id,
-            "error": error
+            "error": error,
+            "instanceSessionToken": instance_session_token or resolve_instance_session_token(instance_id),
         }
-        if instance_session_token is not None:
-            params["instanceSessionToken"] = instance_session_token
+        if lease_token is not None:
+            params["leaseToken"] = lease_token
 
         return self.call("hub.invoke.respond", params)
 

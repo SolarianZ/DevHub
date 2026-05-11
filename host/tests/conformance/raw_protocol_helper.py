@@ -56,6 +56,7 @@ class RawProtocolState:
     """记录 helper 过程中的临时状态。"""
 
     last_invocation_id: str | None = None
+    last_lease_token: str | None = None
     last_invocation: dict[str, Any] | None = None
     observations: list[dict[str, Any]] = field(default_factory=list)
     named_values: dict[str, Any] = field(default_factory=dict)
@@ -275,6 +276,19 @@ class RawProtocolHelper:
 
         self._state.last_invocation = matched
         self._state.last_invocation_id = invocation_id
+        delivery = matched.get("delivery")
+        lease_token = delivery.get("leaseToken") if isinstance(delivery, dict) else None
+        if not isinstance(lease_token, str) or not lease_token:
+            raise OrchestrationFailure(
+                phase=phase,
+                step_index=index,
+                action="poll_expect_invocation",
+                message="poll 返回的 invocation 缺少 delivery.leaseToken。",
+                expected={"delivery": {"leaseToken": WILDCARD_ANY_NON_EMPTY_STRING}},
+                actual=matched,
+                diff_fields=["$.delivery.leaseToken"],
+            )
+        self._state.last_lease_token = lease_token
         self._state.observations.append(
             {
                 "phase": phase,
@@ -325,6 +339,11 @@ class RawProtocolHelper:
             "invocationId": invocation_id,
             "instanceSessionToken": self._resolve_instance_session_token(instance_id, phase, index),
         }
+        if not read_bool(step, "omitLeaseToken", f"orchestration.{phase}[{index}]", default=False):
+            lease_token = step.get("leaseToken") or self._state.last_lease_token
+            if not isinstance(lease_token, str) or not lease_token:
+                raise ValueError(f"orchestration.{phase}[{index}] 缺少可用 leaseToken。")
+            params["leaseToken"] = lease_token
         if is_error:
             params["error"] = require_mapping(step.get("error"), f"orchestration.{phase}[{index}].error")
         else:
@@ -401,6 +420,15 @@ def read_non_negative_int(step: dict[str, Any], key: str, path: str, default: in
     value = step[key]
     if not isinstance(value, int) or isinstance(value, bool) or value < 0:
         raise ValueError(f"{path}.{key} 必须为大于等于 0 的整数。")
+    return value
+
+
+def read_bool(step: dict[str, Any], key: str, path: str, *, default: bool) -> bool:
+    """读取 boolean。"""
+
+    value = step.get(key, default)
+    if not isinstance(value, bool):
+        raise ValueError(f"{path}.{key} 必须为 boolean。")
     return value
 
 

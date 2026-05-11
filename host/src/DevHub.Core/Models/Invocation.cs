@@ -169,6 +169,12 @@ public class InvocationDelivery
     /// </summary>
     [JsonPropertyName("attempt")]
     public int Attempt { get; set; }
+
+    /// <summary>
+    /// 当前交付租约令牌。
+    /// </summary>
+    [JsonPropertyName("leaseToken")]
+    public string LeaseToken { get; set; } = string.Empty;
 }
 
 /// <summary>

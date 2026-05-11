@@ -12,7 +12,7 @@ public interface IProcessLauncher
     /// 按启动配置拉起目标进程。
     /// </summary>
     /// <param name="launchConfig">启动配置。</param>
-    /// <param name="arguments">最终参数字符串。</param>
+    /// <param name="arguments">兼容参数字符串；结构化 argv 优先从 <paramref name="launchConfig"/> 读取。</param>
     /// <returns>启动后的进程对象。</returns>
     Process? Start(LaunchConfiguration launchConfig, string? arguments);
 }
@@ -28,9 +28,20 @@ public sealed class ProcessLauncher : IProcessLauncher
         var startInfo = new ProcessStartInfo
         {
             FileName = launchConfig.ExePath!,
-            Arguments = arguments ?? string.Empty,
             UseShellExecute = false
         };
+
+        if (launchConfig.Args is { Count: > 0 })
+        {
+            foreach (var argument in launchConfig.Args)
+            {
+                startInfo.ArgumentList.Add(argument);
+            }
+        }
+        else
+        {
+            startInfo.Arguments = arguments ?? string.Empty;
+        }
 
         if (!string.IsNullOrWhiteSpace(launchConfig.WorkingDirectory))
         {

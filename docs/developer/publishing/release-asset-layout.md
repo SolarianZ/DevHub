@@ -51,6 +51,7 @@ artifacts/release/<release-id>/
 - Monitor 平台资产：`monitor-assets-ubuntu-latest-<release-id>`、`monitor-assets-windows-latest-<release-id>`、`monitor-assets-macos-latest-<release-id>`
 
 `release-reusable.yml` 下载这些 artifact 后，会把 core 资产还原到 `artifacts/release/<release-id>/`，把三平台 Monitor 资产汇总到 `monitor/<targetPlatform>/`，再刷新 release-level manifest 与 release notes。
+GitHub Release 的上传列表由 release-level `release-manifest.json` 的 `assets[]` 驱动，并额外附带根目录下的 `release-manifest.json` 与 `release-notes.md`。
 
 ## 2. `release-id` 规则
 
@@ -87,7 +88,8 @@ artifacts/release/<release-id>/
 - CI 发布通过 Linux、Windows、macOS runner 生成 Monitor bundle，并在最终发布前汇总到 `monitor/<targetPlatform>/`。
 - 本地 `preview` 与 `main-snapshot` 打包会为当前机器生成一个 `monitor/<targetPlatform>/` 目录。
 - 每个 Monitor 平台目录包含该平台的 bundle、Monitor manifest、Monitor release notes 和验证摘要。
-- release-level manifest 中的 Monitor App 资产使用 `category = monitor-app`，`target` 使用 Monitor manifest 中的 `targetPlatform`，`variant` 使用 Monitor bundle 分类。
+- release-level manifest 中的 Monitor App 资产使用 `category = monitor-app`，`target` 使用 Monitor manifest 中的 `targetPlatform`，`variant` 使用最终分发包所属的 bundle 分类。
+- Monitor 平台 manifest 保留完整平台 bundle 文件清单；release-level manifest 只列出最终上传到 GitHub Release 的 Host、SDK 与 Monitor 分发包文件。
 
 ## 6. Manifest 结构
 
@@ -149,10 +151,12 @@ artifacts/release/<release-id>/
 约束：
 
 - `assets[].path` 使用相对 `artifacts/release/<release-id>/` 的相对路径。
+- `assets[]` 表示最终上传到 GitHub Release 的 payload 资产集合。
 - `assets[].sha256` 用于发布后人工核对或自动校验。
 - Host 资产条目必须包含 `assets[].variant`，取值限定为 `multi-file` 或 `single-file`。
 - Monitor App 资产条目必须包含 `target`、`variant`、`monitorVersion` 与 `javascriptSdkVersion`。
 - 包含 Monitor App 资产的发布必须提供 `monitorPackages[]`，用于定位各平台 Monitor manifest、release notes 与验证摘要。
+- 根目录 `release-manifest.json` 与 `release-notes.md` 作为发布辅助文件单独上传，不写入 `assets[]`。
 - `validation.executed=false` 仅允许出现在显式声明“已由外部流程完成门禁”的受控场景，默认本地打包必须自行执行验证。
 
 ## 7. 发布说明文件
@@ -164,5 +168,6 @@ artifacts/release/<release-id>/
 - Monitor Packages 表格；包含目标平台、Monitor 版本、JS SDK 版本、平台 manifest 和验证摘要路径
 - 验证摘要
 - 面向用户的相关入口链接
+- Monitor Packages 表中的路径位于组装后的 release 工作目录与 workflow artifact 中，不作为额外 GitHub Release 资产上传。
 
 GitHub Release 正文直接复用该文件，避免 workflow 中再维护另一套手写说明。

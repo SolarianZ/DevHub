@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Security.Principal;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -20,6 +21,7 @@ public sealed class HostRuntimeArtifactManager : IDisposable
 {
     private const int HubJsonReplaceMaxRetryCount = 40;
     private static readonly TimeSpan HubJsonReplaceRetryDelay = TimeSpan.FromMilliseconds(50);
+    private static readonly Encoding RuntimeFileEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
     private static readonly JsonSerializerOptions HubJsonSerializerOptions = new()
     {
         WriteIndented = true,
@@ -164,8 +166,7 @@ public sealed class HostRuntimeArtifactManager : IDisposable
         var newToken = GenerateNewToken();
         _logger.LogDebug("成功生成新 token，长度: {TokenLength} 字符", newToken.Length);
 
-        File.WriteAllText(_tokenFilePath, newToken);
-        EnsureRequiredCurrentUserOnlyAccess(_tokenFilePath);
+        WriteRestrictedAtomicTextFile(_tokenFilePath, newToken);
         _tokenPermissionEnsured = true;
 
         _logger.LogInformation("成功生成并写入当前 Hub 会话 token，文件路径: {FilePath}", _tokenFilePath);
@@ -186,8 +187,8 @@ public sealed class HostRuntimeArtifactManager : IDisposable
         {
             _logger.LogWarning("检测到 token 文件丢失，正在恢复当前 Hub 会话 token，文件路径: {FilePath}", _tokenFilePath);
             EnsureRuntimeDirectory();
-            File.WriteAllText(_tokenFilePath, _sessionToken);
-            _tokenPermissionEnsured = false;
+            WriteRestrictedAtomicTextFile(_tokenFilePath, _sessionToken);
+            _tokenPermissionEnsured = true;
         }
 
         if (!_tokenPermissionEnsured)
@@ -214,7 +215,7 @@ public sealed class HostRuntimeArtifactManager : IDisposable
     /// <param name="hubVersion">Hub 版本号（可选）</param>
     public void WriteHubJson(int port, string? hubVersion = null)
     {
-        var tempPath = _hubJsonPath + ".tmp";
+        string? tempPath = null;
         var effectiveHubVersion = NormalizeHubVersion(hubVersion) ?? _defaultHubVersion;
         try
         {
@@ -237,11 +238,14 @@ public sealed class HostRuntimeArtifactManager : IDisposable
                 {
                     LeaseSeconds = _runtimeTuningOptions.LeaseSeconds,
                     OnlineThresholdSeconds = _runtimeTuningOptions.OnlineThresholdSeconds,
-                    LaunchDedupeWindowSeconds = _runtimeTuningOptions.LaunchDedupeWindowSeconds
+                    LaunchDedupeWindowSeconds = _runtimeTuningOptions.LaunchDedupeWindowSeconds,
+                    LaunchRegisterTimeoutSeconds = _runtimeTuningOptions.LaunchRegisterTimeoutSeconds
                 }
             };
 
-            File.WriteAllText(tempPath, JsonSerializer.Serialize(hubRuntime, HubJsonSerializerOptions));
+            tempPath = WriteRestrictedTempTextFile(
+                _hubJsonPath,
+                JsonSerializer.Serialize(hubRuntime, HubJsonSerializerOptions));
 
             ReplaceHubJsonAtomically(tempPath);
             EnsureRequiredCurrentUserOnlyAccess(_hubJsonPath);
@@ -251,7 +255,11 @@ public sealed class HostRuntimeArtifactManager : IDisposable
         }
         catch (Exception ex)
         {
-            TryDeleteTempFile(tempPath);
+            if (tempPath is not null)
+            {
+                TryDeleteTempFile(tempPath);
+            }
+
             _logger.LogError(ex, "写入 hub.json 文件失败，文件路径: {Path}", _hubJsonPath);
             throw;
         }
@@ -332,6 +340,83 @@ public sealed class HostRuntimeArtifactManager : IDisposable
         return string.IsNullOrWhiteSpace(hubVersion)
             ? null
             : hubVersion.Trim();
+    }
+
+    /// <summary>
+    /// 以受限临时文件和原子替换方式写入运行时安全文件。
+    /// </summary>
+    /// <param name="targetPath">目标文件路径。</param>
+    /// <param name="content">文件内容。</param>
+    private void WriteRestrictedAtomicTextFile(string targetPath, string content)
+    {
+        var tempPath = WriteRestrictedTempTextFile(targetPath, content);
+        try
+        {
+            File.Move(tempPath, targetPath, overwrite: true);
+            EnsureRequiredCurrentUserOnlyAccess(targetPath);
+        }
+        catch
+        {
+            TryDeleteTempFile(tempPath);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// 创建受限临时文件，在写入内容前完成权限收敛。
+    /// </summary>
+    /// <param name="targetPath">目标文件路径。</param>
+    /// <param name="content">文件内容。</param>
+    /// <returns>已写入内容的临时文件路径。</returns>
+    private string WriteRestrictedTempTextFile(string targetPath, string content)
+    {
+        var tempPath = CreateTempPathForTarget(targetPath);
+
+        try
+        {
+            CreateEmptyRestrictedFile(tempPath);
+            File.WriteAllText(tempPath, content, RuntimeFileEncoding);
+            EnsureRequiredCurrentUserOnlyAccess(tempPath);
+            return tempPath;
+        }
+        catch
+        {
+            TryDeleteTempFile(tempPath);
+            throw;
+        }
+    }
+
+    private string CreateTempPathForTarget(string targetPath)
+    {
+        var directory = Path.GetDirectoryName(targetPath);
+        if (string.IsNullOrWhiteSpace(directory))
+        {
+            directory = _runtimePath;
+        }
+
+        var targetFileName = Path.GetFileName(targetPath);
+        return Path.Combine(directory, $".{targetFileName}.{Guid.NewGuid():N}.tmp");
+    }
+
+    private void CreateEmptyRestrictedFile(string tempPath)
+    {
+        var options = new FileStreamOptions
+        {
+            Mode = FileMode.CreateNew,
+            Access = FileAccess.Write,
+            Share = FileShare.None
+        };
+
+        if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+        {
+            options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+        }
+
+        using (new FileStream(tempPath, options))
+        {
+        }
+
+        EnsureRequiredCurrentUserOnlyAccess(tempPath);
     }
 
     /// <summary>

@@ -120,7 +120,19 @@ public sealed class LaunchResult
     /// 启动请求标识。
     /// </summary>
     [JsonProperty("launchId")]
-    public string LaunchId { get; set; } = string.Empty;
+    public string? LaunchId { get; set; }
+
+    /// <summary>
+    /// 解析后的启动去重键。
+    /// </summary>
+    [JsonProperty("dedupeKey")]
+    public string? DedupeKey { get; set; }
+
+    /// <summary>
+    /// 已在线实例身份。
+    /// </summary>
+    [JsonProperty("instanceId")]
+    public string? InstanceId { get; set; }
 }
 
 /// <summary>
@@ -346,6 +358,11 @@ public sealed class RespondRequest
     public string InvocationId { get; set; } = string.Empty;
 
     /// <summary>
+    /// 当前投递租约令牌。
+    /// </summary>
+    public string LeaseToken { get; set; } = string.Empty;
+
+    /// <summary>
     /// 成功返回值。
     /// </summary>
     public object? Value
@@ -458,7 +475,7 @@ public sealed class InvocationTarget
     }
 
     /// <summary>
-    /// 目标实例标识。
+    /// 目标实例标识。非空值必须满足实例标识规范，长度不超过 256。
     /// </summary>
     [JsonProperty("instanceId", NullValueHandling = NullValueHandling.Ignore)]
     public string? InstanceId
@@ -503,6 +520,12 @@ public sealed class InvocationOptions
 /// </summary>
 public sealed class InvocationDelivery
 {
+    /// <summary>
+    /// 当前投递租约令牌。
+    /// </summary>
+    [JsonProperty("leaseToken")]
+    public string LeaseToken { get; set; } = string.Empty;
+
     /// <summary>
     /// 当前租约时长，单位秒。
     /// </summary>
@@ -639,7 +662,7 @@ public sealed class DevHubCalleeError
     /// <summary>
     /// 错误附加数据。
     /// </summary>
-    [JsonProperty("data", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonProperty("data", NullValueHandling = NullValueHandling.Include)]
     [JsonConverter(typeof(NullableJTokenJsonConverter))]
     public JToken? Data { get; set; }
 

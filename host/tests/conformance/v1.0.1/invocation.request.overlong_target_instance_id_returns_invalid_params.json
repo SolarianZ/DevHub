@@ -1,0 +1,49 @@
+{
+  "id": "invocation.request.overlong_target_instance_id_returns_invalid_params",
+  "caseId": "CONF-004",
+  "description": "SDK request 指定超长 target.instanceId 时，必须在路由前返回 invalid_params。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "appId": "invoke.request.overlong-target-id",
+        "scopeEntry": {
+          "scope": "",
+          "displayName": "invoke.request.overlong-target-id"
+        }
+      }
+    ]
+  },
+  "request": {
+    "kind": "sdk.request",
+    "clientId": "ConformanceRequestOverlongTargetId",
+    "invokeRequest": {
+      "appId": "invoke.request.overlong-target-id",
+      "method": "demo.request.overlong-target-id",
+      "target": {
+        "instanceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "scope": ""
+      },
+      "options": {
+        "queueIfOffline": false
+      }
+    }
+  },
+  "expectedResponse": {
+    "matchMode": "subset",
+    "phase": "sdk-invocation",
+    "operation": "request",
+    "outcome": "error",
+    "actual": {
+      "code": -32602,
+      "message": "invalid_params",
+      "source": "sdk_local_validation"
+    }
+  },
+  "tags": [
+    "invocation",
+    "request",
+    "validation",
+    "sdk"
+  ]
+}

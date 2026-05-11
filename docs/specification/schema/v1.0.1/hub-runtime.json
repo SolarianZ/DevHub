@@ -28,12 +28,12 @@
     "httpBaseUrl": {
       "type": "string",
       "format": "uri",
-      "pattern": "^https?://(?:[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt]|127\\.0\\.0\\.1|\\[::1\\])(?::[0-9]+)?(?:[/?#].*[^/])?$"
+      "pattern": "^https?://(?:[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt]|127\\.0\\.0\\.1|\\[::1\\])(?::[0-9]+)?$"
     },
     "wsUrl": {
       "type": "string",
       "format": "uri",
-      "pattern": "^wss?://(?:[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt]|127\\.0\\.0\\.1|\\[::1\\])(?::[0-9]+)?(?:[/?#].*[^/])?$"
+      "pattern": "^wss?://(?:[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt]|127\\.0\\.0\\.1|\\[::1\\])(?::[0-9]+)?/ws$"
     },
     "tokenFile": {
       "type": "string",
@@ -58,7 +58,8 @@
       "required": [
         "leaseSeconds",
         "onlineThresholdSeconds",
-        "launchDedupeWindowSeconds"
+        "launchDedupeWindowSeconds",
+        "launchRegisterTimeoutSeconds"
       ],
       "properties": {
         "leaseSeconds": {
@@ -70,6 +71,10 @@
           "minimum": 1
         },
         "launchDedupeWindowSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "launchRegisterTimeoutSeconds": {
           "type": "integer",
           "minimum": 1
         }

@@ -4,6 +4,8 @@ namespace DevHub.Sdk.Internal;
 
 internal static class ProtocolIdentifier
 {
+    internal const int MaxInstanceIdLength = 256;
+
     private static readonly Regex CanonicalIdentifierPattern = new(
         "^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$",
         RegexOptions.Compiled);
@@ -15,7 +17,9 @@ internal static class ProtocolIdentifier
 
     internal static bool IsValidInstanceId(string? instanceId)
     {
-        return IsValidCanonicalIdentifier(instanceId);
+        return instanceId is not null &&
+            instanceId.Length <= MaxInstanceIdLength &&
+            IsValidCanonicalIdentifier(instanceId);
     }
 
     internal static bool IsValidScope(string? scope)
@@ -45,7 +49,7 @@ internal static class ProtocolIdentifier
         if (!IsValidInstanceId(instanceId))
         {
             throw new ArgumentException(
-                "instanceId 必须匹配 ^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$，且不能为空字符串。",
+                "instanceId 必须匹配 ^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$，不能为空字符串，且长度不能超过 256。",
                 paramName);
         }
 
@@ -55,6 +59,16 @@ internal static class ProtocolIdentifier
     internal static string? EnsureOptionalInstanceId(string? instanceId, string paramName)
     {
         return instanceId is null ? null : EnsureInstanceId(instanceId, paramName);
+    }
+
+    internal static string EnsureInvocationId(string? invocationId, string paramName)
+    {
+        if (string.IsNullOrWhiteSpace(invocationId))
+        {
+            throw new ArgumentException("invocationId 不能为空白字符串。", paramName);
+        }
+
+        return invocationId!;
     }
 
     private static bool IsValidCanonicalIdentifier(string? value)

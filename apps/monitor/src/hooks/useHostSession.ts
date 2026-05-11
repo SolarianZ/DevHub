@@ -5,9 +5,14 @@ import {
   APP_INSTANCE_UNREGISTERED,
   DevHubClient,
   DevHubEventsClient,
+  INVOCATION_COMPLETED,
+  INVOCATION_DELIVERED,
+  INVOCATION_FAILED,
+  INVOCATION_QUEUED,
   type AppDefinition,
   type AppDefinitionIdentity,
   type AppInstance,
+  type DevHubEvent,
   type VersionCompatibilityResult,
 } from "@devhub/sdk";
 import { startTransition, useEffect, useEffectEvent, useRef, useState } from "react";
@@ -31,6 +36,12 @@ const HTTP_CLIENT_ID = "devhub-monitor-ui";
 const EVENTS_CLIENT_ID = "devhub-monitor-ui-events";
 const INSTANCE_REFRESH_EVENT_TYPES = [APP_INSTANCE_REGISTERED, APP_INSTANCE_UNREGISTERED] as const;
 const DEFINITION_REFRESH_EVENT_TYPES = [APP_DEFINITION_UPSERTED, APP_DEFINITION_DELETED] as const;
+const INVOCATION_REFRESH_EVENT_TYPES = [
+  INVOCATION_QUEUED,
+  INVOCATION_DELIVERED,
+  INVOCATION_COMPLETED,
+  INVOCATION_FAILED,
+] as const;
 
 interface HostSessionOptions {
   bootstrap: BootstrapSnapshot | null;
@@ -272,6 +283,7 @@ export function useHostSession(options: HostSessionOptions) {
         localSubscriptionId = await eventsClient.subscribe([
           ...DEFINITION_REFRESH_EVENT_TYPES,
           ...INSTANCE_REFRESH_EVENT_TYPES,
+          ...INVOCATION_REFRESH_EVENT_TYPES,
         ]);
 
         const [nextDefinitions, nextInstances, nextVersionCompatibility] = await Promise.all([
@@ -349,6 +361,29 @@ export function useHostSession(options: HostSessionOptions) {
           }
 
           if (event.type === APP_INSTANCE_REGISTERED || event.type === APP_INSTANCE_UNREGISTERED) {
+            ensureScopedInstanceEvent(event);
+            await refreshInstances(event.type, hostClient);
+            continue;
+          }
+
+          if (
+            event.type === INVOCATION_QUEUED
+            || event.type === INVOCATION_DELIVERED
+            || event.type === INVOCATION_COMPLETED
+            || event.type === INVOCATION_FAILED
+          ) {
+            recordFrontendLog({
+              level: "info",
+              category: "frontend.invocation",
+              action: "event_refresh",
+              result: event.type,
+              context: {
+                eventType: event.type,
+                invocationId: typeof event.payload?.invocationId === "string"
+                  ? event.payload.invocationId
+                  : undefined,
+              },
+            });
             await refreshInstances(event.type, hostClient);
           }
         }
@@ -400,4 +435,11 @@ export function useHostSession(options: HostSessionOptions) {
     sessionResetVersion,
     versionCompatibility,
   };
+}
+
+function ensureScopedInstanceEvent(event: DevHubEvent): void {
+  const payload = event.payload;
+  if (!payload || typeof payload.scope !== "string") {
+    throw new Error(`Host instance event ${event.type} is missing required scope.`);
+  }
 }

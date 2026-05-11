@@ -608,7 +608,10 @@ function createInstanceInventoryItem(
     appId: instance.appId,
     scopeLabel,
     title,
-    description: normalizeInventoryText(definition?.description, INVENTORY_DESCRIPTION_FALLBACK),
+    description: normalizeInventoryText(
+      definition?.description,
+      "未找到精确 App Definition；该实例仅支持在线路由，不具备离线队列或自动启动能力",
+    ),
     actionAccessibleName: `查看定义：${instance.instanceId}（${instance.appId}，${scopeLabel}）`,
     actionIcon: <ViewIcon />,
     actionTitle: "查看定义",
@@ -1092,6 +1095,16 @@ function DefinitionWorkspacePage(props: {
                       onChange={(event) => onChangeField("launchExePath", event.target.value)}
                     />
                     <FieldIssues issues={workspace.fieldErrors["definition.launch.exePath"]} />
+                  </label>
+
+                  <label className="field field-full">
+                    <span>args</span>
+                    <textarea
+                      value={workspace.form.launchArgs}
+                      disabled={disableInputs}
+                      onChange={(event) => onChangeField("launchArgs", event.target.value)}
+                    />
+                    <FieldIssues issues={workspace.fieldErrors["definition.launch.args"]} />
                   </label>
 
                   <label className="field">

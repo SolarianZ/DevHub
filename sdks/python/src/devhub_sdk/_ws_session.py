@@ -11,7 +11,7 @@ from uuid import uuid4
 import websockets
 
 from ._json import load_json_text
-from ._jsonrpc import validate_response_envelope
+from ._jsonrpc import normalize_jsonrpc_id, validate_response_envelope
 from .models import AbandonedRequestFilter, DevHubClientOptions, RuntimeConnectionInfo
 
 
@@ -259,13 +259,9 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
             await self._stream.queue.put(params)
             return
 
-        request_id = root.get("id")
-        if isinstance(request_id, bool):
-            raise RuntimeError("WebSocket JSON-RPC 响应缺少有效 id。")
-        if isinstance(request_id, int | float):
-            request_id = str(request_id)
-        if not isinstance(request_id, str):
-            raise RuntimeError("WebSocket JSON-RPC 响应缺少有效 id。")
+        if "id" not in root:
+            raise RuntimeError("WebSocket JSON-RPC 响应缺少 id 字段。")
+        request_id = normalize_jsonrpc_id(root["id"], context="WebSocket JSON-RPC 响应的 id")
 
         self._prune_abandoned_request_ids()
         future = self._pending.get(request_id)
@@ -411,10 +407,8 @@ class WebSocketJsonRpcSession(JsonRpcWsSession):
         self._websocket = None
         if websocket is not None:
             try:
-                if reason:
-                    await websocket.close(reason=reason)
-                else:
-                    await websocket.close()
+                close_operation = websocket.close(reason=reason) if reason else websocket.close()
+                await asyncio.wait_for(close_operation, timeout=1.0)
             except Exception:
                 pass
         receiver_task = self._receiver_task

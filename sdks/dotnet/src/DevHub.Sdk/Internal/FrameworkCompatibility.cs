@@ -38,7 +38,7 @@ internal static class CompatibilityIo
 
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
         using var reader = new StreamReader(stream);
-        var content = await reader.ReadToEndAsync();
+        var content = await reader.ReadToEndAsync().ConfigureAwait(false);
 
         cancellationToken.ThrowIfCancellationRequested();
         return content;
@@ -49,7 +49,7 @@ internal static class CompatibilityIo
         CompatibilityGuards.ThrowIfNull(content, nameof(content));
         cancellationToken.ThrowIfCancellationRequested();
 
-        var body = await content.ReadAsStringAsync().WaitAsyncCompat(cancellationToken);
+        var body = await content.ReadAsStringAsync().WaitAsyncCompat(cancellationToken).ConfigureAwait(false);
 
         cancellationToken.ThrowIfCancellationRequested();
         return body;
@@ -107,14 +107,14 @@ internal static class TaskCompatibilityExtensions
 
         if (task.IsCompleted || !cancellationToken.CanBeCanceled)
         {
-            return await task;
+            return await task.ConfigureAwait(false);
         }
 
         var cancellationTask = Task.Delay(Timeout.Infinite, cancellationToken);
-        var completedTask = await Task.WhenAny(task, cancellationTask);
+        var completedTask = await Task.WhenAny(task, cancellationTask).ConfigureAwait(false);
         if (completedTask == task)
         {
-            return await task;
+            return await task.ConfigureAwait(false);
         }
 
         throw new OperationCanceledException(cancellationToken);

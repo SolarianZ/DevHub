@@ -49,7 +49,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     /// <returns>客户端实例。</returns>
     public static async Task<DevHubEventsClient> FromRuntimeAsync(DevHubClientOptions options, CancellationToken cancellationToken = default)
     {
-        return await FromRuntimeAsync(options, dependencies: null, cancellationToken);
+        return await FromRuntimeAsync(options, dependencies: null, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -68,7 +68,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
         clonedOptions.Validate();
 
         dependencies ??= new DevHubEventsClientDependencies();
-        var connectionInfo = await dependencies.RuntimeResolver.ResolveAsync(clonedOptions, cancellationToken);
+        var connectionInfo = await dependencies.RuntimeResolver.ResolveAsync(clonedOptions, cancellationToken).ConfigureAwait(false);
 
         DevHubEventsClient? client = null;
         var session = dependencies.SessionFactory.Create(new DevHubWebSocketSessionOptions
@@ -95,7 +95,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
             {
                 SessionFactory = new TestWebSocketSessionFactory(connectionFactory, requestIdFactory)
             },
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -121,7 +121,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
                     ["clientId"] = _options.ClientId,
                     ["clientSessionId"] = _options.ClientSessionId.ToString("D")
                 },
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
 
             var payload = ResponsePayloadReader.DeserializeRequired<AuthenticateResultContract>(result, "hub.ws.authenticate.result");
 
@@ -138,7 +138,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
         {
             try
             {
-                await _session.DisconnectAsync("authenticate_failed", CancellationToken.None);
+                await _session.DisconnectAsync("authenticate_failed", CancellationToken.None).ConfigureAwait(false);
             }
             catch
             {
@@ -157,7 +157,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     public async Task<PingResult> PingAsync(object? echo = null, CancellationToken cancellationToken = default)
     {
         EnsureAuthenticated();
-        return await ReadOnlyRpcExecutor.PingAsync(_session.SendRequestAsync, echo, cancellationToken);
+        return await ReadOnlyRpcExecutor.PingAsync(_session.SendRequestAsync, echo, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -168,7 +168,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     public async Task<string> GetHostVersionAsync(CancellationToken cancellationToken = default)
     {
         EnsureAuthenticated();
-        return await ReadOnlyRpcExecutor.GetHostVersionAsync(_session.SendRequestAsync, cancellationToken);
+        return await ReadOnlyRpcExecutor.GetHostVersionAsync(_session.SendRequestAsync, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -180,7 +180,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     public async Task<VersionCompatibilityResult> CheckVersionCompatibilityAsync(CancellationToken cancellationToken = default)
     {
         EnsureAuthenticated();
-        return await VersionCompatibilityEvaluator.CheckAsync(_session.SendRequestAsync, Runtime.HubVersion, cancellationToken);
+        return await VersionCompatibilityEvaluator.CheckAsync(_session.SendRequestAsync, Runtime.HubVersion, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -191,7 +191,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     public async Task<IReadOnlyList<AppDefinition>> ListDefinitionsAsync(CancellationToken cancellationToken = default)
     {
         EnsureAuthenticated();
-        return await ListDefinitionsAsync(new ListDefinitionsRequest(), cancellationToken);
+        return await ListDefinitionsAsync(new ListDefinitionsRequest(), cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -205,7 +205,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
         CancellationToken cancellationToken = default)
     {
         EnsureAuthenticated();
-        return await ReadOnlyRpcExecutor.ListDefinitionsAsync(_session.SendRequestAsync, request, cancellationToken);
+        return await ReadOnlyRpcExecutor.ListDefinitionsAsync(_session.SendRequestAsync, request, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -216,7 +216,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     /// <returns>应用定义。</returns>
     public async Task<AppDefinition> GetDefinitionAsync(string appId, CancellationToken cancellationToken = default)
     {
-        return await GetDefinitionAsync(appId, string.Empty, cancellationToken);
+        return await GetDefinitionAsync(appId, string.Empty, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -232,7 +232,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
         CancellationToken cancellationToken = default)
     {
         EnsureAuthenticated();
-        return await ReadOnlyRpcExecutor.GetDefinitionAsync(_session.SendRequestAsync, appId, scope, cancellationToken);
+        return await ReadOnlyRpcExecutor.GetDefinitionAsync(_session.SendRequestAsync, appId, scope, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -249,7 +249,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
         return await ReadOnlyRpcExecutor.ListInstancesAsync(
             _session.SendRequestAsync,
             request ?? new ListInstancesRequest(),
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -261,7 +261,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
     public async Task<AppInstance> GetInstanceAsync(string instanceId, CancellationToken cancellationToken = default)
     {
         EnsureAuthenticated();
-        return await ReadOnlyRpcExecutor.GetInstanceAsync(_session.SendRequestAsync, instanceId, cancellationToken);
+        return await ReadOnlyRpcExecutor.GetInstanceAsync(_session.SendRequestAsync, instanceId, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -316,7 +316,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
             }
         }
 
-        var result = await _session.SendRequestAsync("hub.events.subscribe", parameters, cancellationToken);
+        var result = await _session.SendRequestAsync("hub.events.subscribe", parameters, cancellationToken).ConfigureAwait(false);
         var payload = ResponsePayloadReader.DeserializeRequired<SubscribeResultContract>(result, "hub.events.subscribe.result");
 
         if (!payload.Ok || string.IsNullOrWhiteSpace(payload.SubscriptionId))
@@ -343,7 +343,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
             {
                 ["subscriptionId"] = subscriptionId
             },
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
 
         var payload = ResponsePayloadReader.DeserializeRequired<OkOnlyContract>(result, "hub.events.unsubscribe.result");
 
@@ -376,7 +376,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
         _authenticated = false;
         _eventStreamAvailable = false;
         _eventChannel.Writer.TryComplete();
-        await _session.DisposeAsync();
+        await _session.DisposeAsync().ConfigureAwait(false);
     }
 
     private void HandleEvent(JObject paramsElement)
@@ -405,7 +405,7 @@ public sealed class DevHubEventsClient : IAsyncDisposable
         Channel<DevHubEvent> eventChannel,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        while (await eventChannel.Reader.WaitToReadAsync(cancellationToken))
+        while (await eventChannel.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false))
         {
             while (eventChannel.Reader.TryRead(out var evt))
             {

@@ -7,10 +7,17 @@ import os
 import re
 import uuid
 import unittest
-import requests
 
 
-from tests.blackbox.test_base import DiscoveryService, RpcClient, TestResult, RpcAssertions
+from tests.blackbox.test_base import (
+    DiscoveryService,
+    RpcAssertions,
+    RpcClient,
+    TestResult,
+    build_json_rpc_request,
+    http_options,
+    http_post,
+)
 
 
 class TestAuthProtocol(unittest.TestCase):
@@ -25,12 +32,7 @@ class TestAuthProtocol(unittest.TestCase):
 
     def _build_payload(self, request_id, method="hub.ping", params=None):
         """构造 JSON-RPC 请求体"""
-        return {
-            "jsonrpc": "2.0",
-            "id": request_id,
-            "method": method,
-            "params": params or {}
-        }
+        return build_json_rpc_request(method, request_id=request_id, params=params)
 
     def _build_headers(self, token, content_type="application/json", origin=None):
         """构造标准请求头"""
@@ -47,12 +49,12 @@ class TestAuthProtocol(unittest.TestCase):
 
     def _post_json(self, base_url, headers, payload):
         """发送 JSON 请求并返回 (status_code, json_response)"""
-        response = requests.post(f"{base_url}/rpc", json=payload, headers=headers, timeout=30)
+        response = http_post(f"{base_url}/rpc", json_body=payload, headers=headers, timeout=30)
         return response.status_code, response.json()
 
     def _post_json_response(self, base_url, headers, payload):
         """发送 JSON 请求并返回原始 HTTP 响应。"""
-        return requests.post(f"{base_url}/rpc", json=payload, headers=headers, timeout=30)
+        return http_post(f"{base_url}/rpc", json_body=payload, headers=headers, timeout=30)
 
     def _assert_origin_cors_headers(self, result, response, origin, require_preflight=False):
         """断言带 Origin 的 /rpc 响应包含 CORS 头。"""
@@ -108,11 +110,15 @@ class TestAuthProtocol(unittest.TestCase):
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
-            response = client.call("hub.ping")
-            if not RpcAssertions.expect_success(result, response, ["serverTimeUtc"]):
-                return result
-
-            result.add_detail(f"✅ 服务器时间: {response['result']['serverTimeUtc']}")
+            ping_shapes = [
+                ("省略 params", client.call("hub.ping")),
+                ("params=null", client.call("hub.ping", None, request_id="ping-null-params")),
+                ("params={}", client.call("hub.ping", {}, request_id="ping-empty-object")),
+            ]
+            for shape_name, response in ping_shapes:
+                if not RpcAssertions.expect_success(result, response, ["serverTimeUtc"]):
+                    return result
+                result.add_detail(f"✅ {shape_name} 成功: {response['result']['serverTimeUtc']}")
 
             # hub.ping echo 为可选实现
             test_echo = "test-message-123"
@@ -140,14 +146,20 @@ class TestAuthProtocol(unittest.TestCase):
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
-            response = client.call("hub.getVersion")
-            if not RpcAssertions.expect_success(result, response, ["version"]):
-                return result
+            version_shapes = [
+                ("省略 params", client.call("hub.getVersion")),
+                ("params=null", client.call("hub.getVersion", None, request_id="get-version-null")),
+                ("params={}", client.call("hub.getVersion", {}, request_id="get-version-empty-object")),
+            ]
+            for shape_name, response in version_shapes:
+                if not RpcAssertions.expect_success(result, response, ["version"]):
+                    return result
 
-            version = response["result"].get("version")
-            if not isinstance(version, str) or not re.fullmatch(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:[-+][0-9A-Za-z.-]+)?", version):
-                result.mark_failure(f"❌ hub.getVersion.version 不是合法 SemVer: {version!r}")
-                return result
+                version = response["result"].get("version")
+                if not isinstance(version, str) or not re.fullmatch(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:[-+][0-9A-Za-z.-]+)?", version):
+                    result.mark_failure(f"❌ {shape_name} 的 hub.getVersion.version 不是合法 SemVer: {version!r}")
+                    return result
+                result.add_detail(f"✅ {shape_name} 返回合法版本: {version}")
 
             result.mark_success()
         except Exception as e:
@@ -173,7 +185,7 @@ class TestAuthProtocol(unittest.TestCase):
                 response,
                 expected_code=-32001,
                 expected_message="unauthorized",
-                expected_id=request_id,
+                expected_id=None,
                 expected_data={"reason": "missing_token"}
             ):
                 return result
@@ -204,13 +216,85 @@ class TestAuthProtocol(unittest.TestCase):
                 response,
                 expected_code=-32001,
                 expected_message="unauthorized",
-                expected_id="auth-invalid-token-id",
+                expected_id=None,
                 expected_data={"reason": "invalid_token"}
             ):
                 return result
 
             result.mark_success()
 
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_missing_token_takes_precedence_over_invalid_json_body(self):
+        """测试缺失 token 时必须先返回 unauthorized，而不是 parse_error"""
+        result = TestResult("测试缺失 token 优先于非法 JSON body")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            headers = self._build_headers(token)
+            headers.pop("Authorization", None)
+
+            response = http_post(
+                f"{base_url}/rpc",
+                data=b'{"jsonrpc":"2.0","id":"auth-missing-token-invalid-json","method":"hub.ping","params":',
+                headers=headers,
+                timeout=30,
+            )
+
+            if not RpcAssertions.expect_http_status(result, response.status_code):
+                return result
+
+            body = response.json()
+            if not RpcAssertions.expect_error(
+                result,
+                body,
+                expected_code=-32001,
+                expected_message="unauthorized",
+                expected_id=None,
+                expected_data={"reason": "missing_token"},
+            ):
+                return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_invalid_token_takes_precedence_over_invalid_json_body(self):
+        """测试无效 token 时必须先返回 unauthorized，而不是 parse_error"""
+        result = TestResult("测试无效 token 优先于非法 JSON body")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            headers = self._build_headers(token)
+            headers["Authorization"] = "Bearer invalid_token"
+
+            response = http_post(
+                f"{base_url}/rpc",
+                data=b'{"jsonrpc":"2.0","id":"auth-invalid-token-invalid-json","method":"hub.ping","params":',
+                headers=headers,
+                timeout=30,
+            )
+
+            if not RpcAssertions.expect_http_status(result, response.status_code):
+                return result
+
+            body = response.json()
+            if not RpcAssertions.expect_error(
+                result,
+                body,
+                expected_code=-32001,
+                expected_message="unauthorized",
+                expected_id=None,
+                expected_data={"reason": "invalid_token"},
+            ):
+                return result
+
+            result.mark_success()
         except Exception as e:
             result.mark_failure(str(e))
 
@@ -235,7 +319,7 @@ class TestAuthProtocol(unittest.TestCase):
                 response,
                 expected_code=-32099,
                 expected_message="not_supported",
-                expected_id="auth-invalid-protocol-id",
+                expected_id=None,
                 expected_data={"expected": 1, "received": "2", "reason": "mismatch"}
             ):
                 return result
@@ -265,7 +349,7 @@ class TestAuthProtocol(unittest.TestCase):
                 response,
                 expected_code=-32099,
                 expected_message="not_supported",
-                expected_id=request_id,
+                expected_id=None,
                 expected_data={"expected": 1, "reason": "missing"}
             ):
                 return result
@@ -295,7 +379,7 @@ class TestAuthProtocol(unittest.TestCase):
                 response,
                 expected_code=-32600,
                 expected_message="invalid_request",
-                expected_id=request_id
+                expected_id=None
             ):
                 return result
 
@@ -333,7 +417,7 @@ class TestAuthProtocol(unittest.TestCase):
                 response,
                 expected_code=-32600,
                 expected_message="invalid_request",
-                expected_id=request_id
+                expected_id=None
             ):
                 return result
 
@@ -373,7 +457,7 @@ class TestAuthProtocol(unittest.TestCase):
                 response,
                 expected_code=-32600,
                 expected_message="invalid_request",
-                expected_id="auth-invalid-session-id"
+                expected_id=None
             ):
                 return result
 
@@ -403,7 +487,7 @@ class TestAuthProtocol(unittest.TestCase):
                 response,
                 expected_code=-32001,
                 expected_message="unauthorized",
-                expected_id="auth-invalid-scheme-id"
+                expected_id=None
             ):
                 return result
 
@@ -599,6 +683,40 @@ class TestAuthProtocol(unittest.TestCase):
 
         return result
 
+    def test_http_notification_success_returns_200_with_empty_body(self):
+        """测试合法 HTTP notification 成功时返回 200 且空响应体"""
+        result = TestResult("测试 HTTP notification 成功返回 200 且空响应体")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            headers = self._build_headers(token)
+            payload = {
+                "jsonrpc": "2.0",
+                "method": "hub.ping",
+                "params": {"echo": "notify"},
+            }
+
+            response = http_post(
+                f"{base_url}/rpc",
+                json_body=payload,
+                headers=headers,
+                timeout=30,
+            )
+
+            if not RpcAssertions.expect_http_status(result, response.status_code):
+                return result
+
+            if response.text != "":
+                result.mark_failure(f"❌ HTTP notification 成功响应体必须为空，实际为: {response.text!r}")
+                return result
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
     def test_rpc_options_preflight_returns_cors_headers(self):
         """测试带 Origin 的 OPTIONS /rpc 预检返回 CORS 头。"""
         result = TestResult("测试带 Origin 的 OPTIONS /rpc 预检返回 CORS 头")
@@ -606,7 +724,7 @@ class TestAuthProtocol(unittest.TestCase):
         try:
             base_url, _ = DiscoveryService.get_hub_info()
             origin = "http://localhost:1420"
-            response = requests.options(
+            response = http_options(
                 f"{base_url}/rpc",
                 headers={
                     "Origin": origin,
@@ -687,7 +805,7 @@ class TestAuthProtocol(unittest.TestCase):
                 body,
                 expected_code=-32099,
                 expected_message="not_supported",
-                expected_id="cors-error-id",
+                expected_id=None,
                 expected_data={"expected": 1, "reason": "missing"}
             ):
                 return result
@@ -734,7 +852,7 @@ class TestAuthProtocol(unittest.TestCase):
             ]
 
             for case in cases:
-                response = requests.post(f"{base_url}/rpc", json=case["payload"], headers=case["headers"], timeout=30)
+                response = http_post(f"{base_url}/rpc", json_body=case["payload"], headers=case["headers"], timeout=30)
                 if response.status_code != 200:
                     result.mark_failure(f"❌ {case['name']} 返回非200状态码: {response.status_code}")
                     return result
@@ -751,8 +869,11 @@ class TestAuthProtocol(unittest.TestCase):
         """运行所有鉴权与协议版本测试"""
         tests = [
             self.test_ping_with_valid_credentials,
+            self.test_get_version_with_valid_credentials,
             self.test_ping_without_token,
             self.test_ping_with_invalid_token,
+            self.test_missing_token_takes_precedence_over_invalid_json_body,
+            self.test_invalid_token_takes_precedence_over_invalid_json_body,
             self.test_ping_with_invalid_protocol_version,
             self.test_ping_without_protocol_header,
             self.test_ping_without_client_id,
@@ -764,6 +885,7 @@ class TestAuthProtocol(unittest.TestCase):
             self.test_jsonrpc_id_null_rejected,
             self.test_jsonrpc_id_must_be_string_or_number,
             self.test_content_type_must_be_application_json,
+            self.test_http_notification_success_returns_200_with_empty_body,
             self.test_rpc_options_preflight_returns_cors_headers,
             self.test_post_with_origin_returns_cors_headers_on_success,
             self.test_post_with_origin_returns_cors_headers_on_jsonrpc_error,

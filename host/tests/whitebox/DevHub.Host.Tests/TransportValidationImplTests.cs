@@ -1,6 +1,7 @@
 namespace DevHub.Host.Tests;
 
 using System.Text.Json;
+using DevHub.Core.Services;
 using DevHub.Core.Models.Rpc;
 using DevHub.Host.Transport;
 
@@ -98,7 +99,7 @@ public class TransportValidationImplTests
     }
 
     [Fact]
-    public void Impl_6_1_TryBuildRpcRequest_FloatId_ShouldParseAsDouble()
+    public void Impl_6_1_TryBuildRpcRequest_FloatId_ShouldReturnInvalidRequestWithNullId()
     {
         var root = ParseJsonElement("""
         {
@@ -110,9 +111,27 @@ public class TransportValidationImplTests
 
         var ok = JsonRpcEnvelopeParser.TryParse(root, out var request, out var errorResponse);
 
-        Assert.True(ok);
-        Assert.Null(errorResponse);
-        Assert.Equal(1.5, Assert.IsType<double>(request.Id));
+        Assert.False(ok);
+        Assert.Null(request);
+        AssertError(errorResponse, -32600, "invalid_request", null);
+    }
+
+    [Fact]
+    public void Impl_6_1_TryBuildRpcRequest_OutOfRangeIntegerId_ShouldReturnInvalidRequestWithNullId()
+    {
+        var root = ParseJsonElement("""
+        {
+          "jsonrpc": "2.0",
+          "id": 9223372036854775808,
+          "method": "hub.ping"
+        }
+        """);
+
+        var ok = JsonRpcEnvelopeParser.TryParse(root, out var request, out var errorResponse);
+
+        Assert.False(ok);
+        Assert.Null(request);
+        AssertError(errorResponse, -32600, "invalid_request", null);
     }
 
     [Fact]
@@ -160,6 +179,29 @@ public class TransportValidationImplTests
     }
 
     [Fact]
+    public void Impl_6_1_HubPingScalarParams_ShouldDetectHubPingOnly()
+    {
+        var scalarParams = ParseJsonElement("\"bad\"");
+
+        var hubPingRequest = new JsonRpcRequest
+        {
+            Id = "req-hub-ping-scalar",
+            Method = "hub.ping",
+            Params = scalarParams
+        };
+
+        var hubGetVersionRequest = new JsonRpcRequest
+        {
+            Id = "req-hub-get-version-scalar",
+            Method = "hub.getVersion",
+            Params = scalarParams
+        };
+
+        Assert.True(JsonRpcEnvelopeParser.IsHubPingScalarParams(hubPingRequest));
+        Assert.False(JsonRpcEnvelopeParser.IsHubPingScalarParams(hubGetVersionRequest));
+    }
+
+    [Fact]
     public void Impl_6_2_IsHttpOnlyMethod_ShouldMatchTransportBoundary()
     {
         Assert.True(TransportMethodPolicy.IsHttpOnlyMethod("hub.apps.validateDefinition"));
@@ -181,6 +223,23 @@ public class TransportValidationImplTests
         Assert.False(TransportMethodPolicy.IsWebSocketOnlyMethod("hub.getVersion"));
         Assert.False(TransportMethodPolicy.IsWebSocketOnlyMethod("hub.ping"));
         Assert.False(TransportMethodPolicy.IsWebSocketOnlyMethod("hub.invoke.request"));
+    }
+
+    [Fact]
+    public void Impl_6_2_HubRpcMethodRegistry_ShouldExposeTransportAndNotificationSets()
+    {
+        Assert.Contains(HubRpcMethods.HubEvent, HubRpcMethodRegistry.AllMethods);
+        Assert.DoesNotContain(HubRpcMethods.HubEvent, HubRpcMethodRegistry.ClientMethods);
+
+        Assert.Contains(HubRpcMethods.HubAppsUnregisterInstance, HubRpcMethodRegistry.NotificationMethods);
+        Assert.Contains(HubRpcMethods.HubEventsUnsubscribe, HubRpcMethodRegistry.WebSocketOnlyMethods);
+        Assert.Contains(HubRpcMethods.HubInvokeRequest, HubRpcMethodRegistry.HttpOnlyMethods);
+
+        Assert.True(HubRpcMethodRegistry.TryGetDescriptor(HubRpcMethods.HubInvokeRequest, out var descriptor));
+        Assert.Equal(HubRpcMethodCategory.Invocation, descriptor.Category);
+        Assert.Equal(HubRpcMethodTransport.Http, descriptor.Transports);
+        Assert.False(descriptor.SupportsNotification);
+        Assert.True(descriptor.ClientCallable);
     }
 
     [Fact]

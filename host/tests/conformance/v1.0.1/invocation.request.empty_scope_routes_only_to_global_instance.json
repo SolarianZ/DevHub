@@ -6,17 +6,15 @@
   "setup": {
     "definitions": [
       {
-        "fileName": "invoke.request.empty-scope--global.json",
-        "definition": {
-          "appId": "invoke.request.empty-scope",
+        "appId": "invoke.request.empty-scope",
+        "scopeEntry": {
           "scope": "",
           "displayName": "invoke.request.empty-scope"
         }
       },
       {
-        "fileName": "invoke.request.empty-scope--scope-scope-a.json",
-        "definition": {
-          "appId": "invoke.request.empty-scope",
+        "appId": "invoke.request.empty-scope",
+        "scopeEntry": {
           "scope": "scope-a",
           "displayName": "invoke.request.empty-scope scope-a"
         }

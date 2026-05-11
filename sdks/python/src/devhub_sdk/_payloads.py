@@ -88,11 +88,19 @@ def build_delete_definition_params(app_id: str, scope: str) -> dict[str, Any]:
     }
 
 
-def build_register_instance_params(instance: AppInstanceRegistration, password: str) -> dict[str, Any]:
+def build_register_instance_params(
+    instance: AppInstanceRegistration,
+    password: str,
+    launch_id: str | None = None,
+) -> dict[str, Any]:
     """构造 `hub.apps.registerInstance` 参数。"""
 
     if instance is None:
         raise ValueError("instance 不能为空。")
+    if getattr(instance, "password", _MISSING) is not _MISSING:
+        raise ValueError("instance.password 不得出现。")
+    if getattr(instance, "instance_session_token", _MISSING) is not _MISSING:
+        raise ValueError("instance.instance_session_token 不得出现。")
 
     normalized_password = require_non_empty_string(password, "password")
     instance_id = require_instance_id(instance.instance_id, "instance.instance_id")
@@ -118,10 +126,18 @@ def build_register_instance_params(instance: AppInstanceRegistration, password: 
     if instance.meta is not None:
         meta = _ensure_json_object(instance.meta, "meta")
         payload["meta"] = meta
-    return {
+    params = {
         "password": normalized_password,
         "instance": payload,
     }
+    normalized_launch_id = require_optional_string(
+        launch_id,
+        "launch_id",
+        allow_empty=False,
+    )
+    if normalized_launch_id is not None:
+        params["launchId"] = normalized_launch_id
+    return params
 
 
 def build_heartbeat_params(instance_id: str, instance_session_token: str) -> dict[str, Any]:
@@ -303,6 +319,7 @@ def build_respond_params(request: RespondRequest) -> dict[str, Any]:
             "request.instance_session_token",
         ),
         "invocationId": invocation_id,
+        "leaseToken": require_non_empty_string(request.lease_token, "request.lease_token"),
     }
     if has_error:
         payload["error"] = _callee_error_to_dict(request.error)
@@ -317,9 +334,9 @@ def _build_definition_payload(definition: AppDefinition) -> dict[str, Any]:
 
     app_id = require_app_id(definition.app_id, "definition.app_id")
     scope = require_scoped_string(definition.scope, "definition.scope")
-    display_name = require_optional_string(definition.display_name, "definition.display_name")
+    display_name = require_optional_string(definition.display_name, "definition.display_name", allow_empty=False)
     if display_name is None:
-        raise ValueError("definition.display_name 类型非法。")
+        raise ValueError("definition.display_name 不能为空白字符串。")
 
     payload: dict[str, Any] = {
         "appId": app_id,
@@ -354,16 +371,18 @@ def _build_capabilities_payload(capabilities: AppCapabilities) -> dict[str, Any]
 
 def _build_launch_payload(launch: LaunchConfiguration) -> dict[str, Any]:
     exe_path = require_optional_string(launch.exe_path, "definition.launch.exe_path")
-    if exe_path is None:
-        raise ValueError("definition.launch.exe_path 类型非法。")
-
-    payload: dict[str, Any] = {"exePath": exe_path}
+    payload: dict[str, Any] = {}
+    if exe_path is not None:
+        payload["exePath"] = exe_path
+    args = _normalize_optional_string_list(launch.args, "definition.launch.args")
     args_template = require_optional_string(launch.args_template, "definition.launch.args_template")
     working_directory = require_optional_string(launch.working_directory, "definition.launch.working_directory")
     dedupe_key_template = require_optional_string(
         launch.dedupe_key_template,
         "definition.launch.dedupe_key_template",
     )
+    if args is not None:
+        payload["args"] = args
     if args_template is not None:
         payload["argsTemplate"] = args_template
     if working_directory is not None:
@@ -450,6 +469,19 @@ def _ensure_json_object(value: Any, name: str) -> dict[str, Any]:
     return ensure_json_object(value, name)
 
 
+def _normalize_optional_string_list(value: Any, name: str) -> list[str] | None:
+    if value is None:
+        return None
+    if not isinstance(value, list):
+        raise ValueError(f"{name} 类型非法。")
+    normalized: list[str] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, str):
+            raise ValueError(f"{name}[{index}] 类型非法。")
+        normalized.append(item)
+    return normalized
+
+
 def _callee_error_to_dict(error: DevHubCalleeError | None) -> dict[str, Any]:
     if error is None:
         raise ValueError("error 不能为空。")
@@ -462,5 +494,5 @@ def _callee_error_to_dict(error: DevHubCalleeError | None) -> dict[str, Any]:
         "message": message,
     }
     if error.data is not None:
-        payload["data"] = ensure_json_object(error.data, "error.data")
+        payload["data"] = ensure_json_value(error.data, "error.data")
     return payload

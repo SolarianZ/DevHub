@@ -12,13 +12,14 @@ import unittest
 from tests.blackbox.test_base import (
     call_with_long_wait_status,
     DiscoveryService,
+    delete_definitions,
     RpcClient,
     RpcAssertions,
     TestResult,
     new_instance_id,
-    safe_remove,
+    resolve_instance_session_token,
     unregister_instances,
-    write_app_definition,
+    upsert_app_definition,
 )
 
 
@@ -26,7 +27,7 @@ class TestInvocationPollRespond(unittest.TestCase):
     """Invocation poll/respond 测试类"""
 
     def _create_definition(self, app_id):
-        return write_app_definition(app_id, rpc=True, events=False)
+        return upsert_app_definition(app_id, rpc=True, events=False)
 
     @staticmethod
     def _new_app_id(prefix):
@@ -112,7 +113,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             result.mark_failure(str(e))
         finally:
             unregister_instances([instance_id])
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -140,7 +141,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             if not RpcAssertions.expect_success(result, register_response, ["instance"]):
                 return result
 
-            respond_response = client.respond_value(instance_id, "invk-not-exists", {"ok": True})
+            respond_response = client.respond_value(instance_id, "invk-not-exists", {"ok": True}, lease_token="missing-lease-token")
             if not RpcAssertions.expect_error(result, respond_response, -32002, "forbidden"):
                 return result
 
@@ -152,7 +153,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             result.mark_failure(str(e))
         finally:
             unregister_instances([instance_id])
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -197,7 +198,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             result.mark_failure(str(e))
         finally:
             unregister_instances([instance_id])
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -245,11 +246,13 @@ class TestInvocationPollRespond(unittest.TestCase):
                 return result
 
             invocation_id = items[0].get("invocationId")
+            lease_token = items[0].get("delivery", {}).get("leaseToken")
             respond_response = client.respond_value(
                 instance_id,
                 invocation_id,
                 {"ok": True},
                 instance_session_token="wrong-instance-session-token",
+                lease_token=lease_token,
             )
             if not RpcAssertions.expect_error(result, respond_response, -32002, "forbidden"):
                 return result
@@ -262,7 +265,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             result.mark_failure(str(e))
         finally:
             unregister_instances([instance_id])
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -305,12 +308,14 @@ class TestInvocationPollRespond(unittest.TestCase):
             poll_response = client.poll_once(instance_id, max_count=10, wait_ms=100)
             if not RpcAssertions.expect_success(result, poll_response, ["items"]):
                 return result
+            items = poll_response.get("result", {}).get("items", [])
+            lease_token = next((item.get("delivery", {}).get("leaseToken") for item in items if item.get("invocationId") == invocation_id), None)
 
-            first_respond = client.respond_value(instance_id, invocation_id, {"ok": True})
+            first_respond = client.respond_value(instance_id, invocation_id, {"ok": True}, lease_token=lease_token)
             if not RpcAssertions.expect_success(result, first_respond):
                 return result
 
-            second_respond = client.respond_value(instance_id, invocation_id, {"ok": True})
+            second_respond = client.respond_value(instance_id, invocation_id, {"ok": True}, lease_token=lease_token)
             if not RpcAssertions.expect_error(result, second_respond, -32030, "delivery_conflict"):
                 return result
 
@@ -325,7 +330,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             except Exception:
                 pass
 
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -383,11 +388,13 @@ class TestInvocationPollRespond(unittest.TestCase):
                 return result
 
             items = poll_response.get("result", {}).get("items", [])
-            if not any(item.get("invocationId") == invocation_id for item in items):
+            holder_item = next((item for item in items if item.get("invocationId") == invocation_id), None)
+            if holder_item is None:
                 result.mark_failure("❌ lease holder poll 未拉取到 invocation")
                 return result
 
-            non_holder_respond = client.respond_value(instance_b, invocation_id, {"ok": True})
+            lease_token = holder_item.get("delivery", {}).get("leaseToken")
+            non_holder_respond = client.respond_value(instance_b, invocation_id, {"ok": True}, lease_token=lease_token)
             if not RpcAssertions.expect_error(result, non_holder_respond, -32030, "delivery_conflict"):
                 return result
 
@@ -396,7 +403,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             result.mark_failure(str(e))
         finally:
             unregister_instances([instance_a, instance_b])
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -445,9 +452,16 @@ class TestInvocationPollRespond(unittest.TestCase):
                 return result
 
             invocation_id_1 = items_1[0].get("invocationId")
+            lease_token_1 = items_1[0].get("delivery", {}).get("leaseToken")
+            if not isinstance(lease_token_1, str) or not lease_token_1:
+                result.mark_failure(f"❌ XOR 子场景1缺少有效 leaseToken: {items_1[0]}")
+                return result
+
             response_both = client.call("hub.invoke.respond", {
                 "instanceId": instance_id,
+                "instanceSessionToken": resolve_instance_session_token(instance_id),
                 "invocationId": invocation_id_1,
+                "leaseToken": lease_token_1,
                 "value": {"ok": True},
                 "error": {"code": 1001, "message": "app_error"}
             }, request_id="respond-xor-both")
@@ -475,9 +489,16 @@ class TestInvocationPollRespond(unittest.TestCase):
                 return result
 
             invocation_id_2 = items_2[0].get("invocationId")
+            lease_token_2 = items_2[0].get("delivery", {}).get("leaseToken")
+            if not isinstance(lease_token_2, str) or not lease_token_2:
+                result.mark_failure(f"❌ XOR 子场景2缺少有效 leaseToken: {items_2[0]}")
+                return result
+
             response_none = client.call("hub.invoke.respond", {
                 "instanceId": instance_id,
+                "instanceSessionToken": resolve_instance_session_token(instance_id),
                 "invocationId": invocation_id_2,
+                "leaseToken": lease_token_2,
             }, request_id="respond-xor-none")
             if not RpcAssertions.expect_error(result, response_none, -32602, "invalid_params"):
                 return result
@@ -487,7 +508,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             result.mark_failure(str(e))
         finally:
             unregister_instances([instance_id])
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -571,7 +592,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             result.mark_failure(str(e))
         finally:
             unregister_instances([instance_id])
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -678,7 +699,7 @@ class TestInvocationPollRespond(unittest.TestCase):
             result.mark_failure(str(e))
         finally:
             unregister_instances([instance_a, instance_b])
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 

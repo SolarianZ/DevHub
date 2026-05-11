@@ -7,6 +7,9 @@ import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
+import { DevHubClient } from "../../src/client.js";
+import type { AppDefinition } from "../../src/models.js";
+import type { RuntimeConnectionInfo, RuntimeResolver } from "../../src/runtime.js";
 
 const OUTPUT_LIMIT = 200;
 const PrebuiltHostAssemblyEnvironmentVariable = "DEVHUB_JS_SDK_HOST_ASSEMBLY";
@@ -87,8 +90,8 @@ export class DevHubHostFixture {
   readonly repoRoot: string;
   readonly dataDirectory: string;
   readonly runtimeDirectory: string;
-  readonly definitionsDirectory: string;
-  readonly instancesDirectory: string;
+  readonly appsDirectory: string;
+  readonly definitionsCatalogPath: string;
   readonly logsDirectory: string;
 
   private readonly tempRoot: string;
@@ -102,8 +105,8 @@ export class DevHubHostFixture {
     tempRoot: string,
     dataDirectory: string,
     runtimeDirectory: string,
-    definitionsDirectory: string,
-    instancesDirectory: string,
+    appsDirectory: string,
+    definitionsCatalogPath: string,
     logsDirectory: string,
     hostAssemblyPath: string
   ) {
@@ -111,8 +114,8 @@ export class DevHubHostFixture {
     this.tempRoot = tempRoot;
     this.dataDirectory = dataDirectory;
     this.runtimeDirectory = runtimeDirectory;
-    this.definitionsDirectory = definitionsDirectory;
-    this.instancesDirectory = instancesDirectory;
+    this.appsDirectory = appsDirectory;
+    this.definitionsCatalogPath = definitionsCatalogPath;
     this.logsDirectory = logsDirectory;
     this.hostAssemblyPath = hostAssemblyPath;
   }
@@ -128,13 +131,12 @@ export class DevHubHostFixture {
     );
     const dataDirectory = tempRoot;
     const runtimeDirectory = path.join(dataDirectory, "runtime");
-    const definitionsDirectory = path.join(dataDirectory, "apps", "definitions");
-    const instancesDirectory = path.join(dataDirectory, "apps", "instances");
+    const appsDirectory = path.join(dataDirectory, "apps");
+    const definitionsCatalogPath = path.join(appsDirectory, "definitions.json");
     const logsDirectory = path.join(dataDirectory, "logs");
 
     await fsPromises.mkdir(runtimeDirectory, { recursive: true });
-    await fsPromises.mkdir(definitionsDirectory, { recursive: true });
-    await fsPromises.mkdir(instancesDirectory, { recursive: true });
+    await fsPromises.mkdir(appsDirectory, { recursive: true });
     await fsPromises.mkdir(logsDirectory, { recursive: true });
     const hostAssemblyPath = await resolveHostAssemblyPath(repoRoot);
 
@@ -143,8 +145,8 @@ export class DevHubHostFixture {
       tempRoot,
       dataDirectory,
       runtimeDirectory,
-      definitionsDirectory,
-      instancesDirectory,
+      appsDirectory,
+      definitionsCatalogPath,
       logsDirectory,
       hostAssemblyPath
     );
@@ -155,12 +157,23 @@ export class DevHubHostFixture {
   async writeDefinition(definition: Record<string, unknown>): Promise<void> {
     const payload = { ...definition };
     const appId = ensureCanonicalIdentifier(payload.appId, "definition.appId");
-
     const scope = normalizeDefinitionScope(payload.scope);
-    payload.scope = scope;
 
-    const target = path.join(this.definitionsDirectory, buildDefinitionFileName(appId, scope));
-    await fsPromises.writeFile(target, JSON.stringify(payload), "utf-8");
+    const client = await DevHubClient.fromRuntime({
+      clientId: `host-fixture-definition-writer-${randomUUID()}`,
+      dataDir: this.dataDirectory
+    }, {
+      runtimeResolver: await this.createStaticRuntimeResolver()
+    });
+    try {
+      await client.upsertDefinition({
+        ...payload,
+        appId,
+        scope
+      } as AppDefinition);
+    } finally {
+      await client.dispose();
+    }
   }
 
   async close(): Promise<void> {
@@ -231,6 +244,15 @@ export class DevHubHostFixture {
     }
 
     throw new Error("等待 hub.json 超时。");
+  }
+
+  private async createStaticRuntimeResolver(): Promise<RuntimeResolver> {
+    const connection = await readRuntimeConnection(this.runtimeDirectory);
+    return {
+      async resolve() {
+        return connection;
+      }
+    };
   }
 }
 
@@ -375,6 +397,63 @@ function ensureTrailingSeparator(value: string): string {
     : `${value}${path.sep}`;
 }
 
+async function readRuntimeConnection(runtimeDirectory: string): Promise<RuntimeConnectionInfo> {
+  const hubJsonPath = path.join(runtimeDirectory, "hub.json");
+  const runtime = JSON.parse(await fsPromises.readFile(hubJsonPath, "utf-8")) as {
+    protocolVersion?: number;
+    pid?: number;
+    httpBaseUrl?: string;
+    wsUrl?: string;
+    tokenFile?: string;
+    startedAtUtc?: string;
+    runtimeTuning?: {
+      leaseSeconds?: number;
+      onlineThresholdSeconds?: number;
+      launchDedupeWindowSeconds?: number;
+      launchRegisterTimeoutSeconds?: number;
+    };
+    hubVersion?: string;
+  };
+
+  if (typeof runtime.httpBaseUrl !== "string" || runtime.httpBaseUrl.length === 0) {
+    throw new Error(`Host runtime 缺少有效 httpBaseUrl: ${hubJsonPath}`);
+  }
+  if (typeof runtime.wsUrl !== "string" || runtime.wsUrl.length === 0) {
+    throw new Error(`Host runtime 缺少有效 wsUrl: ${hubJsonPath}`);
+  }
+  if (typeof runtime.tokenFile !== "string" || runtime.tokenFile.length === 0) {
+    throw new Error(`Host runtime 缺少有效 tokenFile: ${hubJsonPath}`);
+  }
+  if (typeof runtime.runtimeTuning?.leaseSeconds !== "number"
+    || typeof runtime.runtimeTuning?.onlineThresholdSeconds !== "number"
+    || typeof runtime.runtimeTuning?.launchDedupeWindowSeconds !== "number"
+    || typeof runtime.runtimeTuning?.launchRegisterTimeoutSeconds !== "number") {
+    throw new Error(`Host runtime 缺少有效 runtimeTuning: ${hubJsonPath}`);
+  }
+
+  return {
+    runtimeDirectory,
+    token: (await fsPromises.readFile(runtime.tokenFile, "utf-8")).trim(),
+    rpcEndpoint: `${runtime.httpBaseUrl}/rpc`,
+    websocketEndpoint: runtime.wsUrl,
+    runtime: {
+      protocolVersion: runtime.protocolVersion ?? 1,
+      pid: runtime.pid ?? 1,
+      httpBaseUrl: runtime.httpBaseUrl,
+      wsUrl: runtime.wsUrl,
+      tokenFile: runtime.tokenFile,
+      startedAtUtc: new Date(runtime.startedAtUtc ?? new Date().toISOString()),
+      runtimeTuning: {
+        leaseSeconds: runtime.runtimeTuning.leaseSeconds,
+        onlineThresholdSeconds: runtime.runtimeTuning.onlineThresholdSeconds,
+        launchDedupeWindowSeconds: runtime.runtimeTuning.launchDedupeWindowSeconds,
+        launchRegisterTimeoutSeconds: runtime.runtimeTuning.launchRegisterTimeoutSeconds
+      },
+      hubVersion: runtime.hubVersion
+    }
+  };
+}
+
 function normalizeDefinitionScope(value: unknown): string {
   if (value === undefined) {
     return "";
@@ -385,13 +464,6 @@ function normalizeDefinitionScope(value: unknown): string {
   }
 
   return value;
-}
-
-function buildDefinitionFileName(appId: string, scope: string): string {
-  const scopeSegment = scope === ""
-    ? "global"
-    : `scope-${scope}`;
-  return `${appId}--${scopeSegment}.json`;
 }
 
 function ensureCanonicalIdentifier(value: unknown, propertyName: string): string {

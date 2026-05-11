@@ -25,8 +25,7 @@
 │   ├── hub.json
 │   └── token.txt
 ├── apps/
-│   ├── definitions/
-│   └── instances/
+│   └── definitions.json
 └── logs/
 ```
 

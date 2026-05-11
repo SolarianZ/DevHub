@@ -3,12 +3,14 @@
   "caseId": "CONF-008",
   "description": "当全局挂起 invocation 数量达到隔离 Host 配置上限时，新的 invocation 必须返回 rate_limited 与稳定 reason。",
   "transport": "http",
+  "hostEnvOverrides": {
+    "DEVHUB_PENDING_INVOCATIONS_LIMIT": "16"
+  },
   "setup": {
     "definitions": [
       {
-        "fileName": "errors.rate-limited.pending--global.json",
-        "definition": {
-          "appId": "errors.rate-limited.pending",
+        "appId": "errors.rate-limited.pending",
+        "scopeEntry": {
           "scope": "",
           "displayName": "errors.rate-limited.pending"
         }

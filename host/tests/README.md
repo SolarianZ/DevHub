@@ -41,11 +41,16 @@ host/tests/
 - `whitebox/` 承载 Host 工作区的 .NET 白盒测试工程，避免与 `host/src/` 生产工程混放。
 - `tools/` 只放验证入口和辅助脚本，不混入黑盒或 conformance 用例。
 
+白盒命名约定：
+
+- `blackbox/` 与 `conformance/` 是公开协议与对外行为的主验证入口。
+- `whitebox/` 中仅允许走 HTTP / WS / 宿主公共边界夹具的测试保留 `Spec_*` 命名，并声明 `SpecRef`。
+- 直接实例化 handler、service、validator 或其他内部类型的白盒测试统一使用 `Impl_*` 命名，不应通过 `Spec_*` 暗示其覆盖了完整公开入口。
+
 ## 前置要求
 
 - .NET SDK 10.0+
 - Python 3.11+
-- Python 依赖：`pip install requests`
 - Windows ACL 语义校验依赖：`pip install pywin32`
 
 ## 运行方式
@@ -146,6 +151,7 @@ python host/tests/tools/verify_coverage.py --root . --line-threshold 0.80 --bran
 补充说明：
 
 - Host 传输层、parser 与 RPC handler 的新增白盒测试，断言必须以 [`docs/specification/protocol/Specification.md`](../../docs/specification/protocol/Specification.md) 定义的公开 JSON-RPC 结果、错误码、错误数据和可观察状态为依据，不依赖私有 helper 调用顺序或日志文本。
+- 白盒 `Spec_*` 仅用于补强 HTTP / WebSocket / 宿主公共边界语义；协议层权威门禁仍以 `blackbox/` 与 `conformance/` 为准。
 - `find host -type d -name TestResults -prune -exec rm -rf {} +` 与 GitHub CI 保持一致，用于清理历史 `TestResults`，避免旧的 coverage 报告混入当前校验。
 - 启用 `trx` logger 时，Coverlet 会同时生成 `TestResults/_*/In/**/coverage.cobertura.xml` 附件副本和 GUID 目录下的镜像副本。
 - `host/tests/tools/verify_coverage.py` 会优先使用 `trx` 附件副本参与阈值计算，并忽略同一测试工程下内容完全相同的 GUID 镜像副本；这样既保留 `trx`/诊断附件所需文件，又避免重复报告干扰 coverage 口径。

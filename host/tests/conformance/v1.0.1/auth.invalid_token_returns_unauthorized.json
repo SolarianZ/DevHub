@@ -20,7 +20,7 @@
   },
   "expectedResponse": {
     "jsonrpc": "2.0",
-    "id": "auth-invalid-token",
+    "id": null,
     "error": {
       "code": -32001,
       "message": "unauthorized",

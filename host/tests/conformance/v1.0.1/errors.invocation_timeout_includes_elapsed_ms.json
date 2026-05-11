@@ -6,9 +6,8 @@
   "setup": {
     "definitions": [
       {
-        "fileName": "errors.invocation.timeout--global.json",
-        "definition": {
-          "appId": "errors.invocation.timeout",
+        "appId": "errors.invocation.timeout",
+        "scopeEntry": {
           "scope": "",
           "displayName": "errors.invocation.timeout"
         }

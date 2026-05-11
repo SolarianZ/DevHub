@@ -83,6 +83,11 @@ public class RpcRouter
                 }
                 catch (Exception ex)
                 {
+                    if (ex is OperationCanceledException && cancellationToken.IsCancellationRequested)
+                    {
+                        throw;
+                    }
+
                     firstException ??= ex;
                     firstFailedMatch ??= $"exact:{handler.Method}";
                     _logger.LogError(ex, "处理RPC请求失败: {Method}, RequestId: {RequestId}, 参数: {Params}",
@@ -123,6 +128,11 @@ public class RpcRouter
                 }
                 catch (Exception ex)
                 {
+                    if (ex is OperationCanceledException && cancellationToken.IsCancellationRequested)
+                    {
+                        throw;
+                    }
+
                     prefixException ??= ex;
                     firstFailedPrefixMatch ??= $"{prefix}->{handler.Method}";
                     _logger.LogError(ex, "处理RPC请求失败: {Method}, RequestId: {RequestId}, 参数: {Params}",

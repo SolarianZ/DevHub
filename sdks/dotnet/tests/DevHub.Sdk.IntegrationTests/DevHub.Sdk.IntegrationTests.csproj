@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\DevHub.Sdk\DevHub.Sdk.csproj" />
+    <ProjectReference Include="..\..\src\DevHub.Sdk.DependencyInjection\DevHub.Sdk.DependencyInjection.csproj" />
     <ProjectReference Include="..\..\..\..\host\src\DevHub.Host\DevHub.Host.csproj"
                       ReferenceOutputAssembly="false"
                       SetConfiguration="Configuration=$(Configuration)"

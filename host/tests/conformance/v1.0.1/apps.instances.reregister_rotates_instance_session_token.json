@@ -1,7 +1,7 @@
 {
   "id": "apps.instances.reregister_rotates_instance_session_token",
   "caseId": "CONF-003",
-  "description": "同一 instanceId 以相同 password 再次注册时，hub.apps.registerInstance 必须轮换 instanceSessionToken，并使旧 token 失效。",
+  "description": "同一 instanceId、appId、scope 以相同 password 再次注册时，hub.apps.registerInstance 必须轮换 instanceSessionToken，并使旧 token 失效。",
   "transport": "http",
   "setup": {
     "instances": [
@@ -55,7 +55,7 @@
             {
               "instanceId": "apps-instance-reregister-1",
               "appId": "apps.instance.reregister.app",
-              "scope": "workspace-reregister",
+              "scope": "",
               "pid": 32017,
               "invoke": {
                 "poll": true,
@@ -85,7 +85,7 @@
       "instance": {
         "instanceId": "apps-instance-reregister-1",
         "appId": "apps.instance.reregister.app",
-        "scope": "workspace-reregister",
+        "scope": "",
         "pid": 32017,
         "invoke": {
           "poll": true,
@@ -103,7 +103,7 @@
       "instance": {
         "instanceId": "apps-instance-reregister-1",
         "appId": "apps.instance.reregister.app",
-        "scope": "workspace-reregister",
+        "scope": "",
         "pid": 32017,
         "registeredAtUtc": "${ANY_ISO_UTC}",
         "lastSeenUtc": "${ANY_ISO_UTC}",

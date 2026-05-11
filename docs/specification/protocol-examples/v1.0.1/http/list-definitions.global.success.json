@@ -7,7 +7,16 @@
       {
         "appId": "Sample.App",
         "scope": "",
-        "displayName": "Sample App"
+        "displayName": "Sample App",
+        "launch": {
+          "exePath": "/opt/devhub-samples/sample-app",
+          "args": [
+            "--app",
+            "{appId}",
+            "--scope",
+            "{scopeOrGlobal}"
+          ]
+        }
       }
     ]
   }

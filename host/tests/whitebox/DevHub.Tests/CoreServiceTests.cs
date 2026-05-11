@@ -11,6 +11,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using System.Runtime.Versioning;
 
+[Collection(TestCollections.ProcessEnvironment)]
 [Trait("Category", "Impl")]
 public class CoreServiceTests
 {
@@ -33,12 +34,14 @@ public class CoreServiceTests
         using var leaseScope = new EnvironmentVariableScope(RuntimeTuningOptions.LeaseSecondsEnvironmentVariable, "45");
         using var onlineScope = new EnvironmentVariableScope(RuntimeTuningOptions.OnlineThresholdSecondsEnvironmentVariable, "20");
         using var dedupeScope = new EnvironmentVariableScope(RuntimeTuningOptions.LaunchDedupeWindowSecondsEnvironmentVariable, "55");
+        using var registerScope = new EnvironmentVariableScope(RuntimeTuningOptions.LaunchRegisterTimeoutSecondsEnvironmentVariable, "65");
 
         var tuningOptions = RuntimeTuningOptions.Resolve(Mock.Of<ILogger<RuntimeTuningOptions>>());
 
         Assert.Equal(45, tuningOptions.LeaseSeconds);
         Assert.Equal(20, tuningOptions.OnlineThresholdSeconds);
         Assert.Equal(55, tuningOptions.LaunchDedupeWindowSeconds);
+        Assert.Equal(65, tuningOptions.LaunchRegisterTimeoutSeconds);
     }
 
     [Fact]
@@ -47,12 +50,14 @@ public class CoreServiceTests
         using var leaseScope = new EnvironmentVariableScope(RuntimeTuningOptions.LeaseSecondsEnvironmentVariable, "0");
         using var onlineScope = new EnvironmentVariableScope(RuntimeTuningOptions.OnlineThresholdSecondsEnvironmentVariable, "-1");
         using var dedupeScope = new EnvironmentVariableScope(RuntimeTuningOptions.LaunchDedupeWindowSecondsEnvironmentVariable, "abc");
+        using var registerScope = new EnvironmentVariableScope(RuntimeTuningOptions.LaunchRegisterTimeoutSecondsEnvironmentVariable, "0");
 
         var tuningOptions = RuntimeTuningOptions.Resolve(Mock.Of<ILogger<RuntimeTuningOptions>>());
 
         Assert.Equal(RuntimeTuningOptions.DefaultLeaseSeconds, tuningOptions.LeaseSeconds);
         Assert.Equal(RuntimeTuningOptions.DefaultOnlineThresholdSeconds, tuningOptions.OnlineThresholdSeconds);
         Assert.Equal(RuntimeTuningOptions.DefaultLaunchDedupeWindowSeconds, tuningOptions.LaunchDedupeWindowSeconds);
+        Assert.Equal(RuntimeTuningOptions.DefaultLaunchRegisterTimeoutSeconds, tuningOptions.LaunchRegisterTimeoutSeconds);
     }
 
     [Fact]
@@ -113,26 +118,29 @@ public class CoreServiceTests
     public void Impl_AppRegistry_Heartbeat_ShouldUpdateLastSeen()
     {
         // Arrange
-        var appRegistry = new AppRegistry(new SystemClock(), _mockRegistryLogger.Object);
+        var now = DateTime.UtcNow;
+        var clock = new Mock<IClock>();
+        clock.SetupGet(c => c.UtcNow).Returns(() => now);
+        var appRegistry = new AppRegistry(clock.Object, _mockRegistryLogger.Object);
         var instance = new AppInstance
         {
             InstanceId = "test-instance-2",
             AppId = "test-app-2",
             Scope = ScopeContract.Global,
             Pid = 5678,
-            RegisteredAtUtc = DateTime.UtcNow,
-            LastSeenUtc = DateTime.UtcNow.AddSeconds(-10)
+            RegisteredAtUtc = now,
+            LastSeenUtc = now.AddSeconds(-10)
         };
         appRegistry.RegisterInstance(instance);
 
-        var beforeHeartbeat = instance.LastSeenUtc;
+        now = now.AddSeconds(5);
 
         appRegistry.Heartbeat("test-instance-2", out _);
         var updatedInstance = appRegistry.GetInstance("test-instance-2");
 
         // Assert
         Assert.NotNull(updatedInstance);
-        Assert.True(updatedInstance.LastSeenUtc > beforeHeartbeat);
+        Assert.Equal(now, updatedInstance.LastSeenUtc);
     }
 
     [Fact]

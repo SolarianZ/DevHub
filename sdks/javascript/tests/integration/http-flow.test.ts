@@ -55,17 +55,11 @@ it("HTTP 链路应可完成基础流程", async () => {
     rpc: true
   });
 
-  const validation = await client.validateDefinition({
+  await expect(client.validateDefinition({
     appId: "http.managed.app",
     scope: "",
-    displayName: ""
-  });
-  expect(validation.ok).toBe(true);
-  expect(validation.valid).toBe(false);
-  expect(validation.errors[0]).toMatchObject({
-    path: "definition.displayName",
-    code: "missing_display_name"
-  });
+    displayName: " "
+  })).rejects.toThrow(/definition\.displayName/);
 
   const upserted = await client.upsertDefinition({
     appId: "http.managed.app",
@@ -103,6 +97,12 @@ it("HTTP 链路应可完成基础流程", async () => {
   })).rejects.toMatchObject({
     code: DevHubRpcErrorCode.AppDefinitionNotFound
   });
+
+  await expect(client.upsertDefinition({
+    appId: "http.invalid.app",
+    scope: "",
+    displayName: "   "
+  })).rejects.toThrow(/definition\.displayName/);
 
   const registered = await client.registerInstance({
     instanceId: "http-flow-inst-1",
@@ -275,6 +275,7 @@ it("launch 应覆盖 started / starting / already_running", async () => {
   expect(started.status).toBe("started");
   expect(started.pid).toBeGreaterThan(0);
   expect(started.launchId).toMatch(/^launch-/);
+  expect(started.dedupeKey).toBe("http.launch.started.app:global");
 
   const starting = await client.launch({
     appId: "http.launch.starting.app",
@@ -285,6 +286,7 @@ it("launch 应覆盖 started / starting / already_running", async () => {
   expect(starting.status).toBe("starting");
   expect(starting.pid).toBeGreaterThan(0);
   expect(starting.launchId).toMatch(/^launch-/);
+  expect(starting.dedupeKey).toBe("http.launch.starting.app:global");
 
   const registered = await client.registerInstance({
     instanceId: "http-launch-running-inst-1",
@@ -304,7 +306,9 @@ it("launch 应覆盖 started / starting / already_running", async () => {
   expect(alreadyRunning.ok).toBe(true);
   expect(alreadyRunning.status).toBe("already_running");
   expect(alreadyRunning.pid).toBe(registered.pid);
-  expect(alreadyRunning.launchId).toMatch(/^launch-/);
+  expect(alreadyRunning.instanceId).toBe("http-launch-running-inst-1");
+  expect(alreadyRunning.launchId).toBeUndefined();
+  expect(alreadyRunning.dedupeKey).toBeUndefined();
 
   await client.unregisterInstance("http-launch-running-inst-1", registered.instanceSessionToken);
   await client.dispose();
@@ -317,13 +321,9 @@ function createLaunchDefinition(appId: string): Record<string, unknown> {
     displayName: appId,
     launch: {
       exePath: process.execPath,
-      argsTemplate: quoteCommandArgument(path.normalize(launchScriptPath))
+      args: [path.normalize(launchScriptPath)]
     }
   };
-}
-
-function quoteCommandArgument(value: string): string {
-  return value.includes(" ") ? `"${value}"` : value;
 }
 
 function getHost(): DevHubHostFixture {

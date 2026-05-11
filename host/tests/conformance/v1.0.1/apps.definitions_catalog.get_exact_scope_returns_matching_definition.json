@@ -1,0 +1,63 @@
+{
+  "id": "apps.definitions_catalog.get_exact_scope_returns_matching_definition",
+  "caseId": "CONF-003",
+  "description": "同一 appId 存在多份 scoped Definition 时，hub.apps.getDefinition 必须按精确 appId + scope 返回目标定义。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "appId": "apps.get.exact-scope.app",
+        "scopeEntry": {
+          "scope": "",
+          "displayName": "Apps Get Exact Scope Global"
+        }
+      },
+      {
+        "appId": "apps.get.exact-scope.app",
+        "scopeEntry": {
+          "scope": "scope-a",
+          "displayName": "Apps Get Exact Scope A",
+          "description": "用于 conformance scoped get 向量。"
+        }
+      }
+    ]
+  },
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceApps",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000123"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "apps-definitions-get-exact-scope",
+    "method": "hub.apps.getDefinition",
+    "params": {
+      "appId": "apps.get.exact-scope.app",
+      "scope": "scope-a"
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "apps-definitions-get-exact-scope",
+    "result": {
+      "ok": true,
+      "definition": {
+        "appId": "apps.get.exact-scope.app",
+        "scope": "scope-a",
+        "displayName": "Apps Get Exact Scope A",
+        "description": "用于 conformance scoped get 向量。"
+      }
+    }
+  },
+  "tags": [
+    "apps",
+    "definitions",
+    "http",
+    "scope",
+    "success"
+  ]
+}

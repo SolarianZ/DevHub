@@ -64,7 +64,7 @@ from .models import (
     RuntimeConnectionInfo,
     VersionCompatibilityResult,
 )
-from .runtime import FileSystemRuntimeResolver, RuntimeResolver
+from .runtime import FileSystemRuntimeResolver, RuntimeResolver, validate_runtime_connection_info
 
 
 _ECHO_UNSET = object()
@@ -122,6 +122,7 @@ class DevHubClient:
         cloned_options.validate()
         resolved_dependencies = dependencies or DevHubClientDependencies()
         connection_info = resolved_dependencies.runtime_resolver.resolve(cloned_options)
+        validate_runtime_connection_info(connection_info)
         transport = resolved_dependencies.transport_factory(cloned_options, connection_info)
         return cls(cloned_options, connection_info, transport)
 
@@ -203,10 +204,15 @@ class DevHubClient:
         if not require_bool(root, "ok", "hub.apps.deleteDefinition.result"):
             raise RuntimeError("hub.apps.deleteDefinition.result 返回结果非法。")
 
-    def register_instance(self, instance: AppInstanceRegistration, password: str) -> AppInstance:
+    def register_instance(
+        self,
+        instance: AppInstanceRegistration,
+        password: str,
+        launch_id: str | None = None,
+    ) -> AppInstance:
         """调用 `hub.apps.registerInstance`。"""
 
-        result = self._send("hub.apps.registerInstance", build_register_instance_params(instance, password))
+        result = self._send("hub.apps.registerInstance", build_register_instance_params(instance, password, launch_id))
         return parse_register_instance_result(result, path="hub.apps.registerInstance.result")
 
     def heartbeat(self, instance_id: str, instance_session_token: str) -> datetime:

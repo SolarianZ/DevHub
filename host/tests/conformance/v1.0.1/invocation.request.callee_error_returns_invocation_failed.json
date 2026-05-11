@@ -6,9 +6,8 @@
   "setup": {
     "definitions": [
       {
-        "fileName": "invoke.request.callee-error--global.json",
-        "definition": {
-          "appId": "invoke.request.callee-error",
+        "appId": "invoke.request.callee-error",
+        "scopeEntry": {
           "scope": "",
           "displayName": "invoke.request.callee-error"
         }

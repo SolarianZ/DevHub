@@ -14,16 +14,17 @@ namespace DevHub.Core.Services.Invocation;
 public class LaunchCoordinator : ILaunchRegistrationTracker
 {
     private const string DefaultDedupeKeyTemplate = "{appId}:{scopeOrGlobal}";
+    private const string ProcessExitedBeforeRegisterReason = "process_exited_before_register";
     public const string LaunchIdEnvironmentVariable = "DEVHUB_LAUNCH_ID";
-    public const string LaunchIdMetaKey = "launchId";
 
     private readonly object _launchSyncRoot = new();
-    private readonly Dictionary<string, LaunchRecord> _dedupeRecords = new();
+    private readonly Dictionary<LaunchDedupeIdentity, LaunchRecord> _dedupeRecords = new();
     private readonly Dictionary<string, LaunchRecord> _launchRecordsById = new();
     private readonly IDefinitionProvider _definitionProvider;
     private readonly AppRegistry _appRegistry;
     private readonly IRuntimeHttpBaseUrlProvider _runtimeHttpBaseUrlProvider;
     private readonly IProcessLauncher _processLauncher;
+    private readonly IProcessStatusProvider _processStatusProvider;
     private readonly RuntimeTuningOptions _runtimeTuningOptions;
     private readonly IClock _clock;
     private readonly ILogger<LaunchCoordinator> _logger;
@@ -43,8 +44,32 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
             appRegistry,
             runtimeHttpBaseUrlProvider,
             processLauncher,
+            new ProcessStatusProvider(),
             clock,
             RuntimeTuningOptions.Default,
+            logger)
+    {
+    }
+
+    /// <summary>
+    /// 初始化启动协调器。
+    /// </summary>
+    public LaunchCoordinator(
+        IDefinitionProvider definitionProvider,
+        AppRegistry appRegistry,
+        IRuntimeHttpBaseUrlProvider runtimeHttpBaseUrlProvider,
+        IProcessLauncher processLauncher,
+        IClock clock,
+        RuntimeTuningOptions runtimeTuningOptions,
+        ILogger<LaunchCoordinator> logger)
+        : this(
+            definitionProvider,
+            appRegistry,
+            runtimeHttpBaseUrlProvider,
+            processLauncher,
+            new ProcessStatusProvider(),
+            clock,
+            runtimeTuningOptions,
             logger)
     {
     }
@@ -58,6 +83,7 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
         AppRegistry appRegistry,
         IRuntimeHttpBaseUrlProvider runtimeHttpBaseUrlProvider,
         IProcessLauncher processLauncher,
+        IProcessStatusProvider processStatusProvider,
         IClock clock,
         RuntimeTuningOptions runtimeTuningOptions,
         ILogger<LaunchCoordinator> logger)
@@ -66,6 +92,7 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
         _appRegistry = appRegistry;
         _runtimeHttpBaseUrlProvider = runtimeHttpBaseUrlProvider;
         _processLauncher = processLauncher;
+        _processStatusProvider = processStatusProvider;
         _clock = clock;
         _runtimeTuningOptions = runtimeTuningOptions;
         _logger = logger;
@@ -102,8 +129,10 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
         {
             return LaunchOperationResult.CreateSuccess(
                 status: "already_running",
-                launchId: BuildLaunchId(),
-                pid: onlineInstances[0].Pid);
+                launchId: null,
+                pid: onlineInstances[0].Pid,
+                dedupeKey: null,
+                instanceId: onlineInstances[0].InstanceId);
         }
 
         if (!TryValidateLaunchConfig(definition, out var launchConfig, out var configError))
@@ -113,12 +142,13 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
 
         var httpBaseUrl = _runtimeHttpBaseUrlProvider.GetHttpBaseUrl();
         var resolvedDedupeKey = ResolveDedupeKey(definition, appId, scope, dedupeKey, httpBaseUrl);
+        var dedupeIdentity = LaunchDedupeIdentity.Create(appId, scope, resolvedDedupeKey);
 
         var now = _clock.UtcNow;
         LaunchRecord? existingRecord;
         lock (_launchSyncRoot)
         {
-            existingRecord = TryGetActiveDedupeRecord(resolvedDedupeKey, now);
+            existingRecord = TryGetActiveDedupeRecord(dedupeIdentity, now);
         }
 
         if (existingRecord is not null)
@@ -126,31 +156,37 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
             return LaunchOperationResult.CreateSuccess(
                 status: "already_running",
                 launchId: existingRecord.LaunchId,
-                pid: existingRecord.Pid);
+                pid: existingRecord.Pid,
+                dedupeKey: existingRecord.DedupeKey,
+                instanceId: null);
         }
 
         var launchId = BuildLaunchId();
         lock (_launchSyncRoot)
         {
             var nextNow = _clock.UtcNow;
-            if (TryGetActiveDedupeRecord(resolvedDedupeKey, nextNow) is { } record)
+            if (TryGetActiveDedupeRecord(dedupeIdentity, nextNow) is { } record)
             {
                 return LaunchOperationResult.CreateSuccess(
                     status: "already_running",
                     launchId: record.LaunchId,
-                    pid: record.Pid);
+                    pid: record.Pid,
+                    dedupeKey: record.DedupeKey,
+                    instanceId: null);
             }
 
             var launchRecord = new LaunchRecord
             {
                 LaunchId = launchId,
+                DedupeIdentity = dedupeIdentity,
                 DedupeKey = resolvedDedupeKey,
                 AppId = appId,
                 Scope = scope,
                 CreatedAtUtc = nextNow,
+                RegisterDeadlineUtc = ComputeRegisterDeadlineUtc(nextNow, waitForRegisterMs),
                 State = LaunchRecordState.Starting
             };
-            _dedupeRecords[resolvedDedupeKey] = launchRecord;
+            _dedupeRecords[dedupeIdentity] = launchRecord;
             _launchRecordsById[launchId] = launchRecord;
         }
 
@@ -167,8 +203,20 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
                     new
                     {
                         reason = "process_start_failed"
-                    });
+                });
             }
+        }
+        catch (FormatException ex)
+        {
+            RemoveLaunchRecordById(launchId);
+            _logger.LogWarning(ex, "启动参数模板解析失败，AppId: {AppId}, Scope: {Scope}", appId, scope);
+            return LaunchOperationResult.CreateError(
+                -32602,
+                "invalid_params",
+                new
+                {
+                    reason = "invalid_launch_args_template"
+                });
         }
         catch (Exception ex)
         {
@@ -187,18 +235,20 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
         UpdateLaunchRecordPid(launchId, process.Id);
         if (waitForRegisterMs <= 0)
         {
-            return LaunchOperationResult.CreateSuccess("started", launchId, process.Id);
+            return LaunchOperationResult.CreateSuccess("started", launchId, process.Id, resolvedDedupeKey, instanceId: null);
         }
 
         var waitOutcome = await WaitForRegistrationAsync(launchId, waitForRegisterMs, cancellationToken);
         return waitOutcome switch
         {
-            LaunchWaitOutcome.Registered => BuildStartedAfterWait(launchId, process.Id),
-            LaunchWaitOutcome.ScopeMismatch => LaunchOperationResult.CreateError(
+            LaunchWaitOutcome.Registered => BuildStartedAfterWait(launchId, process.Id, resolvedDedupeKey),
+            LaunchWaitOutcome.ScopeMismatch or
+            LaunchWaitOutcome.ProcessExitedBeforeRegister => BuildLaunchFailureAfterWait(launchId),
+            LaunchWaitOutcome.RegisterTimeout => LaunchOperationResult.CreateError(
                 -32020,
                 "launch_failed",
-                GetLaunchFailureData(launchId)),
-            _ => LaunchOperationResult.CreateSuccess("starting", launchId, process.Id)
+                new { reason = "launch_register_timeout", launchId }),
+            _ => LaunchOperationResult.CreateSuccess("starting", launchId, process.Id, resolvedDedupeKey, instanceId: null)
         };
     }
 
@@ -263,12 +313,31 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
             {
                 launchRecord.State = LaunchRecordState.Registered;
                 launchRecord.RegisteredInstanceId = instance.InstanceId;
-                DeactivateDedupeRecord(launchRecord);
+                _logger.LogInformation(
+                    "启动记录已完成注册绑定，LaunchId: {LaunchId}, AppId: {AppId}, Scope: {Scope}, InstanceId: {InstanceId}",
+                    launchRecord.LaunchId,
+                    launchRecord.AppId,
+                    launchRecord.Scope,
+                    instance.InstanceId);
             }
         }
     }
 
     private static string BuildLaunchId() => $"launch-{Guid.NewGuid():N}";
+
+    private DateTime ComputeRegisterDeadlineUtc(DateTime createdAtUtc, int waitForRegisterMs)
+    {
+        var baselineDeadlineUtc = createdAtUtc.AddSeconds(_runtimeTuningOptions.LaunchRegisterTimeoutSeconds);
+        if (waitForRegisterMs <= 0)
+        {
+            return baselineDeadlineUtc;
+        }
+
+        var requestedDeadlineUtc = createdAtUtc.AddMilliseconds(waitForRegisterMs);
+        return requestedDeadlineUtc > baselineDeadlineUtc
+            ? requestedDeadlineUtc
+            : baselineDeadlineUtc;
+    }
 
     private static bool TryValidateLaunchConfig(
         AppDefinition definition,
@@ -296,12 +365,10 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
         string httpBaseUrl,
         string launchId)
     {
-        var effectiveLaunchConfig = BuildEffectiveLaunchConfiguration(launchConfig, launchId);
-        var arguments = RenderTemplate(
-            effectiveLaunchConfig.ArgsTemplate,
-            appId,
-            scope,
-            httpBaseUrl);
+        var effectiveLaunchConfig = BuildEffectiveLaunchConfiguration(launchConfig, launchId, appId, scope, httpBaseUrl);
+        var arguments = launchConfig.Args is not null
+            ? null
+            : RenderTemplate(effectiveLaunchConfig.ArgsTemplate, appId, scope, httpBaseUrl);
 
         return _processLauncher.Start(effectiveLaunchConfig, arguments);
     }
@@ -311,20 +378,28 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
         int waitForRegisterMs,
         CancellationToken cancellationToken)
     {
-        var deadline = _clock.UtcNow.AddMilliseconds(waitForRegisterMs);
-        while (_clock.UtcNow <= deadline)
+        DateTime deadline;
+        lock (_launchSyncRoot)
         {
+            deadline = _launchRecordsById.TryGetValue(launchId, out var launchRecord)
+                ? launchRecord.CreatedAtUtc.AddMilliseconds(waitForRegisterMs)
+                : _clock.UtcNow.AddMilliseconds(waitForRegisterMs);
+        }
+
+        while (true)
+        {
+            var now = _clock.UtcNow;
             lock (_launchSyncRoot)
             {
-                CleanupExpiredLaunchRecords(_clock.UtcNow);
-
                 if (_launchRecordsById.TryGetValue(launchId, out var launchRecord))
                 {
-                    if (launchRecord.State == LaunchRecordState.Failed
-                        && string.Equals(launchRecord.FailureReason, "definition_scope_mismatch", StringComparison.Ordinal))
+                    if (launchRecord.State == LaunchRecordState.Failed)
                     {
-                        RemoveLaunchRecordById(launchId);
-                        return LaunchWaitOutcome.ScopeMismatch;
+                        return string.Equals(launchRecord.FailureReason, "launch_register_timeout", StringComparison.Ordinal)
+                            ? LaunchWaitOutcome.RegisterTimeout
+                            : string.Equals(launchRecord.FailureReason, ProcessExitedBeforeRegisterReason, StringComparison.Ordinal)
+                                ? LaunchWaitOutcome.ProcessExitedBeforeRegister
+                                : LaunchWaitOutcome.ScopeMismatch;
                     }
 
                     if (launchRecord.State == LaunchRecordState.Registered)
@@ -332,7 +407,30 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
                         RemoveLaunchRecordById(launchId);
                         return LaunchWaitOutcome.Registered;
                     }
+
+                    if (!IsLaunchStillInProgress(launchRecord))
+                    {
+                        MarkLaunchFailed(
+                            launchRecord,
+                            ProcessExitedBeforeRegisterReason,
+                            BuildProcessExitedBeforeRegisterErrorData(launchRecord));
+                        return LaunchWaitOutcome.ProcessExitedBeforeRegister;
+                    }
+
+                    if (now >= launchRecord.RegisterDeadlineUtc)
+                    {
+                        MarkLaunchFailed(
+                            launchRecord,
+                            "launch_register_timeout",
+                            new { reason = "launch_register_timeout", launchId = launchRecord.LaunchId });
+                        return LaunchWaitOutcome.RegisterTimeout;
+                    }
                 }
+            }
+
+            if (now >= deadline)
+            {
+                break;
             }
 
             await Task.Delay(20, cancellationToken);
@@ -341,9 +439,19 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
         return LaunchWaitOutcome.TimedOut;
     }
 
-    private static LaunchOperationResult BuildStartedAfterWait(string launchId, int processId)
+    private static LaunchOperationResult BuildStartedAfterWait(string launchId, int processId, string dedupeKey)
     {
-        return LaunchOperationResult.CreateSuccess("started", launchId, processId);
+        return LaunchOperationResult.CreateSuccess("started", launchId, processId, dedupeKey, instanceId: null);
+    }
+
+    private LaunchOperationResult BuildLaunchFailureAfterWait(string launchId)
+    {
+        var errorData = GetLaunchFailureData(launchId);
+        RemoveLaunchRecordById(launchId);
+        return LaunchOperationResult.CreateError(
+            -32020,
+            "launch_failed",
+            errorData);
     }
 
     private object GetLaunchFailureData(string launchId)
@@ -356,7 +464,7 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
             }
         }
 
-        return new { reason = "definition_scope_mismatch", launchId };
+        return new { reason = "launch_failed", launchId };
     }
 
     private static string? RenderTemplate(
@@ -380,6 +488,144 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
             .Replace("{scope}", scopeValue, StringComparison.Ordinal)
             .Replace("{scopeOrGlobal}", scopeOrGlobal, StringComparison.Ordinal)
             .Replace("{httpBaseUrl}", httpBaseUrl, StringComparison.Ordinal);
+    }
+
+    private static IReadOnlyList<string> BuildLaunchArgs(
+        LaunchConfiguration launchConfig,
+        string appId,
+        string scope,
+        string httpBaseUrl)
+    {
+        if (launchConfig.Args is not null)
+        {
+            return launchConfig.Args
+                .Select(argument => RenderTemplate(argument, appId, scope, httpBaseUrl) ?? string.Empty)
+                .ToArray();
+        }
+
+        return ParseArgsTemplate(launchConfig.ArgsTemplate, appId, scope, httpBaseUrl);
+    }
+
+    private static IReadOnlyList<string> ParseArgsTemplate(
+        string? argsTemplate,
+        string appId,
+        string scope,
+        string httpBaseUrl)
+    {
+        var rendered = RenderTemplate(argsTemplate, appId, scope, httpBaseUrl);
+        if (string.IsNullOrEmpty(rendered))
+        {
+            return [];
+        }
+
+        var args = new List<string>();
+        var current = new System.Text.StringBuilder();
+        char? quote = null;
+        var escaping = false;
+        var tokenStarted = false;
+
+        for (var index = 0; index < rendered.Length; index++)
+        {
+            var ch = rendered[index];
+
+            if (quote.HasValue)
+            {
+                if (ch == quote.Value)
+                {
+                    quote = null;
+                    tokenStarted = true;
+                    continue;
+                }
+
+                if (ch == '\\')
+                {
+                    if (index + 1 < rendered.Length)
+                    {
+                        var next = rendered[index + 1];
+                        if (next == quote.Value || next == '\\')
+                        {
+                            current.Append(next);
+                            tokenStarted = true;
+                            index++;
+                            continue;
+                        }
+                    }
+
+                    current.Append(ch);
+                    tokenStarted = true;
+                    continue;
+                }
+
+                current.Append(ch);
+                tokenStarted = true;
+                continue;
+            }
+
+            if (escaping)
+            {
+                current.Append(ch);
+                tokenStarted = true;
+                escaping = false;
+                continue;
+            }
+
+            if (ch == '\\')
+            {
+                if (index + 1 >= rendered.Length)
+                {
+                    throw new FormatException("launch argsTemplate has invalid quoting or escaping.");
+                }
+
+                if (index + 1 < rendered.Length)
+                {
+                    var next = rendered[index + 1];
+                    if (char.IsWhiteSpace(next) || next is '\'' or '"' or '\\')
+                    {
+                        escaping = true;
+                        tokenStarted = true;
+                        continue;
+                    }
+                }
+
+                current.Append(ch);
+                tokenStarted = true;
+                continue;
+            }
+
+            if (ch is '\'' or '"')
+            {
+                quote = ch;
+                tokenStarted = true;
+                continue;
+            }
+
+            if (char.IsWhiteSpace(ch))
+            {
+                if (tokenStarted)
+                {
+                    args.Add(current.ToString());
+                    current.Clear();
+                    tokenStarted = false;
+                }
+
+                continue;
+            }
+
+            current.Append(ch);
+            tokenStarted = true;
+        }
+
+        if (escaping || quote.HasValue)
+        {
+            throw new FormatException("launch argsTemplate has invalid quoting or escaping.");
+        }
+
+        if (tokenStarted)
+        {
+            args.Add(current.ToString());
+        }
+
+        return args;
     }
 
     private string ResolveDedupeKey(
@@ -406,17 +652,24 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
             : rendered;
     }
 
-    private LaunchConfiguration BuildEffectiveLaunchConfiguration(LaunchConfiguration launchConfig, string launchId)
+    private LaunchConfiguration BuildEffectiveLaunchConfiguration(
+        LaunchConfiguration launchConfig,
+        string launchId,
+        string appId,
+        string scope,
+        string httpBaseUrl)
     {
         var environmentVariables = launchConfig.EnvironmentVariables is null
             ? new Dictionary<string, string?>(StringComparer.Ordinal)
             : new Dictionary<string, string?>(launchConfig.EnvironmentVariables, StringComparer.Ordinal);
 
         environmentVariables[LaunchIdEnvironmentVariable] = launchId;
+        var args = BuildLaunchArgs(launchConfig, appId, scope, httpBaseUrl);
 
         return new LaunchConfiguration
         {
             ExePath = launchConfig.ExePath,
+            Args = [.. args],
             ArgsTemplate = launchConfig.ArgsTemplate,
             WorkingDirectory = launchConfig.WorkingDirectory,
             DedupeKeyTemplate = launchConfig.DedupeKeyTemplate,
@@ -438,7 +691,7 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
     private void CleanupExpiredLaunchRecords(DateTime now)
     {
         var expiredLaunchIds = _launchRecordsById.Values
-            .Where(record => ShouldRemoveLaunchRecord(record, now))
+            .Where(record => EvaluateLaunchRecordLifecycle(record, now))
             .Select(record => record.LaunchId)
             .ToList();
 
@@ -448,24 +701,18 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
         }
     }
 
-    private LaunchRecord? TryGetActiveDedupeRecord(string dedupeKey, DateTime now)
+    private LaunchRecord? TryGetActiveDedupeRecord(LaunchDedupeIdentity dedupeIdentity, DateTime now)
     {
         CleanupExpiredLaunchRecords(now);
 
-        if (!_dedupeRecords.TryGetValue(dedupeKey, out var record))
+        if (!_dedupeRecords.TryGetValue(dedupeIdentity, out var record))
         {
             return null;
         }
 
-        if (record.State != LaunchRecordState.Starting)
+        if (record.State == LaunchRecordState.Failed)
         {
             DeactivateDedupeRecord(record);
-            return null;
-        }
-
-        if (!IsLaunchStillInProgress(record))
-        {
-            RemoveLaunchRecordById(record.LaunchId);
             return null;
         }
 
@@ -486,28 +733,20 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
 
     private void DeactivateDedupeRecord(LaunchRecord record)
     {
-        if (_dedupeRecords.TryGetValue(record.DedupeKey, out var current) && current.LaunchId == record.LaunchId)
+        if (_dedupeRecords.TryGetValue(record.DedupeIdentity, out var current) && current.LaunchId == record.LaunchId)
         {
-            _dedupeRecords.Remove(record.DedupeKey);
+            _dedupeRecords.Remove(record.DedupeIdentity);
         }
     }
 
-    private static bool IsLaunchStillInProgress(LaunchRecord record)
+    private bool IsLaunchStillInProgress(LaunchRecord record)
     {
         if (!record.Pid.HasValue)
         {
             return true;
         }
 
-        try
-        {
-            using var process = Process.GetProcessById(record.Pid.Value);
-            return !process.HasExited;
-        }
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
-        {
-            return false;
-        }
+        return _processStatusProvider.IsProcessRunning(record.Pid.Value);
     }
 
     private static object BuildAppDefinitionNotFoundData(string appId, string scope)
@@ -519,14 +758,52 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
         };
     }
 
-    private bool ShouldRemoveLaunchRecord(LaunchRecord record, DateTime now)
+    private bool EvaluateLaunchRecordLifecycle(LaunchRecord record, DateTime now)
     {
         if (record.State == LaunchRecordState.Starting)
         {
-            return !IsLaunchStillInProgress(record);
+            if (!IsLaunchStillInProgress(record))
+            {
+                MarkLaunchFailed(
+                    record,
+                    ProcessExitedBeforeRegisterReason,
+                    BuildProcessExitedBeforeRegisterErrorData(record));
+                return false;
+            }
+
+            if (now >= record.RegisterDeadlineUtc)
+            {
+                MarkLaunchFailed(
+                    record,
+                    "launch_register_timeout",
+                    new { reason = "launch_register_timeout", launchId = record.LaunchId });
+            }
+
+            return false;
         }
 
         return now > record.CreatedAtUtc.AddSeconds(_runtimeTuningOptions.LaunchDedupeWindowSeconds);
+    }
+
+    private void MarkLaunchFailed(LaunchRecord record, string reason, object failureData)
+    {
+        if (record.State == LaunchRecordState.Failed
+            && string.Equals(record.FailureReason, reason, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        record.State = LaunchRecordState.Failed;
+        record.FailureReason = reason;
+        record.FailureData = failureData;
+        DeactivateDedupeRecord(record);
+        _logger.LogWarning(
+            "启动记录进入失败终态，LaunchId: {LaunchId}, AppId: {AppId}, Scope: {Scope}, Pid: {Pid}, Reason: {Reason}",
+            record.LaunchId,
+            record.AppId,
+            record.Scope,
+            record.Pid,
+            reason);
     }
 
     private static object BuildDefinitionScopeMismatchErrorData(
@@ -547,9 +824,21 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
         };
     }
 
+    private static object BuildProcessExitedBeforeRegisterErrorData(LaunchRecord record)
+    {
+        return new
+        {
+            reason = ProcessExitedBeforeRegisterReason,
+            launchId = record.LaunchId,
+            pid = record.Pid
+        };
+    }
+
     private sealed class LaunchRecord
     {
         public required string LaunchId { get; init; }
+
+        public required LaunchDedupeIdentity DedupeIdentity { get; init; }
 
         public required string DedupeKey { get; init; }
 
@@ -558,6 +847,8 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
         public required string Scope { get; init; }
 
         public required DateTime CreatedAtUtc { get; init; }
+
+        public required DateTime RegisterDeadlineUtc { get; init; }
 
         public required LaunchRecordState State { get; set; }
 
@@ -581,7 +872,20 @@ public class LaunchCoordinator : ILaunchRegistrationTracker
     {
         Registered,
         TimedOut,
-        ScopeMismatch
+        ScopeMismatch,
+        RegisterTimeout,
+        ProcessExitedBeforeRegister
+    }
+
+    private readonly record struct LaunchDedupeIdentity(string AppId, string Scope, string DedupeKey)
+    {
+        public static LaunchDedupeIdentity Create(string appId, string scope, string dedupeKey)
+        {
+            ProtocolIdentifier.EnsureAppId(appId, nameof(appId));
+            ScopeContract.EnsureScopedString(scope, nameof(scope));
+            ArgumentException.ThrowIfNullOrWhiteSpace(dedupeKey);
+            return new LaunchDedupeIdentity(appId, scope, dedupeKey);
+        }
     }
 }
 
@@ -611,6 +915,16 @@ public sealed class LaunchOperationResult
     public string? LaunchId { get; init; }
 
     /// <summary>
+    /// 解析后的启动去重键。
+    /// </summary>
+    public string? DedupeKey { get; init; }
+
+    /// <summary>
+    /// 已在线实例身份。
+    /// </summary>
+    public string? InstanceId { get; init; }
+
+    /// <summary>
     /// 错误码。
     /// </summary>
     public int? ErrorCode { get; init; }
@@ -628,14 +942,16 @@ public sealed class LaunchOperationResult
     /// <summary>
     /// 创建成功结果。
     /// </summary>
-    public static LaunchOperationResult CreateSuccess(string status, string launchId, int? pid)
+    public static LaunchOperationResult CreateSuccess(string status, string? launchId, int? pid, string? dedupeKey, string? instanceId)
     {
         return new LaunchOperationResult
         {
             Ok = true,
             Status = status,
             LaunchId = launchId,
-            Pid = pid
+            Pid = pid,
+            DedupeKey = dedupeKey,
+            InstanceId = instanceId
         };
     }
 

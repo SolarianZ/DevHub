@@ -1,0 +1,45 @@
+{
+  "id": "transport.http_content_type_charset_is_accepted",
+  "caseId": "CONF-008",
+  "description": "POST /rpc 必须接受 application/json charset 参数。",
+  "transport": "http",
+  "request": {
+    "kind": "raw.http",
+    "method": "POST",
+    "path": "/rpc",
+    "headers": {
+      "Content-Type": "application/json; charset=utf-8",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceRawHttp",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000201"
+    },
+    "body": {
+      "jsonrpc": "2.0",
+      "id": "transport-charset",
+      "method": "hub.ping",
+      "params": {}
+    }
+  },
+  "expectedResponse": {
+    "matchMode": "subset",
+    "phase": "http",
+    "outcome": "success",
+    "actual": {
+      "statusCode": 200,
+      "bodyJson": {
+        "jsonrpc": "2.0",
+        "id": "transport-charset",
+        "result": {
+          "ok": true,
+          "serverTimeUtc": "${ANY_ISO_UTC}"
+        }
+      }
+    }
+  },
+  "tags": [
+    "http",
+    "transport",
+    "content-type"
+  ]
+}

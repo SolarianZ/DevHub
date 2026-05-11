@@ -95,6 +95,7 @@ public sealed class DefinitionProvider : IDefinitionProvider
         return new LaunchConfiguration
         {
             ExePath = launch.ExePath,
+            Args = launch.Args is null ? null : [.. launch.Args],
             ArgsTemplate = launch.ArgsTemplate,
             WorkingDirectory = launch.WorkingDirectory,
             DedupeKeyTemplate = launch.DedupeKeyTemplate,

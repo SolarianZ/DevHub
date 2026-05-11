@@ -44,6 +44,7 @@ Node.js 文件系统相关的运行时值导入路径为 `@devhub/sdk-javascript
 - WebSocket 事件：覆盖鉴权、订阅、取消订阅与 `hub.event` 事件流。
 - 统一错误模型：`DevHubRpcError` 用于 JSON-RPC `error` 响应；`DevHubConnectionError` 用于超时、传输故障、非 `200` HTTP、非法响应和事件流终止等连接级失败。
 - 本地参数校验：对 `echo`、`args`、`meta`、`error.data` 等 JSON 载荷执行严格校验。
+- JSON-RPC request id：SDK 始终生成不透明字符串 `id`，不暴露自定义 numeric `id` 入口；解析响应时仅接受字符串或可被 JavaScript 安全表示的整数 `id`，并继续拒绝小数与非法范围值。
 - 闭集事件类型：公开 `DevHubEventType` 与 `SUPPORTED_EVENT_TYPES`，为 TypeScript 调用方提供编译期约束。
 - 运行时上下文：当调用方未显式提供 `clientSessionId` 时，同一 JavaScript 运行时上下文中的 `DevHubClient` 与 `DevHubEventsClient` 会复用同一个默认会话身份。
 - 已放弃请求本地维护：`DevHubEventsClient` 提供 `getAbandonedRequestCount(filter?)` 与 `clearAbandonedRequests(filter?)`，可按过滤器统计或清理本地已放弃请求记录。
@@ -147,10 +148,12 @@ try {
 - 底层 WebSocket 终止或重新认证失败后，当前活动读取器仍可排空终止前已经进入缓冲的事件；后续新的 `readEvents()` 调用会在重新认证成功前直接失败。
 - 上述“直接失败”对外表现为 `DevHubConnectionError`；连接正常终止时 `kind === "session_terminated"`，若事件流或响应包本身不合法，则返回 `kind === "invalid_response"`。
 - 重新执行 `authenticate()` 只会建立新的事件流代次，不会恢复旧订阅；恢复事件交付时需要再次调用 `subscribe()`。
+- `disconnect()` / `dispose()` 采用 best-effort 清理；调用 `socket.close(...)` 后，SDK 只等待 `close` 事件或内部 1 秒上限中的较早者，然后继续完成本地释放。
+- `requestTimeoutMs` 只约束请求-响应等待时间，不用于放大断连或释放阶段的等待上限。
 
 ### 6.2 定义与实例管理
 
-定义写接口只在 `DevHubClient` 上提供；实例密码是独立方法参数，不进入 `AppInstanceRegistration`、`AppInstance` 或事件 payload。列表查询同样必须显式提供 `scope`；如需查询全部作用域，只在 `listDefinitions` / `listInstances` 中传入 `null`。
+定义写接口只在 `DevHubClient` 上提供；`displayName` 必须是至少包含一个非空白字符的字符串。实例密码是独立方法参数，不进入 `AppInstanceRegistration`、`AppInstance` 或事件 payload。`AppInstanceRegistration` 的 TypeScript 类型与本地运行时校验都会拒绝把 `password` 或 `instanceSessionToken` 混入实例对象。Host 启动 App 时通过 `DEVHUB_LAUNCH_ID` 传入的启动标识，应通过 `registerInstance` 第三个参数中的 `launchId` 返回 Host，SDK 会将其放入 `hub.apps.registerInstance.params.launchId`。列表查询同样必须显式提供 `scope`；如需查询全部作用域，只在 `listDefinitions` / `listInstances` 中传入 `null`。
 
 ```ts
 const definition = {
@@ -174,7 +177,9 @@ const registered = await client.registerInstance({
   scope: "",
   pid: process.pid,
   invoke: { poll: true, respond: true }
-}, "sample-instance-secret");
+}, "sample-instance-secret", {
+  launchId: process.env.DEVHUB_LAUNCH_ID
+});
 
 const exactInstance = await client.getInstance("sample-inst-1");
 

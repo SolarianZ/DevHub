@@ -110,6 +110,7 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
 
         if (field === "enableLaunch" && value === false) {
           nextForm.launchExePath = "";
+          nextForm.launchArgs = "";
           nextForm.launchArgsTemplate = "";
           nextForm.launchWorkingDirectory = "";
           nextForm.launchDedupeKeyTemplate = "";
@@ -313,7 +314,7 @@ export function useDefinitionEditor(options: DefinitionEditorOptions) {
             saving: false,
             readOnly: true,
             missing: true,
-            emptyStateMessage: `实例 ${instance.instanceId} 对应的定义 ${formatDefinitionIdentity(identity)} 不存在或已被删除。`,
+            emptyStateMessage: `实例 ${instance.instanceId} 对应的定义 ${formatDefinitionIdentity(identity)} 不存在。该实例可在线路由；离线队列和自动启动需要精确 App Definition。`,
             submitError: null,
           });
         });

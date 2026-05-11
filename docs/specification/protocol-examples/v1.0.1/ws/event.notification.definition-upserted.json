@@ -11,7 +11,16 @@
       "definition": {
         "appId": "Sample.App",
         "scope": "Workspace-A.v2",
-        "displayName": "Sample App"
+        "displayName": "Sample App",
+        "launch": {
+          "exePath": "/opt/devhub-samples/sample-app",
+          "args": [
+            "--app",
+            "{appId}",
+            "--scope",
+            "{scopeOrGlobal}"
+          ]
+        }
       }
     }
   }

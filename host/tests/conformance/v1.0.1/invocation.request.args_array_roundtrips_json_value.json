@@ -1,0 +1,102 @@
+{
+  "id": "invocation.request.args_array_roundtrips_json_value",
+  "caseId": "CONF-004",
+  "description": "SDK request 的 args=array 必须原样投递给 callee。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "appId": "invoke.request.args-array",
+        "scopeEntry": {
+          "scope": "",
+          "displayName": "invoke.request.args-array"
+        }
+      }
+    ]
+  },
+  "orchestration": {
+    "beforeCaller": [
+      {
+        "action": "register_instance",
+        "password": "conformance-password",
+        "instance": {
+          "instanceId": "request-args-array-inst",
+          "appId": "invoke.request.args-array",
+          "scope": "",
+          "pid": 32205,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      }
+    ],
+    "duringCaller": [
+      {
+        "action": "poll_expect_invocation",
+        "instanceId": "request-args-array-inst",
+        "waitMs": 1500,
+        "expected": {
+          "appId": "invoke.request.args-array",
+          "method": "demo.request.args-array",
+          "kind": "request",
+          "args": [
+            "alpha",
+            2,
+            true,
+            null
+          ]
+        }
+      },
+      {
+        "action": "respond_value",
+        "instanceId": "request-args-array-inst",
+        "value": {
+          "handled": "array"
+        }
+      }
+    ]
+  },
+  "request": {
+    "kind": "sdk.request",
+    "clientId": "ConformanceRequestArgsArray",
+    "invokeRequest": {
+      "appId": "invoke.request.args-array",
+      "method": "demo.request.args-array",
+      "args": [
+        "alpha",
+        2,
+        true,
+        null
+      ],
+      "target": {
+        "scope": ""
+      },
+      "options": {
+        "ttlMs": 5000,
+        "waitTimeoutMs": 3000,
+        "queueIfOffline": false,
+        "autoLaunch": false
+      }
+    }
+  },
+  "expectedResponse": {
+    "phase": "sdk-invocation",
+    "operation": "request",
+    "outcome": "success",
+    "actual": {
+      "ok": true,
+      "invocationId": "${ANY_NON_EMPTY_STRING}",
+      "value": {
+        "handled": "array"
+      }
+    }
+  },
+  "tags": [
+    "invocation",
+    "request",
+    "args",
+    "json-value",
+    "sdk"
+  ]
+}

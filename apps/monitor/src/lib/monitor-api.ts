@@ -32,6 +32,7 @@ export function toSdkRuntimeConnectionInfo(
         leaseSeconds: connection.runtime.runtimeTuning.leaseSeconds,
         onlineThresholdSeconds: connection.runtime.runtimeTuning.onlineThresholdSeconds,
         launchDedupeWindowSeconds: connection.runtime.runtimeTuning.launchDedupeWindowSeconds,
+        launchRegisterTimeoutSeconds: connection.runtime.runtimeTuning.launchRegisterTimeoutSeconds,
       },
       hubVersion: connection.runtime.hubVersion ?? undefined,
     },

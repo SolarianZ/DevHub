@@ -1,4 +1,5 @@
 using DevHub.Sdk.Models;
+using Newtonsoft.Json.Linq;
 
 namespace DevHub.Sdk.UnitTests.Models;
 
@@ -45,9 +46,10 @@ public sealed class DevHubCalleeErrorTests
     }
 
     [Fact]
-    public void CalleeErrorCreate_WhenDataIsNotObject_ShouldThrowArgumentException()
+    public void CalleeErrorCreate_WhenDataIsScalar_ShouldPreserveJsonValue()
     {
-        Assert.Throws<ArgumentException>(() => DevHubCalleeError.Create(1001, "app_error", "boom"));
+        var exception = Assert.Throws<ArgumentException>(() => DevHubCalleeError.Create(1001, "app_error", "boom"));
+        Assert.Contains("JSON 对象", exception.Message, StringComparison.Ordinal);
     }
 
     private sealed class SampleErrorData

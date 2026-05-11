@@ -1,0 +1,68 @@
+{
+  "id": "invocation.poll.empty_queue_returns_server_time",
+  "caseId": "CONF-004",
+  "description": "HTTP 调用 hub.invoke.poll 且队列为空时，必须成功返回 ok/items/serverTimeUtc，并保留请求 id。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "appId": "invoke.poll.empty-queue",
+        "scopeEntry": {
+          "scope": "",
+          "displayName": "invoke.poll.empty-queue"
+        }
+      }
+    ],
+    "instances": [
+      {
+        "state": "registered",
+        "password": "conformance-password",
+        "instance": {
+          "instanceId": "invoke-poll-empty-queue-inst",
+          "appId": "invoke.poll.empty-queue",
+          "scope": "",
+          "pid": 32016,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      }
+    ]
+  },
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformancePoll",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000013"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "invoke-poll-empty-queue",
+    "method": "hub.invoke.poll",
+    "params": {
+      "instanceId": "invoke-poll-empty-queue-inst",
+      "instanceSessionToken": "${INSTANCE_SESSION_TOKEN_INVOKE_POLL_EMPTY_QUEUE_INST}",
+      "maxCount": 1,
+      "waitMs": 0
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "invoke-poll-empty-queue",
+    "result": {
+      "ok": true,
+      "serverTimeUtc": "${ANY_ISO_UTC}",
+      "items": []
+    }
+  },
+  "tags": [
+    "invocation",
+    "poll",
+    "http",
+    "server-time"
+  ]
+}

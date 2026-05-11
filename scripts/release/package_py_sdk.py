@@ -81,6 +81,10 @@ def package_py_sdk(options: PythonSdkPackageOptions) -> PythonSdkPackageResult:
     versions = {
         "pythonSdk": read_toml_version(PYTHON_SDK_DIR / "pyproject.toml"),
     }
+    python_env = {
+        # 优先导入当前仓库工作树中的 Python SDK，避免本机全局 editable install 污染发布验证。
+        "PYTHONPATH": str(PYTHON_SDK_DIR / "src"),
+    }
 
     if not options.skip_validation:
         run_logged_command(
@@ -89,6 +93,7 @@ def package_py_sdk(options: PythonSdkPackageOptions) -> PythonSdkPackageResult:
             cwd=REPO_ROOT,
             log_path=options.checks_dir / "python-install.log",
             validation_records=validation_records,
+            env_overrides=python_env,
         )
         run_logged_command(
             name="Python SDK tests",
@@ -96,6 +101,7 @@ def package_py_sdk(options: PythonSdkPackageOptions) -> PythonSdkPackageResult:
             cwd=REPO_ROOT,
             log_path=options.checks_dir / "python-tests.log",
             validation_records=validation_records,
+            env_overrides=python_env,
         )
 
     assets = []
@@ -131,6 +137,7 @@ def build_py_sdk_assets(
         cwd=REPO_ROOT,
         log_path=checks_dir / "python-build-backend.log",
         validation_records=validation_records,
+        env_overrides={"PYTHONPATH": str(PYTHON_SDK_DIR / "src")},
     )
     run_logged_command(
         name="Python SDK pack",
@@ -138,6 +145,7 @@ def build_py_sdk_assets(
         cwd=REPO_ROOT,
         log_path=checks_dir / "python-pack.log",
         validation_records=validation_records,
+        env_overrides={"PYTHONPATH": str(PYTHON_SDK_DIR / "src")},
     )
 
     return describe_release_assets(sorted(python_dir.glob("*")))

@@ -1,7 +1,9 @@
+import type { JsonValue } from "./models.js";
+
 export interface DevHubCalleeError {
   code: number;
   message: string;
-  data?: Record<string, unknown>;
+  data?: JsonValue;
 }
 
 export type DevHubConnectionErrorKind =
@@ -97,14 +99,10 @@ export class DevHubRpcError extends Error {
       return null;
     }
 
-    if ("data" in callee && callee.data !== undefined && !isRecord(callee.data)) {
-      return null;
-    }
-
     return {
       code: code as number,
       message,
-      data: isRecord(callee.data) ? callee.data : undefined
+      ...("data" in callee ? { data: callee.data as JsonValue } : {})
     };
   }
 

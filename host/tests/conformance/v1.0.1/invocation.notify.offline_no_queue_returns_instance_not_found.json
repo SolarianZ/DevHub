@@ -6,9 +6,8 @@
   "setup": {
     "definitions": [
       {
-        "fileName": "invoke.notify.no-queue--global.json",
-        "definition": {
-          "appId": "invoke.notify.no-queue",
+        "appId": "invoke.notify.no-queue",
+        "scopeEntry": {
           "scope": "",
           "displayName": "invoke.notify.no-queue"
         }

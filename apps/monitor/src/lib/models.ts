@@ -29,6 +29,7 @@ export interface MonitorRuntimeTuning {
   leaseSeconds: number;
   onlineThresholdSeconds: number;
   launchDedupeWindowSeconds: number;
+  launchRegisterTimeoutSeconds: number;
 }
 
 export interface MonitorHubRuntime {

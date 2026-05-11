@@ -83,11 +83,10 @@ internal sealed class HostTransportTestHarness : IDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(password);
 
         var appRegistry = _serviceProvider.GetRequiredService<AppRegistry>();
-        if (!appRegistry.TryRegisterInstance(instance, password, out _, out var instanceSessionToken, out var passwordMismatch))
+        if (!appRegistry.TryRegisterInstance(instance, password, out _, out var instanceSessionToken, out var validationStatus))
         {
-            throw new InvalidOperationException(passwordMismatch
-                ? $"测试夹具注册实例失败：instanceId={instance.InstanceId} 的 password 不匹配。"
-                : $"测试夹具注册实例失败：instanceId={instance.InstanceId}。");
+            throw new InvalidOperationException(
+                $"测试夹具注册实例失败：instanceId={instance.InstanceId}, status={validationStatus}。");
         }
 
         return instanceSessionToken;

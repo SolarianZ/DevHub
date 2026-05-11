@@ -15,7 +15,7 @@ using Moq;
 /// <summary>
 /// Host 使用的共享实例管理与调用链 RPC 处理器测试。
 /// </summary>
-[Trait("Category", "Spec")]
+[Trait("Category", "Impl")]
 public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
 {
     private readonly string _dataDirectory;
@@ -32,9 +32,8 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.8")]
-    public async Task Spec_6_3_8_AppInstancesRpcHandler_ShouldRegisterInstanceAndRejectPasswordMismatch()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_8_AppInstancesRpcHandler_ShouldRegisterInstanceAndRejectPasswordMismatch()
     {
         var eventPublisher = new Mock<IHubEventPublisher>();
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
@@ -111,9 +110,44 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.8")]
-    public async Task Spec_6_3_8_AppInstancesRpcHandler_WhenDefinitionManagedAppSelfRegistersToOtherScope_ShouldSucceedAndRemainVisible()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_8_AppInstancesRpcHandler_WhenTopLevelLaunchIdIsInvalid_ShouldReturnInvalidParams()
+    {
+        using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        var handler = CreateAppInstancesHandler(appRegistry);
+
+        var response = await handler.HandleAsync(
+            CreateRequest(
+                HubRpcMethods.HubAppsRegisterInstance,
+                "register-invalid-launch-id",
+                new
+                {
+                    password = "sample-password",
+                    launchId = " ",
+                    instance = new
+                    {
+                        instanceId = "instance.invalid.launch",
+                        appId = "instance.invalid.launch.app",
+                        scope = ScopeContract.Global,
+                        pid = 7203,
+                        invoke = new
+                        {
+                            poll = true,
+                            respond = true
+                        }
+                    }
+                }),
+            CancellationToken.None);
+
+        AssertError(response, -32602, "invalid_params", "register-invalid-launch-id");
+        var errorData = JsonSerializer.SerializeToElement(response.Error!.Data);
+        Assert.Equal("invalid_launch_id", errorData.GetProperty("reason").GetString());
+        Assert.Null(appRegistry.GetInstance("instance.invalid.launch"));
+    }
+
+    [Fact]
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_8_AppInstancesRpcHandler_WhenDefinitionManagedAppSelfRegistersToOtherScope_ShouldSucceedAndRemainVisible()
     {
         const string appId = "managed.scope.app";
         const string managedScope = "workspace-A";
@@ -195,9 +229,8 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.12")]
-    public async Task Spec_6_3_12_AppInstancesAndLaunch_WhenUntrackedRegistrationUsesDifferentScope_ShouldKeepLaunchWaiting()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_12_AppInstancesAndLaunch_WhenUntrackedRegistrationUsesDifferentScope_ShouldKeepLaunchWaiting()
     {
         const string appId = "managed.untracked.launch";
         const string launchScope = "workspace-A";
@@ -279,9 +312,184 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.8")]
-    public async Task Spec_6_3_8_AppInstancesAndLaunch_ShouldRejectScopeMismatchedLaunchBinding()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_8_AppInstancesAndLaunch_WhenTopLevelLaunchIdMatches_ShouldCompleteWaitingLaunch()
+    {
+        const string appId = "managed.bound.launch.success";
+        const string launchScope = "workspace-A";
+
+        WriteDefinition(appId, rpcEnabled: true, includeLaunch: true, definitionScope: launchScope);
+
+        using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        var definitionProvider = CreateDefinitionProvider();
+        var runtimeHttpBaseUrlProvider = new Mock<IRuntimeHttpBaseUrlProvider>();
+        runtimeHttpBaseUrlProvider.Setup(provider => provider.GetHttpBaseUrl()).Returns("http://127.0.0.1:57231");
+
+        var launchIdCaptured = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var processLauncher = new Mock<IProcessLauncher>();
+        processLauncher
+            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Callback<LaunchConfiguration, string?>((launchConfig, _) =>
+            {
+                launchIdCaptured.TrySetResult(GetRequiredLaunchId(launchConfig));
+            })
+            .Returns(Process.GetCurrentProcess());
+
+        var launchCoordinator = new LaunchCoordinator(
+            definitionProvider,
+            appRegistry,
+            runtimeHttpBaseUrlProvider.Object,
+            processLauncher.Object,
+            new SystemClock(),
+            Mock.Of<ILogger<LaunchCoordinator>>());
+        var launchHandler = new LaunchHandler(launchCoordinator, Mock.Of<ILogger<LaunchHandler>>());
+        var appInstancesHandler = CreateAppInstancesHandler(
+            appRegistry,
+            definitionProvider: definitionProvider,
+            launchRegistrationTracker: launchCoordinator);
+
+        var launchTask = launchHandler.HandleAsync(
+            CreateRequest(
+                HubRpcMethods.HubAppsLaunch,
+                "bound-launch-success",
+                new
+                {
+                    appId,
+                    scope = launchScope,
+                    waitForRegisterMs = 600
+                }),
+            CancellationToken.None);
+
+        var capturedLaunchId = await launchIdCaptured.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.False(string.IsNullOrWhiteSpace(capturedLaunchId));
+
+        var registerResponse = await appInstancesHandler.HandleAsync(
+            CreateRequest(
+                HubRpcMethods.HubAppsRegisterInstance,
+                "bound-register-success",
+                new
+                {
+                    password = "bound-success-password",
+                    launchId = capturedLaunchId,
+                    instance = new
+                    {
+                        instanceId = "bound.success.instance",
+                        appId,
+                        scope = launchScope,
+                        pid = 7312,
+                        invoke = new
+                        {
+                            poll = true,
+                            respond = true
+                        }
+                    }
+                }),
+            CancellationToken.None);
+
+        Assert.Null(registerResponse.Error);
+        var registerResult = JsonSerializer.SerializeToElement(registerResponse.Result);
+        Assert.True(registerResult.GetProperty("ok").GetBoolean());
+
+        var launchResponse = await launchTask;
+        Assert.Null(launchResponse.Error);
+        var launchResult = JsonSerializer.SerializeToElement(launchResponse.Result);
+        Assert.Equal("started", launchResult.GetProperty("status").GetString());
+        Assert.Equal(capturedLaunchId, launchResult.GetProperty("launchId").GetString());
+    }
+
+    [Fact]
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_8_AppInstancesAndLaunch_WhenMetaLaunchIdIsPresent_ShouldRemainUntracked()
+    {
+        const string appId = "managed.meta-launch-ignored";
+        const string launchScope = "workspace-A";
+        const string selfRegisteredScope = "workspace-B";
+
+        WriteDefinition(appId, rpcEnabled: true, includeLaunch: true, definitionScope: launchScope);
+
+        using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        var definitionProvider = CreateDefinitionProvider();
+        var runtimeHttpBaseUrlProvider = new Mock<IRuntimeHttpBaseUrlProvider>();
+        runtimeHttpBaseUrlProvider.Setup(provider => provider.GetHttpBaseUrl()).Returns("http://127.0.0.1:57231");
+
+        var launchIdCaptured = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var processLauncher = new Mock<IProcessLauncher>();
+        processLauncher
+            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Callback<LaunchConfiguration, string?>((launchConfig, _) =>
+            {
+                launchIdCaptured.TrySetResult(GetRequiredLaunchId(launchConfig));
+            })
+            .Returns(Process.GetCurrentProcess());
+
+        var launchCoordinator = new LaunchCoordinator(
+            definitionProvider,
+            appRegistry,
+            runtimeHttpBaseUrlProvider.Object,
+            processLauncher.Object,
+            new SystemClock(),
+            Mock.Of<ILogger<LaunchCoordinator>>());
+        var launchHandler = new LaunchHandler(launchCoordinator, Mock.Of<ILogger<LaunchHandler>>());
+        var appInstancesHandler = CreateAppInstancesHandler(
+            appRegistry,
+            definitionProvider: definitionProvider,
+            launchRegistrationTracker: launchCoordinator);
+
+        var launchTask = launchHandler.HandleAsync(
+            CreateRequest(
+                HubRpcMethods.HubAppsLaunch,
+                "meta-ignored-launch",
+                new
+                {
+                    appId,
+                    scope = launchScope,
+                    waitForRegisterMs = 250
+                }),
+            CancellationToken.None);
+
+        var capturedLaunchId = await launchIdCaptured.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.False(string.IsNullOrWhiteSpace(capturedLaunchId));
+
+        var registerResponse = await appInstancesHandler.HandleAsync(
+            CreateRequest(
+                HubRpcMethods.HubAppsRegisterInstance,
+                "meta-ignored-register",
+                new
+                {
+                    password = "meta-ignored-password",
+                    instance = new
+                    {
+                        instanceId = "meta.ignored.instance",
+                        appId,
+                        scope = selfRegisteredScope,
+                        pid = 7313,
+                        invoke = new
+                        {
+                            poll = true,
+                            respond = true
+                        },
+                        meta = new
+                        {
+                            launchId = capturedLaunchId
+                        }
+                    }
+                }),
+            CancellationToken.None);
+
+        Assert.Null(registerResponse.Error);
+        var registerResult = JsonSerializer.SerializeToElement(registerResponse.Result);
+        Assert.True(registerResult.GetProperty("ok").GetBoolean());
+        Assert.Equal(selfRegisteredScope, registerResult.GetProperty("instance").GetProperty("scope").GetString());
+
+        var launchResponse = await launchTask;
+        Assert.Null(launchResponse.Error);
+        var launchResult = JsonSerializer.SerializeToElement(launchResponse.Result);
+        Assert.Equal("starting", launchResult.GetProperty("status").GetString());
+    }
+
+    [Fact]
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_8_AppInstancesAndLaunch_ShouldRejectScopeMismatchedLaunchBinding()
     {
         const string appId = "managed.bound.launch";
         const string launchScope = "workspace-A";
@@ -295,13 +503,13 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
         var runtimeHttpBaseUrlProvider = new Mock<IRuntimeHttpBaseUrlProvider>();
         runtimeHttpBaseUrlProvider.Setup(provider => provider.GetHttpBaseUrl()).Returns("http://127.0.0.1:57231");
 
-        string? capturedLaunchId = null;
+        var launchIdCaptured = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         var processLauncher = new Mock<IProcessLauncher>();
         processLauncher
             .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
             .Callback<LaunchConfiguration, string?>((launchConfig, _) =>
             {
-                capturedLaunchId = launchConfig.EnvironmentVariables![LaunchCoordinator.LaunchIdEnvironmentVariable];
+                launchIdCaptured.TrySetResult(GetRequiredLaunchId(launchConfig));
             })
             .Returns(Process.GetCurrentProcess());
 
@@ -330,12 +538,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                 }),
             CancellationToken.None);
 
-        var waitDeadline = DateTime.UtcNow.AddSeconds(2);
-        while (capturedLaunchId is null && DateTime.UtcNow < waitDeadline)
-        {
-            await Task.Delay(10);
-        }
-
+        var capturedLaunchId = await launchIdCaptured.Task.WaitAsync(TimeSpan.FromSeconds(2));
         Assert.False(string.IsNullOrWhiteSpace(capturedLaunchId));
 
         var registerResponse = await appInstancesHandler.HandleAsync(
@@ -345,6 +548,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                 new
                 {
                     password = "bound-password",
+                    launchId = capturedLaunchId,
                     instance = new
                     {
                         instanceId = "bound.instance",
@@ -355,10 +559,6 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                         {
                             poll = true,
                             respond = true
-                        },
-                        meta = new
-                        {
-                            launchId = capturedLaunchId
                         }
                     }
                 }),
@@ -378,9 +578,8 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.9")]
-    public async Task Spec_6_3_9_AppInstancesRpcHandler_WhenHeartbeatUnknown_ShouldReturnInstanceNotFound()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_9_AppInstancesRpcHandler_WhenHeartbeatUnknown_ShouldReturnInstanceNotFound()
     {
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         var handler = CreateAppInstancesHandler(appRegistry);
@@ -403,9 +602,8 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.10")]
-    public async Task Spec_6_3_10_AppInstancesRpcHandler_ShouldUnregisterIdempotentlyAndGuardOwnershipToken()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_10_AppInstancesRpcHandler_ShouldUnregisterIdempotentlyAndGuardOwnershipToken()
     {
         var eventPublisher = new Mock<IHubEventPublisher>();
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
@@ -459,9 +657,8 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.11")]
-    public async Task Spec_6_3_11_AppInstancesRpcHandler_GetInstance_ShouldReturnRetainedSnapshotWithoutRefreshingLastSeen()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_11A_AppInstancesRpcHandler_GetInstance_ShouldReturnRetainedSnapshotWithoutRefreshingLastSeen()
     {
         var clock = new SequenceClock(
             new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
@@ -497,9 +694,8 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.11")]
-    public async Task Spec_6_3_11_AppInstancesRpcHandler_ListInstances_ShouldValidateParamsAndHonorExplicitScopeFilters()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_11_AppInstancesRpcHandler_ListInstances_ShouldValidateParamsAndHonorExplicitScopeFilters()
     {
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         RegisterInstance(appRegistry, "list.app", "global.instance");
@@ -542,10 +738,8 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.13")]
-    [Trait("SpecRef", "6.3.14")]
-    public async Task Spec_6_3_13_And_6_3_14_InvocationRpcHandler_ShouldValidateNotifyTargetsAndMapRouteErrors()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_13_InvocationRpcHandler_ShouldValidateNotifyTargetsAndMapRouteErrors()
     {
         WriteDefinition("notify.rpc-disabled", rpcEnabled: false);
         WriteDefinition("notify.route-errors", rpcEnabled: true);
@@ -640,10 +834,8 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.13")]
-    [Trait("SpecRef", "6.3.15")]
-    public async Task Spec_6_3_13_And_6_3_15_InvocationRpcHandler_NotifyAndPoll_ShouldDeliverQueuedInvocation()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_13_And_6_3_15_InvocationRpcHandler_NotifyAndPoll_ShouldDeliverQueuedInvocation()
     {
         WriteDefinition("notify.success", rpcEnabled: true);
 
@@ -710,10 +902,8 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.14")]
-    [Trait("SpecRef", "6.3.16")]
-    public async Task Spec_6_3_14_And_6_3_16_InvocationRpcHandler_Request_ShouldReturnValueAfterPollAndRespond()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_14_And_6_3_15_And_6_3_16_InvocationRpcHandler_Request_ShouldReturnValueAfterPollAndRespond()
     {
         WriteDefinition("request.success", rpcEnabled: true);
 
@@ -760,6 +950,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
 
         var item = Assert.Single(JsonSerializer.SerializeToElement(pollResponse.Result).GetProperty("items").EnumerateArray());
         var invocationId = item.GetProperty("invocationId").GetString();
+        var leaseToken = item.GetProperty("delivery").GetProperty("leaseToken").GetString();
 
         var respondResponse = await context.Handler.HandleAsync(
             CreateRequest(
@@ -770,6 +961,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                     instanceId = "request.instance",
                     instanceSessionToken = requestToken,
                     invocationId,
+                    leaseToken,
                     value = new
                     {
                         ok = true,
@@ -792,9 +984,8 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.14")]
-    public async Task Spec_6_3_14_InvocationRpcHandler_Request_WhenCalleeReturnsError_ShouldMapInvocationFailed()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_14_InvocationRpcHandler_Request_WhenCalleeReturnsError_ShouldMapInvocationFailed()
     {
         WriteDefinition("request.failed", rpcEnabled: true);
 
@@ -839,9 +1030,9 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                 }),
             CancellationToken.None);
 
-        var invocationId = Assert.Single(JsonSerializer.SerializeToElement(pollResponse.Result).GetProperty("items").EnumerateArray())
-            .GetProperty("invocationId")
-            .GetString();
+        var item = Assert.Single(JsonSerializer.SerializeToElement(pollResponse.Result).GetProperty("items").EnumerateArray());
+        var invocationId = item.GetProperty("invocationId").GetString();
+        var leaseToken = item.GetProperty("delivery").GetProperty("leaseToken").GetString();
 
         await context.Handler.HandleAsync(
             CreateRequest(
@@ -852,6 +1043,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                     instanceId = "request.failed.instance",
                     instanceSessionToken = requestFailedToken,
                     invocationId,
+                    leaseToken,
                     error = new
                     {
                         code = 1001,
@@ -878,13 +1070,12 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.14")]
-    public async Task Spec_6_3_14_InvocationRpcHandler_Request_WhenWaitTimeoutElapses_ShouldReturnInvocationTimeout()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_14_InvocationRpcHandler_Request_WhenWaitTimeoutElapses_ShouldReturnInvocationTimeout()
     {
         WriteDefinition("request.timeout", rpcEnabled: true);
 
-        var clock = new SequenceClock(DateTime.UtcNow, TimeSpan.FromMilliseconds(600));
+        var clock = new SequenceClock(new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), TimeSpan.FromMilliseconds(600));
         using var appRegistry = new AppRegistry(clock, Mock.Of<ILogger<AppRegistry>>());
         using var context = CreateInvocationHandlerContext(appRegistry, clock: clock);
 
@@ -916,13 +1107,12 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.14")]
-    public async Task Spec_6_3_14_InvocationRpcHandler_Request_WhenWaitTimeoutEqualsTtl_ShouldPreferInvocationExpired()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_14_InvocationRpcHandler_Request_WhenWaitTimeoutEqualsTtl_ShouldPreferInvocationExpired()
     {
         WriteDefinition("request.expired", rpcEnabled: true);
 
-        var clock = new SequenceClock(DateTime.UtcNow, TimeSpan.FromMilliseconds(1));
+        var clock = new SequenceClock(new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), TimeSpan.FromMilliseconds(1));
         using var appRegistry = new AppRegistry(clock, Mock.Of<ILogger<AppRegistry>>());
         using var context = CreateInvocationHandlerContext(appRegistry, clock: clock);
 
@@ -953,9 +1143,8 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.15")]
-    public async Task Spec_6_3_15_InvocationRpcHandler_Poll_ShouldRejectUnknownOrUnauthorizedInstances()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_15_InvocationRpcHandler_Poll_ShouldRejectUnknownOrUnauthorizedInstances()
     {
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         var pollDisabledToken = RegisterInstance(appRegistry, "poll.app", "poll.disabled", poll: false);
@@ -992,9 +1181,8 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.16")]
-    public async Task Spec_6_3_16_InvocationRpcHandler_Respond_ShouldRejectInvalidPayloadsUnauthorizedInstancesAndDeliveryConflict()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_16_InvocationRpcHandler_Respond_ShouldRejectInvalidPayloadsUnauthorizedInstancesAndDeliveryConflict()
     {
         WriteDefinition("respond.conflict", rpcEnabled: true);
 
@@ -1029,6 +1217,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                     instanceId = "respond.disabled",
                     instanceSessionToken = respondDisabledToken,
                     invocationId = "invk-any",
+                    leaseToken = "missing-lease-token",
                     value = new { ok = true }
                 }),
             CancellationToken.None);
@@ -1045,6 +1234,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                     instanceId = "holder.instance",
                     instanceSessionToken = holderToken,
                     invocationId = "invk-unknown",
+                    leaseToken = "missing-lease-token",
                     value = new { ok = true }
                 }),
             CancellationToken.None);
@@ -1078,7 +1268,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
 
         var invocationId = JsonSerializer.SerializeToElement(notifyResponse.Result).GetProperty("invocationId").GetString();
 
-        await context.Handler.HandleAsync(
+        var pollResponse = await context.Handler.HandleAsync(
             CreateRequest(
                 HubRpcMethods.HubInvokePoll,
                 "poll-for-conflict",
@@ -1090,6 +1280,10 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                     waitMs = 0
                 }),
             CancellationToken.None);
+        var leaseToken = Assert.Single(JsonSerializer.SerializeToElement(pollResponse.Result).GetProperty("items").EnumerateArray())
+            .GetProperty("delivery")
+            .GetProperty("leaseToken")
+            .GetString();
 
         var conflictResponse = await context.Handler.HandleAsync(
             CreateRequest(
@@ -1100,6 +1294,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
                     instanceId = "other.instance",
                     instanceSessionToken = otherToken,
                     invocationId,
+                    leaseToken,
                     value = new { ok = true }
                 }),
             CancellationToken.None);
@@ -1159,7 +1354,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
     {
         var effectiveClock = clock ?? new SystemClock();
         var effectiveRuntimeTuningOptions = runtimeTuningOptions ?? RuntimeTuningOptions.Default;
-        var definitionLoader = new DefinitionLoader(_definitionsDirectory, Mock.Of<ILogger<DefinitionLoader>>());
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory), Mock.Of<ILogger<DefinitionLoader>>());
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
 
@@ -1197,7 +1392,7 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
 
     private DefinitionProvider CreateDefinitionProvider()
     {
-        var definitionLoader = new DefinitionLoader(_definitionsDirectory, Mock.Of<ILogger<DefinitionLoader>>());
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory), Mock.Of<ILogger<DefinitionLoader>>());
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         return definitionProvider;
@@ -1227,8 +1422,8 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
             };
         }
 
-        File.WriteAllText(
-            Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, normalizedScope).GetFileName()),
+        DefinitionCatalogTestHelper.UpsertDefinition(
+            DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory),
             JsonSerializer.Serialize(payload));
     }
 
@@ -1280,6 +1475,18 @@ public sealed class AppInstancesAndInvocationRpcHandlerTests : IDisposable
             ClientId = clientId,
             ClientSessionId = clientSessionId
         };
+    }
+
+    private static string GetRequiredLaunchId(LaunchConfiguration launchConfiguration)
+    {
+        Assert.NotNull(launchConfiguration.EnvironmentVariables);
+        var hasLaunchId = launchConfiguration.EnvironmentVariables.TryGetValue(
+            LaunchCoordinator.LaunchIdEnvironmentVariable,
+            out var launchId);
+        Assert.True(hasLaunchId, $"Launch configuration did not contain '{LaunchCoordinator.LaunchIdEnvironmentVariable}'.");
+        Assert.False(string.IsNullOrWhiteSpace(launchId));
+
+        return launchId;
     }
 
     private static void AssertError(JsonRpcResponse response, int code, string message, object id)

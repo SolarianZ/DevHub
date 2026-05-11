@@ -183,8 +183,7 @@ public sealed class DevHubHostFixtureTests
 
         Assert.True(Directory.Exists(host.DataDirectory));
         Assert.True(Directory.Exists(host.RuntimeDirectory));
-        Assert.True(Directory.Exists(host.DefinitionsDirectory));
-        Assert.True(Directory.Exists(host.InstancesDirectory));
+        Assert.True(Directory.Exists(host.AppsDirectory));
         Assert.True(Directory.Exists(host.LogsDirectory));
 
         var hubJsonPath = Path.Combine(host.RuntimeDirectory, "hub.json");
@@ -201,7 +200,7 @@ public sealed class DevHubHostFixtureTests
     }
 
     [Fact]
-    public async Task Impl_HostFixture_WhenWritingDefinitions_ShouldUseCanonicalScopeKeyFilenames()
+    public async Task Impl_HostFixture_WhenWritingDefinitions_ShouldPersistSingleCatalogByAppIdAndScope()
     {
         await using var host = await DevHubHostFixture.StartAsync();
 
@@ -224,9 +223,53 @@ public sealed class DevHubHostFixtureTests
             DisplayName = "fixture.scope.app.workspace-a"
         });
 
-        Assert.True(File.Exists(Path.Combine(host.DefinitionsDirectory, "fixture.scope.app--global.json")));
-        Assert.True(File.Exists(Path.Combine(host.DefinitionsDirectory, "fixture.scope.app--scope-global.json")));
-        Assert.True(File.Exists(Path.Combine(host.DefinitionsDirectory, "fixture.scope.app--scope-workspace.a.json")));
+        Assert.True(File.Exists(host.DefinitionsCatalogPath));
+
+        using var catalog = JsonDocument.Parse(await File.ReadAllTextAsync(host.DefinitionsCatalogPath));
+        Assert.Equal(1, catalog.RootElement.GetProperty("version").GetInt32());
+
+        var persistedDefinitions = catalog.RootElement.GetProperty("definitions").EnumerateArray().ToArray();
+        Assert.Equal(3, persistedDefinitions.Length);
+        Assert.Contains(persistedDefinitions, item =>
+            item.GetProperty("appId").GetString() == "fixture.scope.app" &&
+            item.GetProperty("scope").GetString() == string.Empty &&
+            item.GetProperty("displayName").GetString() == "fixture.scope.app.global");
+        Assert.Contains(persistedDefinitions, item =>
+            item.GetProperty("appId").GetString() == "fixture.scope.app" &&
+            item.GetProperty("scope").GetString() == "global" &&
+            item.GetProperty("displayName").GetString() == "fixture.scope.app.literal-global");
+        Assert.Contains(persistedDefinitions, item =>
+            item.GetProperty("appId").GetString() == "fixture.scope.app" &&
+            item.GetProperty("scope").GetString() == "workspace.a" &&
+            item.GetProperty("displayName").GetString() == "fixture.scope.app.workspace-a");
+
+        await using var client = await host.CreateClientAsync("fixture-scope-client");
+        var definitions = await client.ListDefinitionsAsync(new ListDefinitionsRequest
+        {
+            AppId = "fixture.scope.app",
+            Scope = null
+        });
+
+        Assert.Collection(
+            definitions.OrderBy(static item => item.Scope, StringComparer.Ordinal),
+            item =>
+            {
+                Assert.Equal("fixture.scope.app", item.AppId);
+                Assert.Equal(string.Empty, item.Scope);
+                Assert.Equal("fixture.scope.app.global", item.DisplayName);
+            },
+            item =>
+            {
+                Assert.Equal("fixture.scope.app", item.AppId);
+                Assert.Equal("global", item.Scope);
+                Assert.Equal("fixture.scope.app.literal-global", item.DisplayName);
+            },
+            item =>
+            {
+                Assert.Equal("fixture.scope.app", item.AppId);
+                Assert.Equal("workspace.a", item.Scope);
+                Assert.Equal("fixture.scope.app.workspace-a", item.DisplayName);
+            });
     }
 
     [Fact]

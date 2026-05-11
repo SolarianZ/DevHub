@@ -135,8 +135,8 @@ public sealed class JsonRpcHttpTransport : IDevHubHttpTransport
         requestMessage.Content = new StringContent(payload, Encoding.UTF8, "application/json");
 
         using var linkedCts = CreateLinkedTokenSource(cancellationToken);
-        using var responseMessage = await _httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, linkedCts.Token);
-        var body = await CompatibilityIo.ReadAsStringAsync(responseMessage.Content, linkedCts.Token);
+        using var responseMessage = await _httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, linkedCts.Token).ConfigureAwait(false);
+        var body = await CompatibilityIo.ReadAsStringAsync(responseMessage.Content, linkedCts.Token).ConfigureAwait(false);
 
         if (!responseMessage.IsSuccessStatusCode)
         {
@@ -185,17 +185,32 @@ public sealed class JsonRpcHttpTransport : IDevHubHttpTransport
             throw new InvalidOperationException("JSON-RPC 响应的 jsonrpc 版本非法。");
         }
 
-        var responseId = ReadResponseId(root);
-        if (!string.Equals(responseId, requestId, StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException("JSON-RPC 响应的 id 与请求不匹配。");
-        }
-
         var hasResult = root.TryGetValue("result", out var resultToken);
         var hasError = root.TryGetValue("error", out var errorToken) && errorToken.Type != JTokenType.Null;
         if (hasResult == hasError)
         {
             throw new InvalidOperationException("JSON-RPC 响应必须且只能包含 result 或 error。");
+        }
+
+        if (!root.TryGetValue("id", out var idToken))
+        {
+            throw new InvalidOperationException("JSON-RPC 响应缺少 id 字段。");
+        }
+
+        if (idToken.Type == JTokenType.Null)
+        {
+            if (!hasError)
+            {
+                throw new InvalidOperationException("JSON-RPC 响应的 id 类型非法。");
+            }
+
+            ThrowRpcException(errorToken!, requestId);
+        }
+
+        var responseId = ReadResponseId(root);
+        if (!string.Equals(responseId, requestId, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("JSON-RPC 响应的 id 与请求不匹配。");
         }
 
         if (hasError)
@@ -213,18 +228,34 @@ public sealed class JsonRpcHttpTransport : IDevHubHttpTransport
 
     private static string ReadResponseId(JObject root)
     {
-        if (!root.TryGetValue("id", out var idToken))
-        {
-            throw new InvalidOperationException("JSON-RPC 响应缺少 id 字段。");
-        }
+        var idToken = root["id"]!;
 
         return idToken.Type switch
         {
             JTokenType.String => (string?)idToken ?? string.Empty,
-            JTokenType.Integer => Convert.ToString(((JValue)idToken).Value, CultureInfo.InvariantCulture) ?? string.Empty,
-            JTokenType.Float => Convert.ToString(((JValue)idToken).Value, CultureInfo.InvariantCulture) ?? string.Empty,
+            JTokenType.Integer => ReadSupportedNumericId(idToken, "JSON-RPC 响应"),
             _ => throw new InvalidOperationException("JSON-RPC 响应的 id 类型非法。")
         };
+    }
+
+    private static string ReadSupportedNumericId(JToken idToken, string location)
+    {
+        if (idToken is JValue valueToken)
+        {
+            switch (valueToken.Value)
+            {
+                case long longValue:
+                    return longValue.ToString(CultureInfo.InvariantCulture);
+                case int intValue:
+                    return intValue.ToString(CultureInfo.InvariantCulture);
+                case short shortValue:
+                    return shortValue.ToString(CultureInfo.InvariantCulture);
+                case byte byteValue:
+                    return byteValue.ToString(CultureInfo.InvariantCulture);
+            }
+        }
+
+        throw new InvalidOperationException($"{location} 的 id 数值非法：必须为 Int64 范围内整数。");
     }
 
     private static void ThrowRpcException(JToken errorToken, string requestId)
@@ -253,7 +284,7 @@ public sealed class JsonRpcHttpTransport : IDevHubHttpTransport
         JToken? data = null;
         if (errorObject.TryGetValue("data", out var dataToken))
         {
-            if (dataToken.Type != JTokenType.Object)
+            if (dataToken.Type != JTokenType.Object && dataToken.Type != JTokenType.Null)
             {
                 throw new InvalidOperationException("JSON-RPC error.data 非法。");
             }

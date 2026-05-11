@@ -11,6 +11,7 @@ public sealed class AppDefinition
 {
     private string _appId = string.Empty;
     private string _scope = string.Empty;
+    private string? _displayName;
 
     /// <summary>
     /// 应用标识。
@@ -36,7 +37,11 @@ public sealed class AppDefinition
     /// 显示名称。
     /// </summary>
     [JsonProperty("displayName")]
-    public string DisplayName { get; set; } = string.Empty;
+    public string DisplayName
+    {
+        get => EnsureNonWhitespaceString(_displayName, nameof(DisplayName));
+        set => _displayName = EnsureNonWhitespaceString(value, nameof(DisplayName));
+    }
 
     /// <summary>
     /// 应用描述。
@@ -55,6 +60,16 @@ public sealed class AppDefinition
     /// </summary>
     [JsonProperty("launch", NullValueHandling = NullValueHandling.Ignore)]
     public LaunchConfiguration? Launch { get; set; }
+
+    private static string EnsureNonWhitespaceString(string? value, string propertyName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new ArgumentException($"{propertyName} 不能为空白字符串。", propertyName);
+        }
+
+        return value;
+    }
 }
 
 /// <summary>
@@ -85,6 +100,12 @@ public sealed class LaunchConfiguration
     /// </summary>
     [JsonProperty("exePath", NullValueHandling = NullValueHandling.Ignore)]
     public string? ExePath { get; set; }
+
+    /// <summary>
+    /// 结构化启动参数。
+    /// </summary>
+    [JsonProperty("args", NullValueHandling = NullValueHandling.Ignore)]
+    public List<string>? Args { get; set; }
 
     /// <summary>
     /// 参数模板。
@@ -163,7 +184,7 @@ public sealed class AppInstance
     private string _scope = string.Empty;
 
     /// <summary>
-    /// 实例标识。
+    /// Hub 注册表内全局唯一的实例标识，长度不超过 256。
     /// </summary>
     [JsonProperty("instanceId")]
     public string InstanceId
@@ -300,7 +321,7 @@ public sealed class AppInstanceRegistration
     private string _scope = string.Empty;
 
     /// <summary>
-    /// 实例标识。
+    /// Hub 注册表内全局唯一的实例标识，长度不超过 256。同一 instanceId 重注册时必须保持相同 appId 与 scope。
     /// </summary>
     [JsonProperty("instanceId")]
     public string InstanceId
@@ -442,4 +463,10 @@ public sealed class HubRuntimeTuning
     /// </summary>
     [JsonProperty("launchDedupeWindowSeconds")]
     public int LaunchDedupeWindowSeconds { get; set; }
+
+    /// <summary>
+    /// 启动注册截止时间秒数。
+    /// </summary>
+    [JsonProperty("launchRegisterTimeoutSeconds")]
+    public int LaunchRegisterTimeoutSeconds { get; set; }
 }

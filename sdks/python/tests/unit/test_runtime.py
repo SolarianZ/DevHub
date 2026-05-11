@@ -25,6 +25,23 @@ def test_runtime_discovery_with_valid_hub_json_should_read_token_file(tmp_path: 
     assert connection_info.runtime.token_file == str(token_file)
 
 
+@pytest.mark.parametrize("ws_url", ["ws://localhost:47231/ws", "wss://127.0.0.2:47231/ws", "ws://[::1]:47231/ws"])
+def test_runtime_discovery_with_fixed_loopback_ws_url_should_preserve_published_url(
+    tmp_path: Path,
+    ws_url: str,
+) -> None:
+    data_dir, runtime_dir, token_file = _create_data_directory(tmp_path)
+    token_file.write_text("token-1", encoding="utf-8")
+    payload = _hub_payload(token_file)
+    payload["wsUrl"] = ws_url
+    (runtime_dir / "hub.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    connection_info = discover_runtime(DevHubClientOptions(client_id="unit-test-client", data_dir=str(data_dir)))
+
+    assert connection_info.runtime.ws_url == ws_url
+    assert connection_info.websocket_endpoint == ws_url
+
+
 def test_runtime_discovery_should_return_immutable_connection_info(tmp_path: Path) -> None:
     data_dir, runtime_dir, token_file = _create_data_directory(tmp_path)
     token_file.write_text("token-immutable", encoding="utf-8")
@@ -175,7 +192,8 @@ def test_runtime_discovery_when_hub_json_contains_non_standard_json_constant_sho
                 '  "runtimeTuning": {',
                 '    "leaseSeconds": 30,',
                 '    "onlineThresholdSeconds": 30,',
-                '    "launchDedupeWindowSeconds": 30',
+                '    "launchDedupeWindowSeconds": 30,',
+                '    "launchRegisterTimeoutSeconds": 30',
                 "  },",
                 '  "extra": NaN',
                 "}",
@@ -221,11 +239,43 @@ def test_runtime_discovery_when_optional_hub_version_is_null_should_raise(tmp_pa
         discover_runtime(DevHubClientOptions(client_id="unit-test-client", data_dir=str(data_dir)))
 
 
+def test_runtime_discovery_when_launch_register_timeout_seconds_missing_should_raise(tmp_path: Path) -> None:
+    data_dir, runtime_dir, token_file = _create_data_directory(tmp_path)
+    token_file.write_text("token-1", encoding="utf-8")
+    payload = _hub_payload(token_file)
+    runtime_tuning = payload["runtimeTuning"]
+    assert isinstance(runtime_tuning, dict)
+    runtime_tuning.pop("launchRegisterTimeoutSeconds")
+    (runtime_dir / "hub.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="runtimeTuning"):
+        discover_runtime(DevHubClientOptions(client_id="unit-test-client", data_dir=str(data_dir)))
+
+
 @pytest.mark.parametrize(
     ("property_name", "value"),
     [
         ("httpBaseUrl", "http://127.0.0.1:47231/"),
+        ("httpBaseUrl", "http://user@127.0.0.1:47231"),
+        ("httpBaseUrl", "http://user:password@127.0.0.1:47231"),
+        ("httpBaseUrl", "http://127.0.0.1:47231/rpc"),
+        ("httpBaseUrl", " http://127.0.0.1:47231"),
+        ("httpBaseUrl", "http://127.0.0.1:47231 "),
+        ("httpBaseUrl", "http://127.0.0.1:47231?rpc=1"),
+        ("httpBaseUrl", "http://127.0.0.1:47231#rpc"),
         ("httpBaseUrl", "http://192.168.1.10:47231"),
+        ("wsUrl", "ws://127.0.0.1:47231"),
+        ("wsUrl", "ws://127.0.0.1:47231/events"),
+        ("wsUrl", " ws://127.0.0.1:47231/ws"),
+        ("wsUrl", "ws://127.0.0.1:47231/ws "),
+        ("wsUrl", "ws://127.0.0.1:47231/ws?"),
+        ("wsUrl", "ws://127.0.0.1:47231/ws?debug=true"),
+        ("wsUrl", "ws://127.0.0.1:47231/ws#"),
+        ("wsUrl", "ws://127.0.0.1:47231/ws#events"),
+        ("wsUrl", "ws://@127.0.0.1:47231/ws"),
+        ("wsUrl", "ws://user@127.0.0.1:47231/ws"),
+        ("wsUrl", "ws://user:password@127.0.0.1:47231/ws"),
+        ("wsUrl", "http://127.0.0.1:47231/ws"),
         ("wsUrl", "ws://127.0.0.1:47231/ws/"),
         ("wsUrl", "ws://example.com:47231/ws"),
     ],
@@ -301,5 +351,6 @@ def _hub_payload(token_file: Path) -> dict[str, object]:
             "leaseSeconds": 30,
             "onlineThresholdSeconds": 30,
             "launchDedupeWindowSeconds": 30,
+            "launchRegisterTimeoutSeconds": 30,
         },
     }

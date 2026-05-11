@@ -11,15 +11,15 @@ import uuid
 
 from tests.blackbox.test_base import (
     DiscoveryService,
+    delete_definitions,
     RpcAssertions,
     RpcClient,
     TestResult,
     build_app_definition,
-    build_definition_file_name,
     build_definition_identity_params,
-    get_definitions_dir,
+    get_definitions_catalog_path,
     safe_remove,
-    write_app_definition,
+    upsert_app_definition,
 )
 
 
@@ -33,8 +33,8 @@ class TestAppDefinitions(unittest.TestCase):
     def create_test_app_definition(self):
         """创建测试应用程序定义"""
         app_id = self._new_app_id("test-app")
-        test_app_path = write_app_definition(
-            app_id,
+        definition = build_app_definition(
+            app_id=app_id,
             display_name="Test Application",
             description="This is a test application",
             rpc=True,
@@ -44,18 +44,20 @@ class TestAppDefinitions(unittest.TestCase):
                 "argsTemplate": "Hello from Test Application",
             },
         )
-        return app_id, test_app_path
+        return app_id, definition
 
     def test_list_definitions(self):
         """测试列出所有应用程序定义"""
         result = TestResult("测试列出所有应用程序定义")
-        test_app_path = None
 
         try:
-            app_id, test_app_path = self.create_test_app_definition()
-
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
+            app_id, definition = self.create_test_app_definition()
+
+            upsert_response = client.upsert_definition(definition)
+            if not RpcAssertions.expect_success(result, upsert_response, ["definition"]):
+                return result
 
             response = client.call("hub.apps.listDefinitions", {"scope": None})
             if not RpcAssertions.expect_success(result, response, ["definitions"]):
@@ -75,20 +77,26 @@ class TestAppDefinitions(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            safe_remove(test_app_path)
+            try:
+                if "client" in locals() and "app_id" in locals():
+                    client.delete_definition(app_id)
+            except Exception:
+                pass
 
         return result
 
     def test_get_definition(self):
         """测试获取单个应用程序定义"""
         result = TestResult("测试获取单个应用程序定义")
-        test_app_path = None
 
         try:
-            app_id, test_app_path = self.create_test_app_definition()
-
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
+            app_id, definition = self.create_test_app_definition()
+
+            upsert_response = client.upsert_definition(definition)
+            if not RpcAssertions.expect_success(result, upsert_response, ["definition"]):
+                return result
 
             response = client.call("hub.apps.getDefinition", build_definition_identity_params(app_id))
             if not RpcAssertions.expect_success(result, response, ["definition"]):
@@ -106,7 +114,11 @@ class TestAppDefinitions(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            safe_remove(test_app_path)
+            try:
+                if "client" in locals() and "app_id" in locals():
+                    client.delete_definition(app_id)
+            except Exception:
+                pass
 
         return result
 
@@ -144,12 +156,9 @@ class TestAppDefinitions(unittest.TestCase):
         result = TestResult("测试无效格式的应用程序定义文件")
 
         try:
-            definitions_dir = get_definitions_dir()
             invalid_app_id = f"invalid-app-{uuid.uuid4().hex[:8]}"
-            invalid_filename = build_definition_file_name(invalid_app_id)
-            invalid_app_path = os.path.join(definitions_dir, invalid_filename)
+            invalid_app_path = get_definitions_catalog_path()
 
-            # 缺少 appId/displayName
             with open(invalid_app_path, "w", encoding="utf-8") as f:
                 f.write('{"invalid_field": "value"}')
 
@@ -180,16 +189,30 @@ class TestAppDefinitions(unittest.TestCase):
         result = TestResult("测试应用程序定义 appId 格式验证")
 
         try:
-            definitions_dir = get_definitions_dir()
             invalid_app_id = f"invalid app id {uuid.uuid4().hex[:6]}"
-            invalid_app_path = os.path.join(definitions_dir, build_definition_file_name(invalid_app_id))
+            invalid_app_path = get_definitions_catalog_path()
             invalid_app = build_app_definition(
                 invalid_app_id,
                 display_name="Invalid AppId Application",
             )
 
             with open(invalid_app_path, "w", encoding="utf-8") as f:
-                json.dump(invalid_app, f, ensure_ascii=False, indent=2)
+                json.dump(
+                    {
+                        "version": 1,
+                        "definitions": [
+                            {
+                                "appId": invalid_app_id,
+                                "scope": "",
+                                "displayName": invalid_app["displayName"],
+                                "capabilities": invalid_app["capabilities"],
+                            }
+                        ],
+                    },
+                    f,
+                    ensure_ascii=False,
+                    indent=2,
+                )
 
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
@@ -213,21 +236,30 @@ class TestAppDefinitions(unittest.TestCase):
 
         return result
 
-    def test_definition_filename_must_match_appid(self):
-        """测试文件名与 appId 不一致时应被忽略"""
-        result = TestResult("测试文件名与 appId 不一致时应被忽略")
+    def test_invalid_catalog_envelope_should_be_ignored(self):
+        """测试无效 catalog 顶层结构会被整体忽略"""
+        result = TestResult("测试无效 catalog 顶层结构会被整体忽略")
 
         try:
-            definitions_dir = get_definitions_dir()
-            mismatch_path = os.path.join(definitions_dir, f"mismatch-name-{uuid.uuid4().hex[:8]}.json")
+            mismatch_path = get_definitions_catalog_path()
             real_app_id = f"real-app-id-{uuid.uuid4().hex[:8]}"
-            mismatch_app = build_app_definition(
-                real_app_id,
-                display_name="Mismatch Name Application",
-            )
 
             with open(mismatch_path, "w", encoding="utf-8") as f:
-                json.dump(mismatch_app, f, ensure_ascii=False, indent=2)
+                json.dump(
+                    {
+                        "version": "bad",
+                        "definitions": [
+                            {
+                                "appId": real_app_id,
+                                "scope": "",
+                                "displayName": "Mismatch Name Application",
+                            }
+                        ],
+                    },
+                    f,
+                    ensure_ascii=False,
+                    indent=2,
+                )
 
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
@@ -238,10 +270,10 @@ class TestAppDefinitions(unittest.TestCase):
             definitions = response["result"]["definitions"]
             found = any(d.get("appId") == real_app_id for d in definitions)
             if found:
-                result.mark_failure("❌ 文件名与 appId 不一致的定义不应被加载")
+                result.mark_failure("❌ 无效目录索引不应暴露任何 Definition")
                 return result
 
-            result.add_detail("✅ 文件名与 appId 不一致的定义被正确忽略")
+            result.add_detail("✅ 无效目录索引被正确按空集合处理")
             result.mark_success()
 
         except Exception as e:
@@ -254,6 +286,7 @@ class TestAppDefinitions(unittest.TestCase):
     def test_validate_definition(self):
         """测试 validateDefinition 返回结构化校验结果"""
         result = TestResult("测试 validateDefinition 返回结构化校验结果")
+        cleanup_definitions = []
 
         try:
             base_url, token = DiscoveryService.get_hub_info()
@@ -278,6 +311,60 @@ class TestAppDefinitions(unittest.TestCase):
                 result.mark_failure(f"❌ 合法定义校验结果不正确: {valid_response}")
                 return result
 
+            get_valid_response = client.call("hub.apps.getDefinition", build_definition_identity_params(valid_app_id))
+            if not RpcAssertions.expect_error(result, get_valid_response, -32014, "app_definition_not_found"):
+                return result
+
+            baseline_app_id = self._new_app_id("validate-baseline")
+            baseline_definition = {
+                "appId": baseline_app_id,
+                "scope": "",
+                "displayName": "Baseline Definition",
+                "description": "stored baseline"
+            }
+            upsert_baseline = client.upsert_definition(baseline_definition)
+            if not RpcAssertions.expect_success(result, upsert_baseline, ["definition"]):
+                return result
+            cleanup_definitions.append((baseline_app_id, ""))
+
+            validate_update_response = client.call("hub.apps.validateDefinition", {
+                "definition": {
+                    "appId": baseline_app_id,
+                    "scope": "",
+                    "displayName": "Candidate Definition",
+                    "description": "validate must not persist this candidate"
+                }
+            })
+            if not RpcAssertions.expect_success(result, validate_update_response, ["valid", "errors"]):
+                return result
+
+            stored_baseline_response = client.call("hub.apps.getDefinition", build_definition_identity_params(baseline_app_id))
+            if not RpcAssertions.expect_success(result, stored_baseline_response, ["definition"]):
+                return result
+            stored_baseline = stored_baseline_response["result"]["definition"]
+            if stored_baseline.get("displayName") != "Baseline Definition" or stored_baseline.get("description") != "stored baseline":
+                result.mark_failure(f"❌ validateDefinition 修改了已存在 Definition: {stored_baseline}")
+                return result
+
+            blank_launch_app_id = self._new_app_id("blank-launch-validate")
+            blank_launch_response = client.call("hub.apps.validateDefinition", {
+                "definition": {
+                    "appId": blank_launch_app_id,
+                    "scope": "",
+                    "displayName": "Blank Launch Validate App",
+                    "launch": {
+                        "exePath": "   ",
+                        "argsTemplate": "hello"
+                    }
+                }
+            })
+            if not RpcAssertions.expect_success(result, blank_launch_response, ["valid", "errors"]):
+                return result
+
+            if blank_launch_response["result"].get("valid") is not True or blank_launch_response["result"].get("errors") != []:
+                result.mark_failure(f"❌ 空白 launch.exePath 应在定义校验阶段通过: {blank_launch_response}")
+                return result
+
             invalid_response = client.call("hub.apps.validateDefinition", {
                 "definition": {
                     "appId": "Invalid App",
@@ -296,10 +383,67 @@ class TestAppDefinitions(unittest.TestCase):
                 result.mark_failure(f"❌ 非法定义缺少 appId 校验问题: {invalid_response}")
                 return result
 
+            list_after_invalid_response = client.call("hub.apps.listDefinitions", {"scope": None})
+            if not RpcAssertions.expect_success(result, list_after_invalid_response, ["definitions"]):
+                return result
+            if any(definition.get("appId") == "Invalid App" for definition in list_after_invalid_response["result"]["definitions"]):
+                result.mark_failure(f"❌ validateDefinition 非法候选污染了 Definition 清单: {list_after_invalid_response}")
+                return result
+
             result.mark_success()
 
         except Exception as e:
             result.mark_failure(str(e))
+        finally:
+            delete_definitions(cleanup_definitions)
+
+        return result
+
+    def test_blank_launch_exepath_should_store_definition(self):
+        """测试空白 launch.exePath 可通过 upsertDefinition 持久化"""
+        result = TestResult("测试空白 launch.exePath 可持久化")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+            app_id = self._new_app_id("blank-launch-store")
+
+            upsert_response = client.upsert_definition({
+                "appId": app_id,
+                "scope": "",
+                "displayName": "Blank Launch Store App",
+                "launch": {
+                    "exePath": "   ",
+                    "argsTemplate": "managed"
+                }
+            })
+            if not RpcAssertions.expect_success(result, upsert_response, ["definition"]):
+                return result
+
+            definition = upsert_response["result"]["definition"]
+            if definition.get("launch", {}).get("exePath") != "   ":
+                result.mark_failure(f"❌ upsertDefinition 未保留空白 launch.exePath: {definition}")
+                return result
+
+            get_response = client.call("hub.apps.getDefinition", build_definition_identity_params(app_id))
+            if not RpcAssertions.expect_success(result, get_response, ["definition"]):
+                return result
+
+            stored_definition = get_response["result"]["definition"]
+            if stored_definition.get("launch", {}).get("exePath") != "   ":
+                result.mark_failure(f"❌ getDefinition 未返回空白 launch.exePath: {stored_definition}")
+                return result
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            try:
+                if "client" in locals() and "app_id" in locals():
+                    client.delete_definition(app_id)
+            except Exception:
+                pass
 
         return result
 
@@ -312,16 +456,14 @@ class TestAppDefinitions(unittest.TestCase):
             client = RpcClient(base_url, token)
             app_id = self._new_app_id("managed-app")
 
-            upsert_response = client.call("hub.apps.upsertDefinition", {
-                "definition": {
-                    "appId": app_id,
-                    "scope": "",
-                    "displayName": "Managed App",
-                    "description": "Managed from blackbox test",
-                    "launch": {
-                        "exePath": "echo",
-                        "argsTemplate": "managed"
-                    }
+            upsert_response = client.upsert_definition({
+                "appId": app_id,
+                "scope": "",
+                "displayName": "Managed App",
+                "description": "Managed from blackbox test",
+                "launch": {
+                    "exePath": "echo",
+                    "argsTemplate": "managed"
                 }
             })
             if not RpcAssertions.expect_success(result, upsert_response, ["definition"]):
@@ -340,7 +482,7 @@ class TestAppDefinitions(unittest.TestCase):
                 result.mark_failure(f"❌ getDefinition 未返回最新定义: {get_response}")
                 return result
 
-            delete_response = client.call("hub.apps.deleteDefinition", build_definition_identity_params(app_id))
+            delete_response = client.delete_definition(app_id)
             if not RpcAssertions.expect_success(result, delete_response):
                 return result
 
@@ -355,7 +497,7 @@ class TestAppDefinitions(unittest.TestCase):
         finally:
             try:
                 if "client" in locals() and "app_id" in locals():
-                    client.call("hub.apps.deleteDefinition", build_definition_identity_params(app_id))
+                    client.delete_definition(app_id)
             except Exception:
                 pass
 
@@ -374,13 +516,11 @@ class TestAppDefinitions(unittest.TestCase):
                 ("", "Managed Scoped App Global", "global-definition"),
                 ("workspace-a", "Managed Scoped App Workspace A", "workspace-a-definition"),
             ]:
-                upsert_response = client.call("hub.apps.upsertDefinition", {
-                    "definition": {
-                        "appId": app_id,
-                        "scope": scope,
-                        "displayName": display_name,
-                        "description": description,
-                    }
+                upsert_response = client.upsert_definition({
+                    "appId": app_id,
+                    "scope": scope,
+                    "displayName": display_name,
+                    "description": description,
                 })
                 if not RpcAssertions.expect_success(result, upsert_response, ["definition"]):
                     return result
@@ -420,7 +560,7 @@ class TestAppDefinitions(unittest.TestCase):
                 result.mark_failure(f"❌ Scoped Definition 读取结果不正确: {scoped_definition}")
                 return result
 
-            delete_global_response = client.call("hub.apps.deleteDefinition", build_definition_identity_params(app_id, ""))
+            delete_global_response = client.delete_definition(app_id, scope="")
             if not RpcAssertions.expect_success(result, delete_global_response):
                 return result
 
@@ -445,28 +585,33 @@ class TestAppDefinitions(unittest.TestCase):
         finally:
             try:
                 if "client" in locals() and "app_id" in locals():
-                    client.call("hub.apps.deleteDefinition", build_definition_identity_params(app_id, ""))
-                    client.call("hub.apps.deleteDefinition", build_definition_identity_params(app_id, "workspace-a"))
+                    delete_definitions([(app_id, ""), (app_id, "workspace-a")])
             except Exception:
                 pass
 
         return result
 
-    def test_explicit_global_scope_should_use_scope_global_filename_and_echo_canonical_identifiers(self):
-        """测试 scope='global' 使用独立 scopeKey 且按原值回显"""
-        result = TestResult("测试 scope='global' 文件名与 canonical 回显")
+    def test_explicit_global_scope_should_coexist_with_global_and_echo_canonical_identifiers(self):
+        """测试 scope='global' 与 Global Definition 共存且按原值回显"""
+        result = TestResult("测试 scope='global' 与 Global Definition 共存")
 
         try:
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
             app_id = f"Sample.App_{uuid.uuid4().hex[:8]}"
 
-            upsert_response = client.call("hub.apps.upsertDefinition", {
-                "definition": {
-                    "appId": app_id,
-                    "scope": "global",
-                    "displayName": "Explicit Global App",
-                }
+            global_response = client.upsert_definition({
+                "appId": app_id,
+                "scope": "",
+                "displayName": "Global App",
+            })
+            if not RpcAssertions.expect_success(result, global_response, ["definition"]):
+                return result
+
+            upsert_response = client.upsert_definition({
+                "appId": app_id,
+                "scope": "global",
+                "displayName": "Explicit Global App",
             })
             if not RpcAssertions.expect_success(result, upsert_response, ["definition"]):
                 return result
@@ -476,13 +621,12 @@ class TestAppDefinitions(unittest.TestCase):
                 result.mark_failure(f"❌ upsertDefinition 未按原值回显 canonical 标识符: {definition}")
                 return result
 
-            explicit_global_path = os.path.join(get_definitions_dir(), build_definition_file_name(app_id, "global"))
-            default_global_path = os.path.join(get_definitions_dir(), build_definition_file_name(app_id, ""))
-            if not os.path.exists(explicit_global_path):
-                result.mark_failure(f"❌ 未生成 scope='global' 的独立 Definition 文件: {explicit_global_path}")
+            list_all_response = client.call("hub.apps.listDefinitions", {"appId": app_id, "scope": None})
+            if not RpcAssertions.expect_success(result, list_all_response, ["definitions"]):
                 return result
-            if os.path.exists(default_global_path):
-                result.mark_failure(f"❌ scope='global' 错误覆盖了 Global Definition 文件: {default_global_path}")
+            matching_definitions = list_all_response["result"]["definitions"]
+            if [entry.get("scope") for entry in matching_definitions] != ["", "global"]:
+                result.mark_failure(f"❌ listDefinitions 未返回预期 scope 顺序: {matching_definitions}")
                 return result
 
             get_response = client.call("hub.apps.getDefinition", build_definition_identity_params(app_id, "global"))
@@ -495,8 +639,9 @@ class TestAppDefinitions(unittest.TestCase):
             list_global_response = client.call("hub.apps.listDefinitions", {"appId": app_id, "scope": ""})
             if not RpcAssertions.expect_success(result, list_global_response, ["definitions"]):
                 return result
-            if list_global_response["result"]["definitions"]:
-                result.mark_failure(f"❌ Global 过滤错误命中了 scope='global' 定义: {list_global_response}")
+            global_definitions = list_global_response["result"]["definitions"]
+            if len(global_definitions) != 1 or global_definitions[0].get("scope") != "":
+                result.mark_failure(f"❌ Global 过滤结果不正确: {list_global_response}")
                 return result
 
             list_explicit_response = client.call("hub.apps.listDefinitions", {"appId": app_id, "scope": "global"})
@@ -513,8 +658,7 @@ class TestAppDefinitions(unittest.TestCase):
         finally:
             try:
                 if "client" in locals() and "app_id" in locals():
-                    client.call("hub.apps.deleteDefinition", build_definition_identity_params(app_id, "global"))
-                    safe_remove(os.path.join(get_definitions_dir(), build_definition_file_name(app_id, "")))
+                    delete_definitions([(app_id, ""), (app_id, "global")])
             except Exception:
                 pass
 
@@ -528,12 +672,10 @@ class TestAppDefinitions(unittest.TestCase):
             base_url, token = DiscoveryService.get_hub_info()
             client = RpcClient(base_url, token)
 
-            response = client.call("hub.apps.upsertDefinition", {
-                "definition": {
-                    "appId": "Invalid App",
-                    "scope": "",
-                    "displayName": ""
-                }
+            response = client.upsert_definition({
+                "appId": "Invalid App",
+                "scope": "",
+                "displayName": "   "
             })
             if not RpcAssertions.expect_error(result, response, -32602, "invalid_params"):
                 return result
@@ -560,7 +702,7 @@ class TestAppDefinitions(unittest.TestCase):
 
         try:
             app_id = self._new_app_id("managed-scope-app")
-            definition_path = write_app_definition(
+            definition_path = upsert_app_definition(
                 app_id,
                 scope="workspace-a",
                 display_name="Managed Scope App",
@@ -620,7 +762,7 @@ class TestAppDefinitions(unittest.TestCase):
             except Exception:
                 pass
 
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -633,7 +775,7 @@ class TestAppDefinitions(unittest.TestCase):
             client = RpcClient(base_url, token)
             app_id = self._new_app_id("missing-delete-app")
 
-            response = client.call("hub.apps.deleteDefinition", build_definition_identity_params(app_id))
+            response = client.delete_definition(app_id)
             if not RpcAssertions.expect_error(result, response, -32014, "app_definition_not_found"):
                 return result
             if not RpcAssertions.expect_error_data_fields(result, response, {"appId": app_id}):
@@ -654,11 +796,12 @@ class TestAppDefinitions(unittest.TestCase):
             self.test_get_nonexistent_definition(),
             self.test_invalid_app_definition(),
             self.test_app_definition_appid_format_validation(),
-            self.test_definition_filename_must_match_appid(),
+            self.test_invalid_catalog_envelope_should_be_ignored(),
             self.test_validate_definition(),
+            self.test_blank_launch_exepath_should_store_definition(),
             self.test_upsert_definition_and_delete_definition(),
             self.test_scoped_definitions_should_use_composite_identity(),
-            self.test_explicit_global_scope_should_use_scope_global_filename_and_echo_canonical_identifiers(),
+            self.test_explicit_global_scope_should_coexist_with_global_and_echo_canonical_identifiers(),
             self.test_upsert_invalid_definition(),
             self.test_register_instance_should_allow_undeclared_scope_for_definition_managed_app(),
             self.test_delete_nonexistent_definition()

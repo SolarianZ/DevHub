@@ -1,0 +1,55 @@
+{
+  "id": "apps.definitions_catalog.get_returns_preloaded_definition",
+  "caseId": "CONF-003",
+  "description": "预置合法 AppDefinition 时，hub.apps.getDefinition 必须返回对应 definition。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "appId": "apps.get.preloaded.app",
+        "scopeEntry": {
+          "scope": "",
+          "displayName": "Apps Get Preloaded",
+          "description": "用于 conformance AppDefinition 获取向量。"
+        }
+      }
+    ]
+  },
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceApps",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000023"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "apps-definitions-get",
+    "method": "hub.apps.getDefinition",
+    "params": {
+      "appId": "apps.get.preloaded.app",
+      "scope": ""
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "apps-definitions-get",
+    "result": {
+      "ok": true,
+      "definition": {
+        "appId": "apps.get.preloaded.app",
+        "scope": "",
+        "displayName": "Apps Get Preloaded",
+        "description": "用于 conformance AppDefinition 获取向量。"
+      }
+    }
+  },
+  "tags": [
+    "apps",
+    "definitions",
+    "http",
+    "success"
+  ]
+}

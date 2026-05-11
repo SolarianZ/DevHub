@@ -6,6 +6,7 @@ import type {
   RuntimeConnectionInfo,
   RuntimeResolver
 } from "./runtime.js";
+import { validateRuntimeConnectionInfo } from "./runtime-validation.js";
 import { JsonRpcHttpTransport } from "./http-transport.js";
 import {
   normalizeClientOptions,
@@ -28,6 +29,7 @@ import type {
   PingResult,
   PollRequest,
   PollResult,
+  RegisterInstanceOptions,
   RegisteredAppInstance,
   RequestResult,
   RespondRequest,
@@ -116,6 +118,7 @@ export class DevHubClient {
     validateClientOptions(normalized);
     const runtimeResolver = await getRuntimeResolver(dependencies.runtimeResolver);
     const connection = await runtimeResolver.resolve(normalized);
+    validateRuntimeConnectionInfo(connection);
     const transport = dependencies.transportFactory?.(normalized, connection)
       ?? new JsonRpcHttpTransport(normalized, connection);
     return new DevHubClient(normalized, connection, transport);
@@ -196,11 +199,15 @@ export class DevHubClient {
     );
   }
 
-  async registerInstance(instance: AppInstanceRegistration, password: string): Promise<RegisteredAppInstance> {
+  async registerInstance(
+    instance: AppInstanceRegistration,
+    password: string,
+    options?: RegisterInstanceOptions
+  ): Promise<RegisteredAppInstance> {
     this.throwIfDisposed();
     return await this.sendAndParse(
       "hub.apps.registerInstance.result",
-      buildRegisterInstanceParams(instance, password),
+      buildRegisterInstanceParams(instance, password, options),
       "hub.apps.registerInstance",
       parseRegisterInstanceResult
     );

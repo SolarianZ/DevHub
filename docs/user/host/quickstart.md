@@ -82,8 +82,7 @@ Host 启动成功后，会在 `<dataDir>/runtime/` 下写入 `hub.json`，并在
 │   ├── hub.json
 │   └── token.txt
 ├── apps/
-│   ├── definitions/
-│   └── instances/
+│   └── definitions.json
 └── logs/
 ```
 

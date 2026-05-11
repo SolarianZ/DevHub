@@ -1,0 +1,173 @@
+{
+  "id": "events.subscribe_receives_invocation_failed_event",
+  "caseId": "CONF-007",
+  "description": "WS 订阅 invocation.failed 后，callee 返回应用错误必须收到 hub.event。",
+  "transport": "ws",
+  "setup": {
+    "definitions": [
+      {
+        "appId": "events.subscribe.invocation-failed",
+        "scopeEntry": {
+          "scope": "",
+          "displayName": "events.subscribe.invocation-failed"
+        }
+      }
+    ]
+  },
+  "orchestration": {
+    "duringCaller": [
+      {
+        "action": "sleep",
+        "waitMs": 5000
+      },
+      {
+        "action": "register_instance",
+        "password": "conformance-password",
+        "instance": {
+          "instanceId": "events-invocation-failed-inst-1",
+          "appId": "events.subscribe.invocation-failed",
+          "scope": "",
+          "pid": 33025,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      },
+      {
+        "action": "call_rpc",
+        "method": "hub.invoke.notify",
+        "params": {
+          "appId": "events.subscribe.invocation-failed",
+          "target": {
+            "scope": "",
+            "instanceId": "events-invocation-failed-inst-1"
+          },
+          "method": "demo.notify.failed",
+          "args": {
+            "mode": "failed"
+          },
+          "options": {
+            "ttlMs": 60000,
+            "queueIfOffline": true,
+            "autoLaunch": false
+          }
+        }
+      },
+      {
+        "action": "poll_expect_invocation",
+        "instanceId": "events-invocation-failed-inst-1",
+        "waitMs": 1500,
+        "expected": {
+          "appId": "events.subscribe.invocation-failed",
+          "method": "demo.notify.failed",
+          "kind": "notify"
+        }
+      },
+      {
+        "action": "respond_error",
+        "instanceId": "events-invocation-failed-inst-1",
+        "error": {
+          "code": 1001,
+          "message": "app_error",
+          "data": {
+            "reason": "boom"
+          }
+        }
+      }
+    ]
+  },
+  "request": {
+    "kind": "raw.ws",
+    "steps": [
+      {
+        "action": "send",
+        "message": {
+          "jsonrpc": "2.0",
+          "id": "ws-auth-events-failed",
+          "method": "hub.ws.authenticate",
+          "params": {
+            "token": "${HOST_TOKEN}",
+            "protocolVersion": 1,
+            "clientId": "ConformanceWsEventFailed",
+            "clientSessionId": "20000000-0000-0000-0000-000000000025"
+          }
+        }
+      },
+      {
+        "action": "receive",
+        "captureAs": "auth"
+      },
+      {
+        "action": "send",
+        "message": {
+          "jsonrpc": "2.0",
+          "id": "ws-subscribe-events-failed",
+          "method": "hub.events.subscribe",
+          "params": {
+            "types": [
+              "invocation.failed"
+            ]
+          }
+        }
+      },
+      {
+        "action": "receive",
+        "captureAs": "subscribe"
+      },
+      {
+        "action": "receive",
+        "captureAs": "event",
+        "timeoutMs": 15000
+      }
+    ]
+  },
+  "expectedResponse": {
+    "matchMode": "subset",
+    "phase": "ws",
+    "outcome": "success",
+    "actual": {
+      "auth": {
+        "jsonrpc": "2.0",
+        "id": "ws-auth-events-failed",
+        "result": {
+          "ok": true,
+          "protocolVersion": 1
+        }
+      },
+      "subscribe": {
+        "jsonrpc": "2.0",
+        "id": "ws-subscribe-events-failed",
+        "result": {
+          "ok": true,
+          "subscriptionId": "${ANY_NON_EMPTY_STRING}"
+        }
+      },
+      "event": {
+        "jsonrpc": "2.0",
+        "method": "hub.event",
+        "params": {
+          "subscriptionId": "${ANY_NON_EMPTY_STRING}",
+          "type": "invocation.failed",
+          "timeUtc": "${ANY_ISO_UTC}",
+          "payload": {
+            "invocationId": "${ANY_NON_EMPTY_STRING}",
+            "appId": "events.subscribe.invocation-failed",
+            "instanceId": "events-invocation-failed-inst-1",
+            "target": {
+              "scope": "",
+              "instanceId": "events-invocation-failed-inst-1"
+            },
+            "reason": "boom"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    "events",
+    "ws",
+    "raw",
+    "invocation"
+  ]
+}

@@ -29,7 +29,6 @@ import {
   readArray,
   readBoolean,
   readDate,
-  readOptionalScopeString,
   readScopeString,
   readInstanceId,
   readInvocationId,
@@ -41,6 +40,7 @@ import {
   readOptionalObject,
   readOptionalString,
   readPositiveInt,
+  readNonBlankString,
   readStringValue,
   readString,
   readUuidString
@@ -166,12 +166,34 @@ export function parseLaunchResult(payload: unknown): LaunchResult {
     throw new Error("hub.apps.launch.result.pid is invalid.");
   }
 
-  return {
+  const result: LaunchResult = {
     ok: true,
     status,
-    pid: pidValue === undefined ? undefined : (pidValue as number | null),
-    launchId: readString(record, "hub.apps.launch.result", "launchId")
+    pid: pidValue === undefined ? undefined : (pidValue as number | null)
   };
+
+  const launchId = readOptionalString(record, "hub.apps.launch.result", "launchId");
+  const dedupeKey = readOptionalString(record, "hub.apps.launch.result", "dedupeKey");
+  const instanceId = readOptionalInstanceIdOrNull(record, "hub.apps.launch.result", "instanceId");
+  if (launchId !== undefined) {
+    result.launchId = launchId;
+  }
+  if (dedupeKey !== undefined) {
+    result.dedupeKey = dedupeKey;
+  }
+  if (instanceId !== undefined && instanceId !== null) {
+    result.instanceId = instanceId;
+  }
+
+  if (status === "started" || status === "starting") {
+    if (!launchId || !dedupeKey) {
+      throw new Error("hub.apps.launch.result requires launchId and dedupeKey for started/starting.");
+    }
+  } else if (!instanceId && (!launchId || !dedupeKey)) {
+    throw new Error("hub.apps.launch.result requires instanceId or launchId + dedupeKey for already_running.");
+  }
+
+  return result;
 }
 
 export function parseNotifyResult(payload: unknown): NotifyResult {
@@ -239,7 +261,7 @@ export function parseUnsubscribeResult(payload: unknown): void {
 export function parseAppDefinition(payload: unknown, location: string): AppDefinition {
   const record = ensureRecord(payload, location);
   const appId = readAppId(record, location, "appId");
-  const displayName = readStringValue(record, location, "displayName");
+  const displayName = readNonBlankString(record, location, "displayName");
   const description = readOptionalString(record, location, "description");
 
   let capabilities: AppDefinition["capabilities"] = {
@@ -258,8 +280,17 @@ export function parseAppDefinition(payload: unknown, location: string): AppDefin
   let launch: AppDefinition["launch"] | undefined;
   const launchPayload = readOptionalObject(record, location, "launch");
   if (launchPayload) {
+    const argsPayload = "args" in launchPayload
+      ? readArray(launchPayload, `${location}.launch`, "args")
+      : undefined;
     launch = {
-      exePath: readStringValue(launchPayload, `${location}.launch`, "exePath"),
+      exePath: readOptionalString(launchPayload, `${location}.launch`, "exePath"),
+      args: argsPayload?.map((item, index) => {
+        if (typeof item !== "string") {
+          throw new Error(`${location}.launch.args[${index}] must be a string.`);
+        }
+        return item;
+      }),
       argsTemplate: readOptionalString(launchPayload, `${location}.launch`, "argsTemplate"),
       workingDirectory: readOptionalString(launchPayload, `${location}.launch`, "workingDirectory"),
       dedupeKeyTemplate: readOptionalString(launchPayload, `${location}.launch`, "dedupeKeyTemplate")
@@ -332,6 +363,7 @@ export function parseInvocation(payload: unknown, location: string): Invocation 
   const deliveryPayload = readOptionalObject(record, location, "delivery");
   if (deliveryPayload) {
     delivery = {
+      leaseToken: readString(deliveryPayload, `${location}.delivery`, "leaseToken"),
       leaseSeconds: readPositiveInt(deliveryPayload, `${location}.delivery`, "leaseSeconds"),
       attempt: readPositiveInt(deliveryPayload, `${location}.delivery`, "attempt")
     };
@@ -437,7 +469,7 @@ function validateEventPayload(type: string, payload: JsonObject | undefined, loc
   if (type === APP_INSTANCE_REGISTERED || type === APP_INSTANCE_UNREGISTERED) {
     readAppId(payload, location, "appId");
     readInstanceId(payload, location, "instanceId");
-    readOptionalScopeString(payload, location, "scope");
+    readScopeString(payload, location, "scope");
     ensureNoSensitiveInstanceFields(payload, location);
   }
 }

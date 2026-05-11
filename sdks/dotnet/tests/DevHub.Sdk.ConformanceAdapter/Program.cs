@@ -13,6 +13,8 @@ var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web)
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
 };
 
+var payloadJsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+
 if (args.Length != 1)
 {
     WritePayload(new AdapterResult("dotnet", null, null, null, "error", null, new { message = "用法错误：需要 execution-context.json 路径。" }));
@@ -35,6 +37,8 @@ try
             ? await RunInvocationAsync(root, vector, request)
             : string.Equals(kind, "sdk.events", StringComparison.Ordinal)
                 ? await RunEventsAsync(root, vector, request)
+                : string.Equals(kind, "raw.http", StringComparison.Ordinal)
+                    ? await RunHttpAsync(root, vector, request)
                 : string.Equals(kind, "raw.ws", StringComparison.Ordinal) ||
                   string.Equals(ReadString(vector, "transport"), "ws", StringComparison.Ordinal)
                     ? await RunWsAsync(root, vector, request)
@@ -76,9 +80,14 @@ async Task<AdapterResult> RunDiscoveryAsync(JsonElement context, JsonElement vec
             runtime = new
             {
                 protocolVersion = connection.Runtime.ProtocolVersion,
+                pid = connection.Runtime.Pid,
                 httpBaseUrl = connection.Runtime.HttpBaseUrl,
                 wsUrl = connection.Runtime.WsUrl,
                 tokenFile = connection.Runtime.TokenFile
+                ,
+                startedAtUtc = connection.Runtime.StartedAtUtc,
+                runtimeTuning = connection.Runtime.RuntimeTuning,
+                hubVersion = connection.Runtime.HubVersion
             }
         };
 
@@ -86,10 +95,7 @@ async Task<AdapterResult> RunDiscoveryAsync(JsonElement context, JsonElement vec
     }
     catch (Exception exception)
     {
-        var reason = !string.IsNullOrWhiteSpace(explicitDataDir)
-                     && string.Equals(Path.GetFileName(explicitDataDir), "runtime", StringComparison.OrdinalIgnoreCase)
-            ? "runtime_subdirectory_rejected"
-            : "discovery_failed";
+        var reason = ClassifyDiscoveryFailure(explicitDataDir, exception);
         return new AdapterResult(
             "dotnet",
             ReadString(vector, "id"),
@@ -111,24 +117,25 @@ async Task<AdapterResult> RunDiscoveryAsync(JsonElement context, JsonElement vec
 
 async Task<AdapterResult> RunInvocationAsync(JsonElement context, JsonElement vector, JsonElement request)
 {
+    var vectorId = ReadString(vector, "id");
     var operation = string.Equals(ReadString(request, "kind"), "sdk.notify", StringComparison.Ordinal)
         ? "notify"
         : "request";
-    await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
-    {
-        ClientId = ReadOptionalString(request, "clientId") ?? "ConformanceInvocation",
-        DataDir = ReadString(context, "dataDir")
-    });
-
-    var invokeRequest = BuildInvokeRequest(request.GetProperty("invokeRequest"));
     try
     {
+        await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOptions
+        {
+            ClientId = ReadOptionalString(request, "clientId") ?? "ConformanceInvocation",
+            DataDir = ReadString(context, "dataDir")
+        });
+
+        var invokeRequest = BuildInvokeRequest(request.GetProperty("invokeRequest"));
         if (string.Equals(operation, "notify", StringComparison.Ordinal))
         {
             var result = await client.NotifyAsync(invokeRequest);
             return new AdapterResult(
                 "dotnet",
-                ReadString(vector, "id"),
+                vectorId,
                 "sdk-invocation",
                 operation,
                 "success",
@@ -143,7 +150,7 @@ async Task<AdapterResult> RunInvocationAsync(JsonElement context, JsonElement ve
         var requestResult = await client.RequestAsync(invokeRequest);
         return new AdapterResult(
             "dotnet",
-            ReadString(vector, "id"),
+            vectorId,
             "sdk-invocation",
             operation,
             "success",
@@ -159,12 +166,16 @@ async Task<AdapterResult> RunInvocationAsync(JsonElement context, JsonElement ve
     {
         return new AdapterResult(
             "dotnet",
-            ReadString(vector, "id"),
+            vectorId,
             "sdk-invocation",
             operation,
             "error",
             NormalizeInvocationError(exception),
             null);
+    }
+    catch (ArgumentException exception)
+    {
+        return CreateLocalValidationError(vectorId, operation, exception);
     }
 }
 
@@ -595,6 +606,87 @@ async Task<AdapterResult> RunRpcAsync(JsonElement context, JsonElement vector, J
         null,
         "success",
         responseDocument.RootElement.Clone(),
+        null);
+}
+
+async Task<AdapterResult> RunHttpAsync(JsonElement context, JsonElement vector, JsonElement request)
+{
+    var dataDir = ReadString(context, "dataDir");
+    var resolver = new FileSystemDevHubRuntimeResolver();
+    var connection = await resolver.ResolveAsync(new DevHubClientOptions
+    {
+        ClientId = "ConformanceRawHttpAdapter",
+        DataDir = dataDir
+    });
+
+    var method = new HttpMethod(ReadString(request, "method"));
+    var requestUri = new Uri(new Uri(connection.Runtime.HttpBaseUrl, UriKind.Absolute), ReadString(request, "path"));
+
+    using var client = new HttpClient();
+    using var requestMessage = new HttpRequestMessage(method, requestUri);
+
+    StringContent? content = null;
+    if (request.TryGetProperty("body", out var bodyElement))
+    {
+        content = new StringContent(NormalizeRawRequestBody(bodyElement), Encoding.UTF8);
+    }
+
+    if (request.TryGetProperty("headers", out var headersElement) && headersElement.ValueKind == JsonValueKind.Object)
+    {
+        foreach (var header in headersElement.EnumerateObject())
+        {
+            var value = ReadRequiredString(header.Value, $"request.headers.{header.Name}");
+            if (string.Equals(header.Name, "Content-Type", StringComparison.OrdinalIgnoreCase) && content is not null)
+            {
+                content.Headers.ContentType = MediaTypeHeaderValue.Parse(value);
+                continue;
+            }
+
+            if (!(content?.Headers.TryAddWithoutValidation(header.Name, value) ?? false))
+            {
+                requestMessage.Headers.TryAddWithoutValidation(header.Name, value);
+            }
+        }
+    }
+
+    if (content is not null)
+    {
+        if (content.Headers.ContentType is null)
+        {
+            content.Headers.ContentType = MediaTypeHeaderValue.Parse("application/json");
+        }
+
+        requestMessage.Content = content;
+    }
+
+    using var responseMessage = await client.SendAsync(requestMessage);
+    var bodyText = await responseMessage.Content.ReadAsStringAsync();
+    object? bodyJson = null;
+    if (!string.IsNullOrWhiteSpace(bodyText))
+    {
+        try
+        {
+            using var responseDocument = JsonDocument.Parse(bodyText);
+            bodyJson = ConvertJsonElement(responseDocument.RootElement);
+        }
+        catch (JsonException)
+        {
+        }
+    }
+
+    return new AdapterResult(
+        "dotnet",
+        ReadString(vector, "id"),
+        "http",
+        null,
+        "success",
+        new
+        {
+            statusCode = (int)responseMessage.StatusCode,
+            headers = NormalizeHeaders(responseMessage),
+            bodyText,
+            bodyJson
+        },
         null);
 }
 
@@ -1072,7 +1164,22 @@ object NormalizeInvocationError(DevHubRpcException exception)
         payload["invocationId"] = exception.InvocationId;
     }
 
-    if (exception.CalleeError is { } calleeError)
+    if (exception.TryGetDataProperty("calleeError", out var calleeErrorToken) && calleeErrorToken is JObject calleeErrorObject)
+    {
+        var calleePayload = new Dictionary<string, object?>
+        {
+            ["code"] = calleeErrorObject.Value<int>("code"),
+            ["message"] = calleeErrorObject.Value<string>("message")
+        };
+
+        if (calleeErrorObject.TryGetValue("data", out var dataToken))
+        {
+            calleePayload["data"] = dataToken.Type == JTokenType.Null ? null : ConvertJToken(dataToken);
+        }
+
+        payload["calleeError"] = calleePayload;
+    }
+    else if (exception.CalleeError is { } calleeError)
     {
         var calleePayload = new Dictionary<string, object?>
         {
@@ -1088,6 +1195,59 @@ object NormalizeInvocationError(DevHubRpcException exception)
     }
 
     return payload;
+}
+
+AdapterResult CreateLocalValidationError(string vectorId, string operation, ArgumentException exception)
+{
+    return new AdapterResult(
+        "dotnet",
+        vectorId,
+        "sdk-invocation",
+        operation,
+        "error",
+        new
+        {
+            code = -32602,
+            message = "invalid_params",
+            source = "sdk_local_validation",
+            detail = exception.Message
+        },
+        null);
+}
+
+string ClassifyDiscoveryFailure(string? explicitDataDir, Exception exception)
+{
+    if (!string.IsNullOrWhiteSpace(explicitDataDir) &&
+        string.Equals(
+            Path.GetFileName(Path.TrimEndingDirectorySeparator(explicitDataDir)),
+            "runtime",
+            StringComparison.OrdinalIgnoreCase))
+    {
+        return "runtime_subdirectory_rejected";
+    }
+
+    return exception.Message.Contains("hub.json", StringComparison.Ordinal)
+           || exception.Message.Contains("tokenFile", StringComparison.Ordinal)
+           || exception.Message.Contains("token 文件", StringComparison.Ordinal)
+        ? "invalid_runtime"
+        : "discovery_failed";
+}
+
+Dictionary<string, string> NormalizeHeaders(HttpResponseMessage responseMessage)
+{
+    var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+    foreach (var header in responseMessage.Headers)
+    {
+        headers[header.Key.ToLowerInvariant()] = string.Join(", ", header.Value);
+    }
+
+    foreach (var header in responseMessage.Content.Headers)
+    {
+        headers[header.Key.ToLowerInvariant()] = string.Join(", ", header.Value);
+    }
+
+    return headers;
 }
 
 object? ConvertJsonElement(JsonElement? element)
@@ -1247,17 +1407,48 @@ int ReadNonNegativeInt32(JsonElement element, string propertyName)
 
 void WritePayload(AdapterResult payload)
 {
-    Console.Out.WriteLine(JsonSerializer.Serialize(payload, jsonOptions));
+    var serialized = new Dictionary<string, object?>
+    {
+        ["sdk"] = payload.Sdk,
+        ["outcome"] = payload.Outcome
+    };
+
+    if (payload.VectorId is not null)
+    {
+        serialized["vectorId"] = payload.VectorId;
+    }
+
+    if (payload.Phase is not null)
+    {
+        serialized["phase"] = payload.Phase;
+    }
+
+    if (payload.Operation is not null)
+    {
+        serialized["operation"] = payload.Operation;
+    }
+
+    if (payload.Actual is not null)
+    {
+        serialized["actual"] = payload.Actual;
+    }
+
+    if (payload.Error is not null)
+    {
+        serialized["error"] = payload.Error;
+    }
+
+    Console.Out.WriteLine(JsonSerializer.Serialize(serialized, payloadJsonOptions));
 }
 
 internal sealed record AdapterResult(
     string Sdk,
-    string? VectorId,
-    string? Phase,
-    string? Operation,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? VectorId,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Phase,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Operation,
     string Outcome,
-    object? Actual,
-    object? Error);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] object? Actual,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] object? Error);
 
 internal sealed record EventReadResult(EventReadStatus Status, object? Event);
 

@@ -1,0 +1,137 @@
+{
+  "id": "events.subscribe_receives_unregistered_event",
+  "caseId": "CONF-007",
+  "description": "WS 订阅 app.instance.unregistered 后，注销实例必须收到 hub.event。",
+  "transport": "ws",
+  "setup": {
+    "definitions": [
+      {
+        "appId": "events.subscribe.unregistered",
+        "scopeEntry": {
+          "scope": "",
+          "displayName": "events.subscribe.unregistered"
+        }
+      }
+    ]
+  },
+  "orchestration": {
+    "duringCaller": [
+      {
+        "action": "sleep",
+        "waitMs": 5000
+      },
+      {
+        "action": "register_instance",
+        "password": "conformance-password",
+        "instance": {
+          "instanceId": "events-unregistered-inst-1",
+          "appId": "events.subscribe.unregistered",
+          "scope": "",
+          "pid": 33021,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      },
+      {
+        "action": "call_rpc",
+        "method": "hub.apps.unregisterInstance",
+        "params": {
+          "instanceId": "events-unregistered-inst-1"
+        }
+      }
+    ]
+  },
+  "request": {
+    "kind": "raw.ws",
+    "steps": [
+      {
+        "action": "send",
+        "message": {
+          "jsonrpc": "2.0",
+          "id": "ws-auth-events-unregistered",
+          "method": "hub.ws.authenticate",
+          "params": {
+            "token": "${HOST_TOKEN}",
+            "protocolVersion": 1,
+            "clientId": "ConformanceWsEventUnregistered",
+            "clientSessionId": "20000000-0000-0000-0000-000000000021"
+          }
+        }
+      },
+      {
+        "action": "receive",
+        "captureAs": "auth"
+      },
+      {
+        "action": "send",
+        "message": {
+          "jsonrpc": "2.0",
+          "id": "ws-subscribe-events-unregistered",
+          "method": "hub.events.subscribe",
+          "params": {
+            "types": [
+              "app.instance.unregistered"
+            ]
+          }
+        }
+      },
+      {
+        "action": "receive",
+        "captureAs": "subscribe"
+      },
+      {
+        "action": "receive",
+        "captureAs": "event",
+        "timeoutMs": 15000
+      }
+    ]
+  },
+  "expectedResponse": {
+    "matchMode": "subset",
+    "phase": "ws",
+    "outcome": "success",
+    "actual": {
+      "auth": {
+        "jsonrpc": "2.0",
+        "id": "ws-auth-events-unregistered",
+        "result": {
+          "ok": true,
+          "protocolVersion": 1
+        }
+      },
+      "subscribe": {
+        "jsonrpc": "2.0",
+        "id": "ws-subscribe-events-unregistered",
+        "result": {
+          "ok": true,
+          "subscriptionId": "${ANY_NON_EMPTY_STRING}"
+        }
+      },
+      "event": {
+        "jsonrpc": "2.0",
+        "method": "hub.event",
+        "params": {
+          "subscriptionId": "${ANY_NON_EMPTY_STRING}",
+          "type": "app.instance.unregistered",
+          "timeUtc": "${ANY_ISO_UTC}",
+          "payload": {
+            "appId": "events.subscribe.unregistered",
+            "instanceId": "events-unregistered-inst-1",
+            "scope": ""
+          }
+        }
+      }
+    },
+    "forbidPaths": [
+      "$.actual.event.params.payload.password",
+      "$.actual.event.params.payload.instanceSessionToken"
+    ]
+  },
+  "tags": [
+    "events",
+    "ws",
+    "raw"
+  ]
+}

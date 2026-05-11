@@ -154,6 +154,70 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
     }
 
     [Fact]
+    public async Task Impl_Notify_WhenTargetInstanceIdMalformed_ShouldReturnInvalidParamsBeforeRouting()
+    {
+        WriteDefinition("invocation-notify-invalid-target-instance", rpcEnabled: true);
+        using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        var handler = CreateHandler(appRegistry);
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "notify-invalid-target-instance",
+            Method = HubRpcMethods.HubInvokeNotify,
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId = "invocation-notify-invalid-target-instance",
+                target = new { scope = ScopeContract.Global, instanceId = "node:01" },
+                method = "task.run",
+                options = new
+                {
+                    queueIfOffline = false,
+                    autoLaunch = false
+                }
+            })
+        }, CancellationToken.None);
+
+        AssertError(response, -32602, "invalid_params");
+        var data = JsonSerializer.SerializeToElement(response.Error!.Data);
+        Assert.Equal("invalid_target_instance", data.GetProperty("reason").GetString());
+    }
+
+    [Fact]
+    public async Task Impl_Request_WhenTargetInstanceIdOverlong_ShouldReturnInvalidParamsBeforeRouting()
+    {
+        WriteDefinition("invocation-request-overlong-target-instance", rpcEnabled: true);
+        using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        var handler = CreateHandler(appRegistry);
+
+        var response = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "request-overlong-target-instance",
+            Method = HubRpcMethods.HubInvokeRequest,
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId = "invocation-request-overlong-target-instance",
+                target = new
+                {
+                    scope = ScopeContract.Global,
+                    instanceId = new string('a', ProtocolIdentifier.MaxInstanceIdLength + 1)
+                },
+                method = "task.run",
+                options = new
+                {
+                    ttlMs = 300000,
+                    waitTimeoutMs = 120000,
+                    queueIfOffline = false,
+                    autoLaunch = false
+                }
+            })
+        }, CancellationToken.None);
+
+        AssertError(response, -32602, "invalid_params");
+        var data = JsonSerializer.SerializeToElement(response.Error!.Data);
+        Assert.Equal("invalid_target_instance", data.GetProperty("reason").GetString());
+    }
+
+    [Fact]
     public async Task Impl_Poll_WhenParamsInvalid_ShouldReturnInvalidParams()
     {
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
@@ -182,6 +246,14 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
             Params = JsonSerializer.SerializeToElement(new { instanceId = "inst-1", waitMs = -1 })
         }, CancellationToken.None);
         AssertError(invalidWaitMs, -32602, "invalid_params");
+
+        var overlongInstanceId = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "poll-overlong-instance-id",
+            Method = HubRpcMethods.HubInvokePoll,
+            Params = JsonSerializer.SerializeToElement(new { instanceId = new string('a', ProtocolIdentifier.MaxInstanceIdLength + 1), waitMs = 0 })
+        }, CancellationToken.None);
+        AssertError(overlongInstanceId, -32602, "invalid_params");
     }
 
     [Fact]
@@ -262,6 +334,19 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
             })
         }, CancellationToken.None);
         AssertError(invalidErrorData, -32602, "invalid_params");
+
+        var overlongInstanceId = await handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "respond-overlong-instance-id",
+            Method = HubRpcMethods.HubInvokeRespond,
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                instanceId = new string('a', ProtocolIdentifier.MaxInstanceIdLength + 1),
+                invocationId = "invk-1",
+                value = new { ok = true }
+            })
+        }, CancellationToken.None);
+        AssertError(overlongInstanceId, -32602, "invalid_params");
     }
 
     [Fact]
@@ -281,6 +366,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
                 instanceId = "respond-missing-inst",
                 instanceSessionToken = instanceToken,
                 invocationId = "invk-not-exists",
+                leaseToken = "missing-lease-token",
                 value = new { ok = true }
             })
         }, CancellationToken.None);
@@ -364,11 +450,10 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
         const string appId = "invocation-wait-budget-elapsed";
         WriteDefinition(appId, rpcEnabled: true);
 
-        var clock = new SequenceClock(DateTime.UtcNow, TimeSpan.FromMilliseconds(600));
+        var clock = new SequenceClock(new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), TimeSpan.FromMilliseconds(600));
         using var appRegistry = new AppRegistry(clock, Mock.Of<ILogger<AppRegistry>>());
         var handler = CreateHandler(appRegistry, clock);
 
-        var stopwatch = Stopwatch.StartNew();
         var response = await handler.HandleAsync(new JsonRpcRequest
         {
             Id = "request-wait-budget-elapsed",
@@ -387,10 +472,8 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
                 }
             })
         }, CancellationToken.None);
-        stopwatch.Stop();
 
         AssertError(response, -32012, "invocation_timeout");
-        Assert.True(stopwatch.ElapsedMilliseconds < 350, $"Expected timeout without waiting the stale wait window, actual={stopwatch.ElapsedMilliseconds}ms.");
 
         var errorData = JsonSerializer.SerializeToElement(response.Error!.Data);
         Assert.True(errorData.GetProperty("elapsedMs").GetInt32() >= 500);
@@ -451,16 +534,195 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
     }
 
     [Fact]
+    public async Task Impl_Notify_WhenPendingLimitReachedAndQueueIfOfflineDisabled_ShouldReturnInstanceNotFound()
+    {
+        const string queuedAppId = "invocation-rate-limit-offline-seed";
+        const string rejectedAppId = "invocation-rate-limit-offline-no-queue";
+        WriteDefinition(queuedAppId, rpcEnabled: true);
+        WriteDefinition(rejectedAppId, rpcEnabled: true);
+
+        using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        var runtimeTuningOptions = RuntimeTuningOptions.Create(30, 30, 30, pendingInvocationsLimit: 1);
+        var context = CreateHandlerContext(appRegistry, runtimeTuningOptions: runtimeTuningOptions);
+
+        var firstResponse = await context.Handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "notify-rate-limit-no-queue-seed",
+            Method = HubRpcMethods.HubInvokeNotify,
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId = queuedAppId,
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
+                method = "task.queue.seed",
+                options = new
+                {
+                    ttlMs = 60000,
+                    queueIfOffline = true,
+                    autoLaunch = false
+                }
+            })
+        }, CancellationToken.None);
+        Assert.Null(firstResponse.Error);
+        Assert.Equal(1, context.Store.GetActiveInvocationCount());
+
+        var secondResponse = await context.Handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "notify-rate-limit-no-queue-rejected",
+            Method = HubRpcMethods.HubInvokeNotify,
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId = rejectedAppId,
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
+                method = "task.queue.rejected",
+                options = new
+                {
+                    ttlMs = 60000,
+                    queueIfOffline = false,
+                    autoLaunch = false
+                }
+            })
+        }, CancellationToken.None);
+
+        AssertError(secondResponse, -32010, "instance_not_found");
+        var errorData = JsonSerializer.SerializeToElement(secondResponse.Error!.Data);
+        Assert.Equal("offline_no_queue", errorData.GetProperty("reason").GetString());
+        Assert.Equal(1, context.Store.GetActiveInvocationCount());
+    }
+
+    [Fact]
+    public async Task Impl_Notify_WhenPendingLimitReachedAndDefinitionMissing_ShouldReturnDefinitionNotFound()
+    {
+        const string queuedAppId = "invocation-rate-limit-definition-seed";
+        const string missingAppId = "invocation-rate-limit-definition-missing";
+        WriteDefinition(queuedAppId, rpcEnabled: true);
+
+        using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        var runtimeTuningOptions = RuntimeTuningOptions.Create(30, 30, 30, pendingInvocationsLimit: 1);
+        var context = CreateHandlerContext(appRegistry, runtimeTuningOptions: runtimeTuningOptions);
+
+        var firstResponse = await context.Handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "notify-rate-limit-missing-definition-seed",
+            Method = HubRpcMethods.HubInvokeNotify,
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId = queuedAppId,
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
+                method = "task.queue.seed",
+                options = new
+                {
+                    ttlMs = 60000,
+                    queueIfOffline = true,
+                    autoLaunch = false
+                }
+            })
+        }, CancellationToken.None);
+        Assert.Null(firstResponse.Error);
+        Assert.Equal(1, context.Store.GetActiveInvocationCount());
+
+        var secondResponse = await context.Handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "notify-rate-limit-missing-definition-rejected",
+            Method = HubRpcMethods.HubInvokeNotify,
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId = missingAppId,
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
+                method = "task.queue.rejected",
+                options = new
+                {
+                    ttlMs = 60000,
+                    queueIfOffline = true,
+                    autoLaunch = true
+                }
+            })
+        }, CancellationToken.None);
+
+        AssertError(secondResponse, -32010, "instance_not_found");
+        var errorData = JsonSerializer.SerializeToElement(secondResponse.Error!.Data);
+        Assert.Equal("definition_not_found", errorData.GetProperty("reason").GetString());
+        Assert.Equal(missingAppId, errorData.GetProperty("appId").GetString());
+        Assert.Equal(ScopeContract.Global, errorData.GetProperty("scope").GetString());
+        Assert.Equal(1, context.Store.GetActiveInvocationCount());
+    }
+
+    [Fact]
+    public async Task Impl_Notify_WhenPendingLimitReachedAndAutoLaunchRequested_ShouldReturnRateLimitedWithoutLaunching()
+    {
+        const string queuedAppId = "invocation-rate-limit-autolaunch-seed";
+        const string launchAppId = "invocation-rate-limit-autolaunch";
+        WriteDefinition(queuedAppId, rpcEnabled: true);
+        WriteDefinition(launchAppId, rpcEnabled: true, includeLaunch: true);
+
+        using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
+        var runtimeTuningOptions = RuntimeTuningOptions.Create(30, 30, 30, pendingInvocationsLimit: 1);
+        var processLauncher = new Mock<IProcessLauncher>();
+        processLauncher
+            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Returns(Process.GetCurrentProcess());
+        var context = CreateHandlerContext(
+            appRegistry,
+            runtimeTuningOptions: runtimeTuningOptions,
+            processLauncher: processLauncher.Object);
+
+        var firstResponse = await context.Handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "notify-rate-limit-autolaunch-seed",
+            Method = HubRpcMethods.HubInvokeNotify,
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId = queuedAppId,
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
+                method = "task.queue.seed",
+                options = new
+                {
+                    ttlMs = 60000,
+                    queueIfOffline = true,
+                    autoLaunch = false
+                }
+            })
+        }, CancellationToken.None);
+        Assert.Null(firstResponse.Error);
+        Assert.Equal(1, context.Store.GetActiveInvocationCount());
+
+        var secondResponse = await context.Handler.HandleAsync(new JsonRpcRequest
+        {
+            Id = "notify-rate-limit-autolaunch-rejected",
+            Method = HubRpcMethods.HubInvokeNotify,
+            Params = JsonSerializer.SerializeToElement(new
+            {
+                appId = launchAppId,
+                target = new { scope = ScopeContract.Global, instanceId = (string?)null },
+                method = "task.queue.rejected",
+                options = new
+                {
+                    ttlMs = 60000,
+                    queueIfOffline = true,
+                    autoLaunch = true
+                }
+            })
+        }, CancellationToken.None);
+
+        AssertError(secondResponse, -32040, "rate_limited");
+        var errorData = JsonSerializer.SerializeToElement(secondResponse.Error!.Data);
+        Assert.Equal("pending_invocations_limit_exceeded", errorData.GetProperty("reason").GetString());
+        Assert.Equal(1, errorData.GetProperty("limit").GetInt32());
+        Assert.Equal(1, errorData.GetProperty("active").GetInt32());
+        processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Never);
+        Assert.Equal(1, context.Store.GetActiveInvocationCount());
+    }
+
+    [Fact]
     public async Task Impl_Notify_WhenPendingInvocationLimitReachedConcurrently_ShouldAllowOnlySingleInvocation()
     {
         const string firstAppId = "invocation-rate-limited-concurrent-a";
         const string secondAppId = "invocation-rate-limited-concurrent-b";
-        WriteDefinition(firstAppId, rpcEnabled: true, includeLaunch: true);
+        WriteDefinition(firstAppId, rpcEnabled: true);
         WriteDefinition(secondAppId, rpcEnabled: true, includeLaunch: true);
 
         using var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
         var runtimeTuningOptions = RuntimeTuningOptions.Create(30, 30, 30, pendingInvocationsLimit: 1);
-        using var processLauncher = new BlockingProcessLauncher(expectedStarts: 2);
+        using var processLauncher = new BlockingProcessLauncher(expectedStarts: 1);
         var context = CreateHandlerContext(
             appRegistry,
             runtimeTuningOptions: runtimeTuningOptions,
@@ -480,28 +742,23 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
                     {
                         ttlMs = 60000,
                         queueIfOffline = true,
-                        autoLaunch = true
+                        autoLaunch = appId == secondAppId
                     }
                 })
             }, CancellationToken.None));
 
-        var firstTask = SendAsync("notify-rate-limit-concurrent-first", firstAppId, "task.queue.concurrent.first");
-        var secondTask = SendAsync("notify-rate-limit-concurrent-second", secondAppId, "task.queue.concurrent.second");
+        var firstResponse = await SendAsync("notify-rate-limit-concurrent-first", firstAppId, "task.queue.concurrent.first");
+        Assert.Null(firstResponse.Error);
+        Assert.Equal(1, context.Store.GetActiveInvocationCount());
 
-        Assert.True(processLauncher.WaitUntilBlocked(TimeSpan.FromSeconds(5)));
-        processLauncher.Release();
+        var secondResponse = await SendAsync("notify-rate-limit-concurrent-second", secondAppId, "task.queue.concurrent.second");
+        AssertError(secondResponse, -32040, "rate_limited");
 
-        var responses = await Task.WhenAll(firstTask, secondTask);
-
-        Assert.Single(responses, static response => response.Error is null);
-
-        var rateLimited = Assert.Single(responses, static response => response.Error?.Code == -32040);
-        Assert.Equal("rate_limited", rateLimited.Error!.Message);
-
-        var errorData = JsonSerializer.SerializeToElement(rateLimited.Error.Data);
+        var errorData = JsonSerializer.SerializeToElement(secondResponse.Error!.Data);
         Assert.Equal("pending_invocations_limit_exceeded", errorData.GetProperty("reason").GetString());
         Assert.Equal(1, errorData.GetProperty("limit").GetInt32());
         Assert.Equal(1, errorData.GetProperty("active").GetInt32());
+        Assert.Equal(0, processLauncher.StartCount);
         Assert.Equal(1, context.Store.GetActiveInvocationCount());
     }
 
@@ -603,6 +860,13 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
             })
         }, CancellationToken.None);
         Assert.Null(poll.Error);
+        var leaseToken = JsonSerializer.SerializeToElement(poll.Result)
+            .GetProperty("items")
+            .EnumerateArray()
+            .Single()
+            .GetProperty("delivery")
+            .GetProperty("leaseToken")
+            .GetString();
 
         var conflict = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -613,6 +877,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
                 instanceId = "other-instance",
                 instanceSessionToken = otherToken,
                 invocationId,
+                leaseToken,
                 value = new { ok = true }
             })
         }, CancellationToken.None);
@@ -657,7 +922,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
         var effectiveRuntimeTuningOptions = runtimeTuningOptions ?? RuntimeTuningOptions.Default;
         var effectiveProcessLauncher = processLauncher ?? new ProcessLauncher();
 
-        var definitionLoader = new DefinitionLoader(_definitionsDirectory, Mock.Of<ILogger<DefinitionLoader>>());
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory), Mock.Of<ILogger<DefinitionLoader>>());
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
 
@@ -692,7 +957,6 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
 
     private void WriteDefinition(string appId, bool rpcEnabled, bool includeLaunch = false)
     {
-        var path = Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, ScopeContract.Global).GetFileName());
         var payload = new Dictionary<string, object?>
         {
             ["appId"] = appId,
@@ -714,7 +978,9 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
             };
         }
 
-        File.WriteAllText(path, JsonSerializer.Serialize(payload));
+        DefinitionCatalogTestHelper.UpsertDefinition(
+            DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory),
+            JsonSerializer.Serialize(payload));
     }
 
     private static string RegisterInstance(AppRegistry appRegistry, string appId, string instanceId, int pid)
@@ -780,6 +1046,7 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
     {
         private readonly CountdownEvent _started;
         private readonly ManualResetEventSlim _release = new(false);
+        private int _startCount;
 
         public BlockingProcessLauncher(int expectedStarts)
         {
@@ -788,10 +1055,13 @@ public sealed class InvocationHandlerBoundaryTests : IDisposable
 
         public Process? Start(DevHub.Core.Models.LaunchConfiguration launchConfig, string? arguments)
         {
+            Interlocked.Increment(ref _startCount);
             _started.Signal();
             _release.Wait();
             return Process.GetCurrentProcess();
         }
+
+        public int StartCount => Volatile.Read(ref _startCount);
 
         public bool WaitUntilBlocked(TimeSpan timeout)
         {

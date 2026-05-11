@@ -6,9 +6,8 @@
   "setup": {
     "definitions": [
       {
-        "fileName": "invoke.request.rpc-disabled--global.json",
-        "definition": {
-          "appId": "invoke.request.rpc-disabled",
+        "appId": "invoke.request.rpc-disabled",
+        "scopeEntry": {
           "scope": "",
           "displayName": "invoke.request.rpc-disabled",
           "capabilities": {

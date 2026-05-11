@@ -43,7 +43,7 @@ public class InvocationStoreTests
         Assert.Equal(30, polled[0].Delivery.LeaseSeconds);
         Assert.Equal(1, polled[0].Delivery.Attempt);
 
-        var respondStatus = store.Respond(instance.InstanceId, created.InvocationId, value: new { ok = true }, error: null);
+        var respondStatus = store.Respond(instance.InstanceId, created.InvocationId, polled[0].Delivery.LeaseToken, value: new { ok = true }, error: null);
         Assert.Equal(InvocationRespondStatus.Success, respondStatus);
 
         Assert.True(store.TryGet(created.InvocationId, out var current));
@@ -73,6 +73,29 @@ public class InvocationStoreTests
         Assert.Single(polled);
         Assert.Equal(pending.InvocationId, polled[0].InvocationId);
         Assert.Equal(InvocationState.Delivered, polled[0].State);
+    }
+
+    [Fact]
+    public void Impl_TryGet_ShouldReturnSnapshot()
+    {
+        var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
+        var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
+        var store = new InvocationStore(_storeLogger.Object, routingService, new SystemClock());
+        var created = store.CreateInvocation(CreateNotify("snapshot.app", targetScope: null, targetInstanceId: null), hasOnlineCandidates: true);
+
+        Assert.True(store.TryGet(created.InvocationId, out var snapshot));
+        snapshot!.State = InvocationState.Completed;
+        snapshot.Target.Scope = "mutated";
+        snapshot.Options.TtlMs = 1;
+        snapshot.Delivery.LeaseToken = "mutated-token";
+        snapshot.Caller.ClientId = "mutated-client";
+
+        Assert.True(store.TryGet(created.InvocationId, out var current));
+        Assert.Equal(InvocationState.Queued, current!.State);
+        Assert.Equal(ScopeContract.Global, current.Target.Scope);
+        Assert.Equal(60000, current.Options.TtlMs);
+        Assert.Equal(string.Empty, current.Delivery.LeaseToken);
+        Assert.Equal("test-client", current.Caller.ClientId);
     }
 
     [Fact]
@@ -131,7 +154,7 @@ public class InvocationStoreTests
         var polled = await store.PollAsync(instance, maxCount: 1, waitMs: 0, CancellationToken.None);
         Assert.Single(polled);
 
-        var status = store.Respond(instance.InstanceId, created.InvocationId, value: null, error: new { code = 1001, message = "app_error" });
+        var status = store.Respond(instance.InstanceId, created.InvocationId, polled[0].Delivery.LeaseToken, value: null, error: new { code = 1001, message = "app_error" });
         Assert.Equal(InvocationRespondStatus.Success, status);
 
         Assert.True(store.TryGet(created.InvocationId, out var current));
@@ -158,11 +181,12 @@ public class InvocationStoreTests
         var created = store.CreateInvocation(CreateNotify("timeout.app", targetScope: null, targetInstanceId: null), hasOnlineCandidates: true);
         var polled = await store.PollAsync(instance, maxCount: 1, waitMs: 0, CancellationToken.None);
         Assert.Single(polled);
+        var leaseToken = polled[0].Delivery.LeaseToken;
 
         var marked = store.MarkTimeout(created.InvocationId, DateTime.UtcNow);
         Assert.True(marked);
 
-        var status = store.Respond(instance.InstanceId, created.InvocationId, value: new { ok = true }, error: null);
+        var status = store.Respond(instance.InstanceId, created.InvocationId, leaseToken, value: new { ok = true }, error: null);
         Assert.Equal(InvocationRespondStatus.Expired, status);
     }
 
@@ -185,11 +209,12 @@ public class InvocationStoreTests
         var created = store.CreateInvocation(CreateNotify("expired.app", targetScope: null, targetInstanceId: null), hasOnlineCandidates: true);
         var polled = await store.PollAsync(instance, maxCount: 1, waitMs: 0, CancellationToken.None);
         Assert.Single(polled);
+        var leaseToken = polled[0].Delivery.LeaseToken;
 
         var marked = store.MarkExpired(created.InvocationId, DateTime.UtcNow);
         Assert.True(marked);
 
-        var status = store.Respond(instance.InstanceId, created.InvocationId, value: new { ok = true }, error: null);
+        var status = store.Respond(instance.InstanceId, created.InvocationId, leaseToken, value: new { ok = true }, error: null);
         Assert.Equal(InvocationRespondStatus.Expired, status);
     }
 
@@ -238,6 +263,157 @@ public class InvocationStoreTests
 
         Assert.True(store.TryGet(created.InvocationId, out var current));
         Assert.Equal(InvocationState.Timeout, current!.State);
+    }
+
+    [Fact]
+    public async Task Impl_Poll_ShouldTimeoutElapsedRequestBeforeLeaseAndCompleteWaiter()
+    {
+        var start = DateTime.UtcNow;
+        var clock = new MutableClock(start);
+        var appRegistry = new AppRegistry(clock, _registryLogger.Object);
+        var instance = appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = "inst-poll-timeout",
+            AppId = "poll-timeout.app",
+            Scope = ScopeContract.Global,
+            Pid = 4012,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
+
+        var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
+        var eventPublisher = new Mock<DevHub.Core.Services.Events.IHubEventPublisher>();
+        var store = new InvocationStore(_storeLogger.Object, routingService, clock, eventPublisher.Object);
+        var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
+
+        var request = CreateRequest("poll-timeout.app", targetScope: null, targetInstanceId: null, ttlMs: 5000, waitTimeoutMs: 1000);
+        request.CreatedAtUtc = start;
+        var created = store.CreateInvocation(request, hasOnlineCandidates: true);
+        var waitTask = waiter.Register(created.InvocationId);
+
+        clock.Advance(TimeSpan.FromMilliseconds(1001));
+
+        var polled = await store.PollAsync(instance, maxCount: 1, waitMs: 0, CancellationToken.None, waiter);
+
+        Assert.Empty(polled);
+        var completion = await waitTask;
+        Assert.Equal(InvocationRequestCompletionKind.Timeout, completion.Kind);
+        Assert.Equal(1001, completion.ElapsedMs);
+        Assert.True(store.TryGet(created.InvocationId, out var current));
+        Assert.Equal(InvocationState.Timeout, current!.State);
+        Assert.Null(current.LeaseHolderInstanceId);
+        Assert.Null(current.LeaseExpireAtUtc);
+        eventPublisher.Verify(
+            publisher => publisher.Publish(It.IsAny<DevHub.Core.Services.Events.HubEventMessage>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task Impl_Poll_ShouldExpireElapsedTtlBeforeLeaseAndCompleteWaiter()
+    {
+        var start = DateTime.UtcNow;
+        var clock = new MutableClock(start);
+        var appRegistry = new AppRegistry(clock, _registryLogger.Object);
+        var instance = appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = "inst-poll-expired",
+            AppId = "poll-expired.app",
+            Scope = ScopeContract.Global,
+            Pid = 4013,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
+
+        var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
+        var store = new InvocationStore(_storeLogger.Object, routingService, clock);
+        var waiter = new InvocationRequestWaiter(Mock.Of<ILogger<InvocationRequestWaiter>>());
+
+        var request = CreateRequest("poll-expired.app", targetScope: null, targetInstanceId: null, ttlMs: 1000, waitTimeoutMs: 5000);
+        request.CreatedAtUtc = start;
+        var created = store.CreateInvocation(request, hasOnlineCandidates: true);
+        var waitTask = waiter.Register(created.InvocationId);
+
+        clock.Advance(TimeSpan.FromMilliseconds(1001));
+
+        var polled = await store.PollAsync(instance, maxCount: 1, waitMs: 0, CancellationToken.None, waiter);
+
+        Assert.Empty(polled);
+        var completion = await waitTask;
+        Assert.Equal(InvocationRequestCompletionKind.Expired, completion.Kind);
+        Assert.Equal(1001, completion.ElapsedMs);
+        Assert.True(store.TryGet(created.InvocationId, out var current));
+        Assert.Equal(InvocationState.Expired, current!.State);
+    }
+
+    [Fact]
+    public async Task Impl_Poll_ShouldDeliverRequestBeforeWaitTimeoutElapses()
+    {
+        var start = DateTime.UtcNow;
+        var clock = new MutableClock(start);
+        var appRegistry = new AppRegistry(clock, _registryLogger.Object);
+        var instance = appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = "inst-poll-before-timeout",
+            AppId = "poll-before-timeout.app",
+            Scope = ScopeContract.Global,
+            Pid = 4014,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
+
+        var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
+        var eventPublisher = new Mock<DevHub.Core.Services.Events.IHubEventPublisher>();
+        var store = new InvocationStore(_storeLogger.Object, routingService, clock, eventPublisher.Object);
+
+        var request = CreateRequest("poll-before-timeout.app", targetScope: null, targetInstanceId: null, ttlMs: 5000, waitTimeoutMs: 1000);
+        request.CreatedAtUtc = start;
+        var created = store.CreateInvocation(request, hasOnlineCandidates: true);
+
+        clock.Advance(TimeSpan.FromMilliseconds(999));
+
+        var polled = await store.PollAsync(instance, maxCount: 1, waitMs: 0, CancellationToken.None);
+
+        Assert.Single(polled);
+        Assert.Equal(created.InvocationId, polled[0].InvocationId);
+        Assert.Equal(InvocationState.Delivered, polled[0].State);
+        Assert.Equal(instance.InstanceId, polled[0].LeaseHolderInstanceId);
+        eventPublisher.Verify(
+            publisher => publisher.Publish(It.Is<DevHub.Core.Services.Events.HubEventMessage>(message =>
+                message.Type == HubEventTypes.InvocationDelivered)),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task Impl_Respond_WhenRequestWaitTimeoutElapsedBeforeTtlAndLeaseValid_ShouldMarkTimeoutAndRejectAsExpired()
+    {
+        var start = DateTime.UtcNow;
+        var clock = new MutableClock(start);
+        var appRegistry = new AppRegistry(clock, _registryLogger.Object);
+        var instance = appRegistry.RegisterInstance(new AppInstance
+        {
+            InstanceId = "inst-respond-timeout",
+            AppId = "respond-timeout.app",
+            Scope = ScopeContract.Global,
+            Pid = 4015,
+            Invoke = new InvokeCapability { Poll = true, Respond = true }
+        });
+
+        var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
+        var store = new InvocationStore(_storeLogger.Object, routingService, clock);
+
+        var request = CreateRequest("respond-timeout.app", targetScope: null, targetInstanceId: null, ttlMs: 5000, waitTimeoutMs: 1000);
+        request.CreatedAtUtc = start;
+        var created = store.CreateInvocation(request, hasOnlineCandidates: true);
+        var polled = await store.PollAsync(instance, maxCount: 1, waitMs: 0, CancellationToken.None);
+        var leaseToken = Assert.Single(polled).Delivery.LeaseToken;
+
+        clock.Advance(TimeSpan.FromMilliseconds(1000));
+
+        var status = store.Respond(instance.InstanceId, created.InvocationId, leaseToken, value: new { ok = true }, error: null);
+
+        Assert.Equal(InvocationRespondStatus.Expired, status);
+        Assert.True(store.TryGet(created.InvocationId, out var current));
+        Assert.Equal(InvocationState.Timeout, current!.State);
+        Assert.Null(current.LeaseHolderInstanceId);
+        Assert.Null(current.LeaseExpireAtUtc);
+        Assert.Equal(string.Empty, current.Delivery.LeaseToken);
     }
 
     [Fact]
@@ -296,7 +472,7 @@ public class InvocationStoreTests
         var polled = await store.PollAsync(instance, maxCount: 1, waitMs: 0, CancellationToken.None);
         Assert.Single(polled);
 
-        var respondStatus = store.Respond(instance.InstanceId, created.InvocationId, value: new { ok = true }, error: null);
+        var respondStatus = store.Respond(instance.InstanceId, created.InvocationId, polled[0].Delivery.LeaseToken, value: new { ok = true }, error: null);
         Assert.Equal(InvocationRespondStatus.Success, respondStatus);
         Assert.True(store.TryGet(created.InvocationId, out var terminalInvocation));
         Assert.Equal(InvocationState.Completed, terminalInvocation!.State);
@@ -404,6 +580,3 @@ public class InvocationStoreTests
         }
     }
 }
-
-
-

@@ -86,6 +86,11 @@ jobs:
             is_release_intent="true"
           fi
 
+          is_dev_push="false"
+          if [[ "${EVENT_NAME}" == "push" && "${REF}" == "refs/heads/dev" ]]; then
+            is_dev_push="true"
+          fi
+
           base_sha=""
           head_sha="${SHA}"
           if [[ "${EVENT_NAME}" == "pull_request" ]]; then
@@ -236,6 +241,12 @@ jobs:
             if [[ "${changed_monitor}" == "true" || "${changed_sdk_js}" == "true" || "${changed_release}" == "true" || "${changed_workflow}" == "true" ]]; then
               run_monitor_validation="true"
             fi
+            if [[ "${is_dev_push}" == "true" && ( "${changed_host}" == "true" || "${changed_sdk_dotnet}" == "true" || "${changed_sdk_js}" == "true" || "${changed_sdk_python}" == "true" || "${changed_release}" == "true" || "${changed_workflow}" == "true" || "${changed_docs_specification}" == "true" ) ]]; then
+              run_cross_platform_smoke="true"
+            fi
+            if [[ "${is_dev_push}" == "true" && ( "${changed_host}" == "true" || "${changed_sdk_js}" == "true" || "${changed_monitor}" == "true" || "${changed_release}" == "true" || "${changed_workflow}" == "true" || "${changed_docs_specification}" == "true" ) ]]; then
+              run_monitor_validation="true"
+            fi
           fi
 
           changed_scopes=()
@@ -306,11 +317,6 @@ jobs:
 
       - name: Verify version metadata
         run: python3 scripts/release/sync_versions.py --check
-
-      - name: Install Python dependencies
-        run: |
-          python3 -m pip install --upgrade pip
-          python3 -m pip install requests
 
       - name: Restore
         run: dotnet restore host/DevHub.slnx
@@ -549,9 +555,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install Python SDK test dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e './sdks/python[test]' requests
+        run: python -m pip install -e './sdks/python[test]'
 
       - name: Download shared Host artifact
         uses: actions/download-artifact@v7
@@ -593,9 +597,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install Python SDK test dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e './sdks/python[test]' requests
+        run: python -m pip install -e './sdks/python[test]'
 
       - name: Install JavaScript SDK dependencies
         run: npm --prefix sdks/javascript ci
@@ -715,11 +717,6 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
-
-      - name: Install Python dependencies
-        run: |
-          python3 -m pip install --upgrade pip
-          python3 -m pip install requests
 
       - name: Restore
         run: dotnet restore host/DevHub.slnx
@@ -857,11 +854,6 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
-
-      - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install requests
 
       - name: Install Windows ACL dependency
         if: runner.os == 'Windows'

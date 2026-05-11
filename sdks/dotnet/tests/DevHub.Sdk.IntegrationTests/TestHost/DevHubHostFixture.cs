@@ -4,8 +4,6 @@ using System.Reflection;
 using System.Text;
 using System.Threading;
 using DevHub.Sdk.Models;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Serialization;
 
 namespace DevHub.Sdk.IntegrationTests.TestHost;
 
@@ -99,9 +97,9 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
 
     public string RuntimeDirectory => Path.Combine(DataDirectory, "runtime");
 
-    public string DefinitionsDirectory => Path.Combine(DataDirectory, "apps", "definitions");
+    public string AppsDirectory => Path.Combine(DataDirectory, "apps");
 
-    public string InstancesDirectory => Path.Combine(DataDirectory, "apps", "instances");
+    public string DefinitionsCatalogPath => Path.Combine(AppsDirectory, "definitions.json");
 
     public string LogsDirectory => Path.Combine(DataDirectory, "logs");
 
@@ -126,27 +124,12 @@ internal sealed class DevHubHostFixture : IAsyncDisposable
 
     public async Task WriteDefinitionAsync(AppDefinition definition)
     {
-        Directory.CreateDirectory(DefinitionsDirectory);
-        var path = Path.Combine(DefinitionsDirectory, BuildDefinitionFileName(definition));
-        var content = JsonConvert.SerializeObject(
-            definition,
-            new JsonSerializerSettings
-            {
-                ContractResolver = new CamelCasePropertyNamesContractResolver(),
-                NullValueHandling = NullValueHandling.Ignore,
-                DateParseHandling = DateParseHandling.None
-        });
-        await File.WriteAllTextAsync(path, content);
-    }
-
-    private static string BuildDefinitionFileName(AppDefinition definition)
-    {
         ArgumentNullException.ThrowIfNull(definition);
+        _ = definition.AppId;
+        _ = definition.Scope;
 
-        var scopeSegment = string.IsNullOrEmpty(definition.Scope)
-            ? "global"
-            : $"scope-{definition.Scope}";
-        return $"{definition.AppId}--{scopeSegment}.json";
+        await using var client = await CreateClientAsync($"fixture-definition-writer-{Guid.NewGuid():N}");
+        await client.UpsertDefinitionAsync(definition);
     }
 
     public Task<DevHubClient> CreateClientAsync(string clientId)

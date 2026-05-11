@@ -124,7 +124,8 @@ public sealed class PublicExtensionPointTests
             {
                 LeaseSeconds = 30,
                 OnlineThresholdSeconds = 30,
-                LaunchDedupeWindowSeconds = 30
+                LaunchDedupeWindowSeconds = 30,
+                LaunchRegisterTimeoutSeconds = 30
             }
         };
 

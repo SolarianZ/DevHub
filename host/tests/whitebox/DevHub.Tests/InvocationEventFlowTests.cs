@@ -95,7 +95,9 @@ public class InvocationEventFlowTests : IDisposable
         var items = pollResult.GetProperty("items").EnumerateArray().ToList();
         Assert.Single(items);
         var invocationId = items[0].GetProperty("invocationId").GetString();
+        var leaseToken = items[0].GetProperty("delivery").GetProperty("leaseToken").GetString();
         Assert.False(string.IsNullOrWhiteSpace(invocationId));
+        Assert.False(string.IsNullOrWhiteSpace(leaseToken));
 
         var respondResponse = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -106,6 +108,7 @@ public class InvocationEventFlowTests : IDisposable
                 instanceId = "inst-event-success",
                 instanceSessionToken,
                 invocationId,
+                leaseToken,
                 value = new { ok = true }
             })
         }, CancellationToken.None);
@@ -123,6 +126,7 @@ public class InvocationEventFlowTests : IDisposable
         Assert.Equal(invocationId, completedPayload.GetProperty("invocationId").GetString());
         Assert.Equal("event.invoke.app", completedPayload.GetProperty("appId").GetString());
         Assert.Equal("inst-event-success", completedPayload.GetProperty("instanceId").GetString());
+        Assert.False(completedPayload.GetProperty("delivery").TryGetProperty("leaseToken", out _));
     }
 
     [Fact]
@@ -182,7 +186,9 @@ public class InvocationEventFlowTests : IDisposable
 
         Assert.Null(pollResponse.Error);
         var pollResult = JsonSerializer.SerializeToElement(pollResponse.Result);
-        var invocationId = pollResult.GetProperty("items").EnumerateArray().First().GetProperty("invocationId").GetString();
+        var pollItem = pollResult.GetProperty("items").EnumerateArray().First();
+        var invocationId = pollItem.GetProperty("invocationId").GetString();
+        var leaseToken = pollItem.GetProperty("delivery").GetProperty("leaseToken").GetString();
 
         var respondResponse = await handler.HandleAsync(new JsonRpcRequest
         {
@@ -193,6 +199,7 @@ public class InvocationEventFlowTests : IDisposable
                 instanceId = "inst-event-failed",
                 instanceSessionToken,
                 invocationId,
+                leaseToken,
                 error = new
                 {
                     code = 1001,
@@ -215,7 +222,10 @@ public class InvocationEventFlowTests : IDisposable
         Assert.Equal(invocationId, failedPayload.GetProperty("invocationId").GetString());
         Assert.Equal("event.invoke.fail.app", failedPayload.GetProperty("appId").GetString());
         Assert.Equal("inst-event-failed", failedPayload.GetProperty("instanceId").GetString());
-        Assert.True(failedPayload.TryGetProperty("error", out _));
+        Assert.Equal("mock", failedPayload.GetProperty("reason").GetString());
+        Assert.True(failedPayload.TryGetProperty("error", out var error));
+        Assert.Equal("app_error", error.GetProperty("message").GetString());
+        Assert.False(failedPayload.GetProperty("delivery").TryGetProperty("leaseToken", out _));
     }
 
     /// <summary>
@@ -231,7 +241,7 @@ public class InvocationEventFlowTests : IDisposable
 
     private (InvocationHandler Handler, HubEventBus EventBus) CreateHandler(AppRegistry appRegistry)
     {
-        var definitionLoader = new DefinitionLoader(_tempDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
@@ -257,9 +267,6 @@ public class InvocationEventFlowTests : IDisposable
                ?? throw new InvalidOperationException($"Instance '{instanceId}' session token was not registered.");
     }
 }
-
-
-
 
 
 

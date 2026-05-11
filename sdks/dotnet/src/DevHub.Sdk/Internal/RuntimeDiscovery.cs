@@ -24,7 +24,7 @@ internal static class RuntimeDiscovery
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        var hubJsonContent = await CompatibilityIo.ReadAllTextAsync(hubJsonPath, cancellationToken);
+        var hubJsonContent = await CompatibilityIo.ReadAllTextAsync(hubJsonPath, cancellationToken).ConfigureAwait(false);
         var hubJsonObject = DevHubJson.ParseObject(hubJsonContent);
         ValidateHubVersion(hubJsonObject, hubJsonPath);
 
@@ -38,7 +38,7 @@ internal static class RuntimeDiscovery
             throw new InvalidOperationException($"未找到 token 文件：{runtime.TokenFile}");
         }
 
-        var token = (await CompatibilityIo.ReadAllTextAsync(runtime.TokenFile, cancellationToken)).Trim();
+        var token = (await CompatibilityIo.ReadAllTextAsync(runtime.TokenFile, cancellationToken).ConfigureAwait(false)).Trim();
         if (string.IsNullOrWhiteSpace(token))
         {
             throw new InvalidOperationException($"token 文件为空：{runtime.TokenFile}");
@@ -138,7 +138,8 @@ internal static class RuntimeDiscovery
         if (runtime.RuntimeTuning is null ||
             runtime.RuntimeTuning.LeaseSeconds < 1 ||
             runtime.RuntimeTuning.OnlineThresholdSeconds < 1 ||
-            runtime.RuntimeTuning.LaunchDedupeWindowSeconds < 1)
+            runtime.RuntimeTuning.LaunchDedupeWindowSeconds < 1 ||
+            runtime.RuntimeTuning.LaunchRegisterTimeoutSeconds < 1)
         {
             throw new InvalidOperationException($"hub.json.runtimeTuning 非法：{hubJsonPath}");
         }
@@ -153,31 +154,65 @@ internal static class RuntimeDiscovery
         }
     }
 
-    private static void ValidateHttpBaseUrl(string httpBaseUrl, string hubJsonPath)
+    internal static void ValidateConnectionInfo(DevHubRuntimeConnectionInfo connectionInfo, string source)
     {
-        if (string.IsNullOrWhiteSpace(httpBaseUrl) || httpBaseUrl.EndsWith("/", StringComparison.Ordinal))
+        CompatibilityGuards.ThrowIfNull(connectionInfo, nameof(connectionInfo));
+
+        ValidateHttpBaseUrl(connectionInfo.Runtime.HttpBaseUrl, source);
+        ValidateWebSocketUrl(connectionInfo.Runtime.WsUrl, source);
+
+        if (connectionInfo.RpcEndpoint.AbsoluteUri != connectionInfo.Runtime.HttpBaseUrl + "/rpc")
+        {
+            throw new InvalidOperationException($"{source}.rpcEndpoint 非法。");
+        }
+
+        if (connectionInfo.WebSocketEndpoint.AbsoluteUri != connectionInfo.Runtime.WsUrl)
+        {
+            throw new InvalidOperationException($"{source}.webSocketEndpoint 非法。");
+        }
+    }
+
+    internal static void ValidateHttpBaseUrl(string httpBaseUrl, string hubJsonPath)
+    {
+        if (string.IsNullOrWhiteSpace(httpBaseUrl) ||
+            httpBaseUrl.Trim() != httpBaseUrl ||
+            httpBaseUrl.EndsWith("/", StringComparison.Ordinal) ||
+            httpBaseUrl.IndexOf("?", StringComparison.Ordinal) >= 0 ||
+            httpBaseUrl.IndexOf("#", StringComparison.Ordinal) >= 0)
         {
             throw new InvalidOperationException($"hub.json.httpBaseUrl 非法：{hubJsonPath}");
         }
 
         if (!Uri.TryCreate(httpBaseUrl, UriKind.Absolute, out var uri) ||
             (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) ||
-            !IsLoopbackHost(uri.Host))
+            !IsLoopbackHost(uri.Host) ||
+            !string.IsNullOrEmpty(uri.UserInfo) ||
+            uri.AbsolutePath != "/" ||
+            !string.IsNullOrEmpty(uri.Query) ||
+            !string.IsNullOrEmpty(uri.Fragment))
         {
             throw new InvalidOperationException($"hub.json.httpBaseUrl 非法：{hubJsonPath}");
         }
     }
 
-    private static void ValidateWebSocketUrl(string wsUrl, string hubJsonPath)
+    internal static void ValidateWebSocketUrl(string wsUrl, string hubJsonPath)
     {
-        if (string.IsNullOrWhiteSpace(wsUrl) || wsUrl.EndsWith("/", StringComparison.Ordinal))
+        if (string.IsNullOrWhiteSpace(wsUrl) ||
+            wsUrl.Trim() != wsUrl ||
+            wsUrl.EndsWith("/", StringComparison.Ordinal) ||
+            wsUrl.IndexOf("?", StringComparison.Ordinal) >= 0 ||
+            wsUrl.IndexOf("#", StringComparison.Ordinal) >= 0)
         {
             throw new InvalidOperationException($"hub.json.wsUrl 非法：{hubJsonPath}");
         }
 
         if (!Uri.TryCreate(wsUrl, UriKind.Absolute, out var uri) ||
             (uri.Scheme != "ws" && uri.Scheme != "wss") ||
-            !IsLoopbackHost(uri.Host))
+            !IsLoopbackHost(uri.Host) ||
+            !string.IsNullOrEmpty(uri.UserInfo) ||
+            uri.AbsolutePath != "/ws" ||
+            !string.IsNullOrEmpty(uri.Query) ||
+            !string.IsNullOrEmpty(uri.Fragment))
         {
             throw new InvalidOperationException($"hub.json.wsUrl 非法：{hubJsonPath}");
         }

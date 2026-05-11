@@ -74,7 +74,36 @@ public sealed class ProgramTests : IDisposable
         var second = InvokePrivateStatic<string>("BuildSingleInstanceMutexName", runtimePathOptions);
 
         Assert.Equal(first, second);
-        Assert.StartsWith(@"Local\DevHub_", first, StringComparison.Ordinal);
+        var expectedPrefix = OperatingSystem.IsWindows() ? @"Global\DevHub_" : @"Local\DevHub_";
+        Assert.StartsWith(expectedPrefix, first, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Impl_BuildSingleInstanceMutexName_OnWindows_ShouldUseCrossSessionScope()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var runtimePathOptions = RuntimePathOptions.Create(Path.Combine(_tempRoot, "data"));
+        var mutexName = InvokePrivateStatic<string>("BuildSingleInstanceMutexName", runtimePathOptions);
+
+        Assert.StartsWith(@"Global\DevHub_", mutexName, StringComparison.Ordinal);
+        Assert.False(mutexName.StartsWith(@"Local\", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Impl_BuildSingleInstanceMutexName_WhenUsedForMutex_ShouldRejectCompetingInstance()
+    {
+        var runtimePathOptions = RuntimePathOptions.Create(Path.Combine(_tempRoot, "data"));
+        var mutexName = InvokePrivateStatic<string>("BuildSingleInstanceMutexName", runtimePathOptions);
+
+        using var firstMutex = new Mutex(initiallyOwned: true, mutexName, out var firstCreated);
+        using var secondMutex = new Mutex(initiallyOwned: true, mutexName, out var secondCreated);
+
+        Assert.True(firstCreated);
+        Assert.False(secondCreated);
     }
 
     [Fact]

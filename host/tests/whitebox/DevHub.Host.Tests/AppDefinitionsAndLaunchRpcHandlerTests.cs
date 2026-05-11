@@ -15,7 +15,7 @@ using Moq;
 /// <summary>
 /// Host 使用的共享定义管理与启动 RPC 处理器测试。
 /// </summary>
-[Trait("Category", "Spec")]
+[Trait("Category", "Impl")]
 public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
 {
     private readonly string _tempRoot;
@@ -30,14 +30,12 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.3")]
-    [Trait("SpecRef", "6.3.4")]
-    public async Task Spec_6_3_3_And_6_3_4_AppDefinitionsRpcHandler_ShouldListAndGetDefinitions()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_3_And_6_3_4_AppDefinitionsRpcHandler_ShouldListAndGetDefinitions()
     {
         using var context = CreateDefinitionContext();
         WriteDefinition(
-            context.RuntimePathOptions.DefinitionsPath,
+            context.RuntimePathOptions.DefinitionsCatalogPath,
             """
             {
               "appId": "adapter.alpha",
@@ -46,7 +44,7 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
             }
             """);
         WriteDefinition(
-            context.RuntimePathOptions.DefinitionsPath,
+            context.RuntimePathOptions.DefinitionsCatalogPath,
             """
             {
               "appId": "adapter.beta",
@@ -55,6 +53,7 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
             }
             """);
 
+        context.DefinitionProvider.Refresh();
         var handler = new AppDefinitionsHandler(context.DefinitionProvider, context.DefinitionManager, Mock.Of<ILogger<AppDefinitionsHandler>>());
 
         var listResponse = await handler.HandleAsync(
@@ -79,9 +78,8 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.4")]
-    public async Task Spec_6_3_4_AppDefinitionsRpcHandler_WhenDefinitionMissing_ShouldReturnAppDefinitionNotFound()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_4_AppDefinitionsRpcHandler_WhenDefinitionMissing_ShouldReturnAppDefinitionNotFound()
     {
         using var context = CreateDefinitionContext();
         var handler = new AppDefinitionsHandler(context.DefinitionProvider, context.DefinitionManager, Mock.Of<ILogger<AppDefinitionsHandler>>());
@@ -96,10 +94,8 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.5")]
-    [Trait("SpecRef", "6.3.6")]
-    public async Task Spec_6_3_5_And_6_3_6_AppDefinitionsRpcHandler_ShouldValidateAndRejectInvalidDefinitions()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_5_And_6_3_6_AppDefinitionsRpcHandler_ShouldValidateAndRejectInvalidDefinitions()
     {
         using var context = CreateDefinitionContext();
         var handler = new AppDefinitionsHandler(context.DefinitionProvider, context.DefinitionManager, Mock.Of<ILogger<AppDefinitionsHandler>>());
@@ -136,9 +132,8 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.5")]
-    public async Task Spec_6_3_5_AppDefinitionsRpcHandler_WhenDefinitionParamMissing_ShouldReturnInvalidParams()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_5_AppDefinitionsRpcHandler_WhenDefinitionParamMissing_ShouldReturnInvalidParams()
     {
         using var context = CreateDefinitionContext();
         var handler = new AppDefinitionsHandler(context.DefinitionProvider, context.DefinitionManager, Mock.Of<ILogger<AppDefinitionsHandler>>());
@@ -151,10 +146,8 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.6")]
-    [Trait("SpecRef", "6.3.7")]
-    public async Task Spec_6_3_6_And_6_3_7_AppDefinitionsRpcHandler_ShouldUpsertAndDeleteDefinition()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_6_And_6_3_7_AppDefinitionsRpcHandler_ShouldUpsertAndDeleteDefinition()
     {
         var eventPublisher = new Mock<IHubEventPublisher>();
         using var context = CreateDefinitionContext(eventPublisher.Object);
@@ -205,9 +198,52 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.3")]
-    public async Task Spec_6_3_3_AppDefinitionsRpcHandler_ShouldKeepDefinitionsSeparateByScopeAndStableOrder()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_5_And_6_3_6_And_6_3_12_AppDefinitionsAndLaunch_WhenLaunchExePathBlank_ShouldStoreDefinitionAndReturnLaunchConfigMissing()
+    {
+        using var context = CreateDefinitionContext();
+        var definitionsHandler = new AppDefinitionsHandler(context.DefinitionProvider, context.DefinitionManager, Mock.Of<ILogger<AppDefinitionsHandler>>());
+        var launchHandler = CreateLaunchHandler(context);
+
+        var definitionParams = new
+        {
+            definition = new
+            {
+                appId = "blank-launch-config",
+                scope = ScopeContract.Global,
+                displayName = "Blank Launch Config",
+                launch = new
+                {
+                    exePath = "   ",
+                    argsTemplate = "--info"
+                }
+            }
+        };
+
+        var validateResponse = await definitionsHandler.HandleAsync(
+            CreateRequest(HubRpcMethods.HubAppsValidateDefinition, "validate-blank-launch", definitionParams),
+            CancellationToken.None);
+        Assert.Null(validateResponse.Error);
+        Assert.True(JsonSerializer.SerializeToElement(validateResponse.Result).GetProperty("valid").GetBoolean());
+
+        var upsertResponse = await definitionsHandler.HandleAsync(
+            CreateRequest(HubRpcMethods.HubAppsUpsertDefinition, "upsert-blank-launch", definitionParams),
+            CancellationToken.None);
+        Assert.Null(upsertResponse.Error);
+        var upsertDefinition = JsonSerializer.SerializeToElement(upsertResponse.Result).GetProperty("definition");
+        Assert.Equal("   ", upsertDefinition.GetProperty("launch").GetProperty("exePath").GetString());
+
+        var launchResponse = await launchHandler.HandleAsync(
+            CreateRequest(HubRpcMethods.HubAppsLaunch, "launch-blank-launch", new { appId = "blank-launch-config", scope = ScopeContract.Global }),
+            CancellationToken.None);
+
+        AssertError(launchResponse, -32020, "launch_failed", "launch-blank-launch");
+        Assert.Equal("launch_config_missing", JsonSerializer.SerializeToElement(launchResponse.Error!.Data).GetProperty("reason").GetString());
+    }
+
+    [Fact]
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_3_AppDefinitionsRpcHandler_ShouldKeepDefinitionsSeparateByScopeAndStableOrder()
     {
         var eventPublisher = new Mock<IHubEventPublisher>();
         using var context = CreateDefinitionContext(eventPublisher.Object);
@@ -347,9 +383,8 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.12")]
-    public async Task Spec_6_3_12_LaunchRpcHandler_ShouldValidateScopeWaitAndDedupeKey()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_12_LaunchRpcHandler_ShouldValidateScopeWaitAndDedupeKey()
     {
         using var context = CreateDefinitionContext();
         var handler = CreateLaunchHandler(context);
@@ -372,9 +407,8 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
     }
 
     [Fact]
-    [Trait("Category", "Spec")]
-    [Trait("SpecRef", "6.3.12")]
-    public async Task Spec_6_3_12_LaunchRpcHandler_ShouldMapLaunchErrorsAndSuccess()
+    [Trait("Category", "Impl")]
+    public async Task Impl_6_3_12_LaunchRpcHandler_ShouldMapLaunchErrorsAndSuccess()
     {
         using var context = CreateDefinitionContext();
         var processLauncher = new Mock<IProcessLauncher>();
@@ -390,7 +424,7 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
         AssertError(missingDefinitionResponse, -32014, "app_definition_not_found", "launch-missing-definition");
 
         WriteDefinition(
-            context.RuntimePathOptions.DefinitionsPath,
+            context.RuntimePathOptions.DefinitionsCatalogPath,
             """
             {
               "appId": "launch.no-config",
@@ -407,7 +441,7 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
         Assert.Equal("launch_config_missing", JsonSerializer.SerializeToElement(missingConfigResponse.Error!.Data).GetProperty("reason").GetString());
 
         WriteDefinition(
-            context.RuntimePathOptions.DefinitionsPath,
+            context.RuntimePathOptions.DefinitionsCatalogPath,
             """
             {
               "appId": "launch.success",
@@ -429,6 +463,7 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
         Assert.Equal("started", successResult.GetProperty("status").GetString());
         Assert.Equal(Process.GetCurrentProcess().Id, successResult.GetProperty("pid").GetInt32());
         Assert.False(string.IsNullOrWhiteSpace(successResult.GetProperty("launchId").GetString()));
+        Assert.Equal("launch.success:global", successResult.GetProperty("dedupeKey").GetString());
     }
 
     /// <inheritdoc />
@@ -449,10 +484,10 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
     private DefinitionTestContext CreateDefinitionContext(IHubEventPublisher? eventPublisher = null, IClock? clock = null)
     {
         var runtimePathOptions = RuntimePathOptions.Create(Path.Combine(_tempRoot, Guid.NewGuid().ToString("N")));
-        Directory.CreateDirectory(runtimePathOptions.DefinitionsPath);
+        Directory.CreateDirectory(runtimePathOptions.AppsPath);
 
         var validator = new AppDefinitionValidator();
-        var definitionLoader = new DefinitionLoader(runtimePathOptions.DefinitionsPath, Mock.Of<ILogger<DefinitionLoader>>(), validator);
+        var definitionLoader = new DefinitionLoader(runtimePathOptions.DefinitionsCatalogPath, Mock.Of<ILogger<DefinitionLoader>>(), validator);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
 
@@ -502,16 +537,9 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
         };
     }
 
-    private static void WriteDefinition(string definitionsPath, string json)
+    private static void WriteDefinition(string catalogPath, string json)
     {
-        using var document = JsonDocument.Parse(json);
-        var appId = document.RootElement.GetProperty("appId").GetString();
-        var scope = document.RootElement.TryGetProperty("scope", out var scopeElement)
-            ? scopeElement.ValueKind == JsonValueKind.Null ? ScopeContract.Global : scopeElement.GetString()
-            : ScopeContract.Global;
-        File.WriteAllText(
-            Path.Combine(definitionsPath, AppDefinitionIdentity.Create(appId!, scope ?? ScopeContract.Global).GetFileName()),
-            json);
+        DefinitionCatalogTestHelper.UpsertDefinition(catalogPath, json);
     }
 
     private static void AssertError(JsonRpcResponse response, int code, string message, object id)

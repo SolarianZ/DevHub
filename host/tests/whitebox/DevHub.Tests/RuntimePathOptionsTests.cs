@@ -5,6 +5,7 @@ using DevHub.Core.Services;
 /// <summary>
 /// <see cref="RuntimePathOptions"/> 测试。
 /// </summary>
+[Collection(TestCollections.ProcessEnvironment)]
 [Trait("Category", "Impl")]
 public class RuntimePathOptionsTests : IDisposable
 {
@@ -30,8 +31,8 @@ public class RuntimePathOptionsTests : IDisposable
 
         Assert.Equal(dataDirectory, options.RootPath);
         Assert.Equal(Path.Combine(dataDirectory, "runtime"), options.RuntimePath);
-        Assert.Equal(Path.Combine(dataDirectory, "apps", "definitions"), options.DefinitionsPath);
-        Assert.Equal(Path.Combine(dataDirectory, "apps", "instances"), options.InstancesPath);
+        Assert.Equal(Path.Combine(dataDirectory, "apps"), options.AppsPath);
+        Assert.Equal(Path.Combine(dataDirectory, "apps", "definitions.json"), options.DefinitionsCatalogPath);
         Assert.Equal(Path.Combine(dataDirectory, "logs"), options.LogsPath);
         Assert.Equal(Path.Combine(dataDirectory, "runtime", "token.txt"), options.TokenFilePath);
         Assert.Equal(Path.Combine(dataDirectory, "runtime", "hub.json"), options.HubJsonPath);
@@ -48,8 +49,8 @@ public class RuntimePathOptionsTests : IDisposable
 
         Assert.Equal(expectedRoot, options.RootPath);
         Assert.Equal(Path.Combine(expectedRoot, "runtime"), options.RuntimePath);
-        Assert.Equal(Path.Combine(expectedRoot, "apps", "definitions"), options.DefinitionsPath);
-        Assert.Equal(Path.Combine(expectedRoot, "apps", "instances"), options.InstancesPath);
+        Assert.Equal(Path.Combine(expectedRoot, "apps"), options.AppsPath);
+        Assert.Equal(Path.Combine(expectedRoot, "apps", "definitions.json"), options.DefinitionsCatalogPath);
         Assert.Equal(Path.Combine(expectedRoot, "logs"), options.LogsPath);
         Assert.Equal(Path.Combine(expectedRoot, "runtime", "token.txt"), options.TokenFilePath);
         Assert.Equal(Path.Combine(expectedRoot, "runtime", "hub.json"), options.HubJsonPath);
@@ -68,15 +69,15 @@ public class RuntimePathOptionsTests : IDisposable
         var expectedRootPath = Path.GetFullPath(relativeDataDirectory, currentDirectory);
         Assert.Equal(expectedRootPath, options.RootPath);
         Assert.True(Path.IsPathFullyQualified(options.RuntimePath));
-        Assert.True(Path.IsPathFullyQualified(options.DefinitionsPath));
-        Assert.True(Path.IsPathFullyQualified(options.InstancesPath));
+        Assert.True(Path.IsPathFullyQualified(options.AppsPath));
+        Assert.True(Path.IsPathFullyQualified(options.DefinitionsCatalogPath));
         Assert.True(Path.IsPathFullyQualified(options.LogsPath));
         Assert.True(Path.IsPathFullyQualified(options.TokenFilePath));
         Assert.True(Path.IsPathFullyQualified(options.HubJsonPath));
         Assert.True(Path.IsPathFullyQualified(options.PreviousHubJsonPath));
         Assert.Equal(Path.Combine(expectedRootPath, "runtime"), options.RuntimePath);
-        Assert.Equal(Path.Combine(expectedRootPath, "apps", "definitions"), options.DefinitionsPath);
-        Assert.Equal(Path.Combine(expectedRootPath, "apps", "instances"), options.InstancesPath);
+        Assert.Equal(Path.Combine(expectedRootPath, "apps"), options.AppsPath);
+        Assert.Equal(Path.Combine(expectedRootPath, "apps", "definitions.json"), options.DefinitionsCatalogPath);
         Assert.Equal(Path.Combine(expectedRootPath, "logs"), options.LogsPath);
         Assert.Equal(Path.Combine(expectedRootPath, "runtime", "token.txt"), options.TokenFilePath);
         Assert.Equal(Path.Combine(expectedRootPath, "runtime", "hub.json"), options.HubJsonPath);
@@ -95,8 +96,8 @@ public class RuntimePathOptionsTests : IDisposable
 
         Assert.Equal(created.RootPath, resolved.RootPath);
         Assert.Equal(created.RuntimePath, resolved.RuntimePath);
-        Assert.Equal(created.DefinitionsPath, resolved.DefinitionsPath);
-        Assert.Equal(created.InstancesPath, resolved.InstancesPath);
+        Assert.Equal(created.AppsPath, resolved.AppsPath);
+        Assert.Equal(created.DefinitionsCatalogPath, resolved.DefinitionsCatalogPath);
         Assert.Equal(created.LogsPath, resolved.LogsPath);
         Assert.Equal(created.TokenFilePath, resolved.TokenFilePath);
         Assert.Equal(created.HubJsonPath, resolved.HubJsonPath);

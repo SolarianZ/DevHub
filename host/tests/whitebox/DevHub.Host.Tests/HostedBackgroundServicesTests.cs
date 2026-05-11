@@ -1,8 +1,10 @@
 namespace DevHub.Host.Tests;
 
+using System.Text.Json;
 using DevHub.Core.Models;
 using DevHub.Core.Services;
 using DevHub.Core.Services.Abstractions;
+using DevHub.Core.Services.Events;
 using DevHub.Core.Services.Invocation;
 using DevHub.Host.BackgroundServices;
 using Microsoft.Extensions.Logging;
@@ -18,8 +20,13 @@ public sealed class HostedBackgroundServicesTests
     public void Impl_AppRegistryCleanupBackgroundService_ExecuteOneIteration_ShouldCleanupExpiredInstances()
     {
         var clock = new MutableClock(DateTime.UtcNow);
+        var eventPublisher = new Mock<IHubEventPublisher>();
+        HubEventMessage? publishedMessage = null;
+        eventPublisher
+            .Setup(publisher => publisher.Publish(It.IsAny<HubEventMessage>()))
+            .Callback<HubEventMessage>(message => publishedMessage = message);
         using var appRegistry = new AppRegistry(clock, Mock.Of<ILogger<AppRegistry>>());
-        var service = new AppRegistryCleanupBackgroundService(appRegistry, Mock.Of<ILogger<AppRegistryCleanupBackgroundService>>());
+        var service = new AppRegistryCleanupBackgroundService(appRegistry, eventPublisher.Object, Mock.Of<ILogger<AppRegistryCleanupBackgroundService>>());
 
         var instance = appRegistry.RegisterInstance(new AppInstance
         {
@@ -40,6 +47,14 @@ public sealed class HostedBackgroundServicesTests
         service.ExecuteOneIteration();
 
         Assert.Null(appRegistry.GetInstance(instance.InstanceId));
+        eventPublisher.Verify(publisher => publisher.Publish(It.IsAny<HubEventMessage>()), Times.Once);
+        Assert.NotNull(publishedMessage);
+        Assert.Equal(HubEventTypes.AppInstanceUnregistered, publishedMessage!.Type);
+
+        var payload = JsonSerializer.SerializeToElement(publishedMessage.Payload);
+        Assert.Equal(ScopeContract.Global, payload.GetProperty("scope").GetString());
+        Assert.False(payload.TryGetProperty("instanceSessionToken", out var _));
+        Assert.False(payload.TryGetProperty("password", out var _));
     }
 
     [Fact]

@@ -11,14 +11,16 @@
 
 ## 2. 样例值约定
 
-本目录中的 JSON 文件统一使用固定字面值，目的是提供可直接消费、可直接校验的合法样例。涉及运行时生成或返回的字段时，示例统一采用以下样例值：
+本目录中的 JSON 文件统一使用固定字面值，目的是提供可直接消费、可直接校验的协议报文样例。正向样例使用合法业务值；用于演示校验失败或错误路径的样例，会在保持 JSON-RPC 报文形状合法的前提下包含故意构造的业务无效值。涉及运行时生成或返回的字段时，示例统一采用以下样例值：
 
 - Host token：`devhub-host-token-sample`
 - Host version：`1.0.1`
 - `subscriptionId`：`sub-sample-001`
 - `invocationId`：`invk-sample-request-001`
 - `launchId`：`launch-sample-app-global-001`
+- register password：`regsec_7fK2m9Qx4Nc8Vt1Lp6Ys3Hd0Br5ZwJ2Ua8Ce1Mg4`
 - `instanceSessionToken`：`inst-session-node-01-alpha-001`
+- `leaseToken`：`lease-sample-request-001-attempt-1`
 - `serverTimeUtc`：`2026-03-28T12:34:56Z`
 - `registeredAtUtc`：`2026-03-28T12:35:01Z`
 - `lastSeenUtc`：`2026-03-28T12:35:16Z`
@@ -31,12 +33,14 @@
 - 显式 `scope = "Workspace-A.v2"`
 - `instanceId = "NODE_01.alpha"` / `NODE_01.beta`
 
+JSON-RPC request `id` 的示例默认优先使用字符串，避免跨语言 numeric 精度差异；如果接入方自行改用 numeric `id`，该值必须是有符号 64 位整数范围内的整数，Hub 会拒绝小数或超出该范围的 numeric `id`。
+
 ## 3. 动态读取规则
 
 以下地址、凭据与运行时返回值由运行中的 Hub 决定；示例中的固定字面值仅用于说明报文形状：
 
 - HTTP 地址：`hub.json.httpBaseUrl`
-- WebSocket 地址：`hub.json.wsUrl`
+- WebSocket 地址：`hub.json.wsUrl`，该值为回环地址上的固定 `/ws` 端点
 - token：`hub.json.tokenFile`
 - Host 版本：`hub.getVersion.result.version`
 - `subscriptionId`：`hub.events.subscribe.result.subscriptionId`
@@ -100,6 +104,7 @@ HTTP：
 - [`http/invoke-request.success.json`](./http/invoke-request.success.json)
 - [`http/invoke-request.invocation-failed.error.json`](./http/invoke-request.invocation-failed.error.json)
 - [`http/invoke-poll.request.json`](./http/invoke-poll.request.json)
+- [`http/invoke-poll.success.json`](./http/invoke-poll.success.json)
 - [`http/invoke-respond.request.json`](./http/invoke-respond.request.json)
 
 WebSocket：
@@ -118,16 +123,18 @@ WebSocket：
 
 ## 5. 与 Schema / Conformance 的关系
 
-- 本目录中的 JSON 文件本身使用固定合法字面值，可直接作为对应 schema 的结构校验输入。
+- 本目录中的 JSON 文件本身可直接作为对应 JSON-RPC 信封 schema 的结构校验输入；其中演示失败路径的业务载荷，应按具体方法语义解释，不作为通用数据模型 schema 的正向样例。
 - 带 `id` 的 HTTP / WS 请求示例对应 [`rpc-request.json`](../../schema/v1.0.1/rpc-request.json)。
 - 省略 `id` 的 [`http/invoke-notify.notification.request.json`](./http/invoke-notify.notification.request.json) 对应 [`rpc-notification.json`](../../schema/v1.0.1/rpc-notification.json)。
 - 所有 `*.success.json` 响应示例对应 [`rpc-response.json`](../../schema/v1.0.1/rpc-response.json)。
 - 所有 `*.error.json` 错误示例对应 [`error-response.json`](../../schema/v1.0.1/error-response.json)。
 - 所有 `ws/event.notification*.json` 事件示例对应 [`event-notification.json`](../../schema/v1.0.1/event-notification.json)。
 - `get-instance.*.json` 演示 `hub.apps.getInstance` 的精确实例查询语义；`launch.*.json` 演示 `hub.apps.launch` 的显式 `appId + scope` 启动语义。
-- Definition 相关示例始终按精确复合身份 `appId + scope` 组织；`scope: ""` 表示 Global Definition，其他合法非空字符串表示显式作用域 Definition。示例中的 `getDefinition`、`deleteDefinition`、`upsertDefinition` 与 `app.definition.*` 事件都不会演示仅按 `appId` 定位或 `{appId}.json` 持久化。
+- Definition 相关示例始终按精确复合身份 `appId + scope` 组织；`scope: ""` 表示 Global Definition，其他合法非空字符串表示显式作用域 Definition。示例中的 `getDefinition`、`deleteDefinition`、`upsertDefinition` 与 `app.definition.*` 事件都不会演示仅按 `appId` 定位或 `{appId}.json` 持久化。包含启动配置的 Definition 示例使用结构化 `launch.args` 表示 argv 参数。
 - `listDefinitions` 与 `listInstances` 都演示了 `scope = null` 时的不按作用域过滤语义，以及 `scope = ""` 时仅匹配 Global 的语义。除这两个列表查询外，本目录不会用 `scope: null` 表示 Global，也不会省略必须显式存在的 `scope` 字段。
-- `register-instance.success.json` 会返回顶层 `instanceSessionToken`；后续 `heartbeat`、`unregisterInstance`、`hub.invoke.poll` 与 `hub.invoke.respond` 示例都复用该 token，但该 token 不会出现在 `AppInstance`、`listInstances` 或事件载荷中。
+- `register-instance.success.json` 会返回顶层 `instanceSessionToken`；后续 `heartbeat`、`unregisterInstance`、`hub.invoke.poll` 与 `hub.invoke.respond` 示例都复用该 token，但该 token 不会出现在 `AppInstance`、`listInstances` 或事件载荷中。`invoke-poll.success.json` 展示 Hub 在 `delivery.leaseToken` 中签发的当前租约 token；`invoke-respond.request.json` 使用同一 token 完成本次交付。
 - `invoke-notify.notification.request.json` 演示的是省略 `id` 的 JSON-RPC notification。该用法在 HTTP 下对应空的 `200 OK` 响应体；如需获得 JSON-RPC `error` 或成功结果，必须改为发送带 `id` 的普通 request。
+- `invoke-notify.notification.request.json` 与 `invoke-request.request.json` 中的非 null `target.instanceId` 必须满足 canonical `instanceId` grammar 与 256 字符长度上限；非法值属于参数错误，不进入实例路由查找。
+- `register-instance.request.json` 中的 `instanceId` 是 Hub 注册表全局实例身份；同一 `instanceId` 的 re-register 必须保持相同 `appId + scope` 且 password 匹配。
 - 如需做结构校验，请配合 [`schema/v1.0.1/README.md`](../../schema/v1.0.1/README.md) 使用。
 - 如需验证实现是否满足 Spec §10 的最小基线，请配合 [`host/tests/conformance/README.md`](../../../../host/tests/conformance/README.md) 使用。

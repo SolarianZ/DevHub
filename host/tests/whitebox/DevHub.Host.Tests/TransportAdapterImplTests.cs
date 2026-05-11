@@ -14,7 +14,6 @@ public sealed class TransportAdapterImplTests
     private readonly AppDefinitionValidator _validator = new();
 
     [Fact]
-    [Trait("SpecRef", "5.1.2")]
     public void Impl_AppDefinitionValidator_WhenRootIsNotObject_ShouldReturnInvalidDefinitionIssue()
     {
         var ok = _validator.TryParseAndValidate(ParseElement("\"bad\""), out var definition, out var validationResult);
@@ -30,8 +29,6 @@ public sealed class TransportAdapterImplTests
     }
 
     [Fact]
-    [Trait("SpecRef", "5.1.1")]
-    [Trait("SpecRef", "5.1.2")]
     public void Impl_AppDefinitionValidator_WhenDefinitionContainsInvalidNestedFields_ShouldCollectValidationIssues()
     {
         var ok = _validator.TryParseAndValidate(
@@ -39,9 +36,10 @@ public sealed class TransportAdapterImplTests
                 """
                 {
                   "appId": "Bad App",
-                  "displayName": "",
+                  "displayName": "   ",
                   "description": null,
                   "launch": {
+                    "args": [1],
                     "argsTemplate": 1,
                     "workingDirectory": null,
                     "dedupeKeyTemplate": false
@@ -62,7 +60,8 @@ public sealed class TransportAdapterImplTests
         Assert.Contains(validationResult.Errors, issue => issue.Path == "definition.appId" && issue.Code == "invalid_app_id");
         Assert.Contains(validationResult.Errors, issue => issue.Path == "definition.displayName" && issue.Code == "missing_display_name");
         Assert.Contains(validationResult.Errors, issue => issue.Path == "definition.description" && issue.Code == "invalid_field_type");
-        Assert.Contains(validationResult.Errors, issue => issue.Path == "definition.launch.exePath" && issue.Code == "missing_launch_exe_path");
+        Assert.DoesNotContain(validationResult.Errors, issue => issue.Path == "definition.launch.exePath");
+        Assert.Contains(validationResult.Errors, issue => issue.Path == "definition.launch.args[0]" && issue.Code == "invalid_field_type");
         Assert.Contains(validationResult.Errors, issue => issue.Path == "definition.launch.argsTemplate" && issue.Code == "invalid_field_type");
         Assert.Contains(validationResult.Errors, issue => issue.Path == "definition.launch.workingDirectory" && issue.Code == "invalid_field_type");
         Assert.Contains(validationResult.Errors, issue => issue.Path == "definition.launch.dedupeKeyTemplate" && issue.Code == "invalid_field_type");
@@ -71,7 +70,6 @@ public sealed class TransportAdapterImplTests
     }
 
     [Fact]
-    [Trait("SpecRef", "5.1.1")]
     public void Impl_AppDefinitionValidator_WhenLaunchOrCapabilitiesAreNotObjects_ShouldReturnInvalidFieldType()
     {
         var ok = _validator.TryParseAndValidate(
@@ -94,7 +92,6 @@ public sealed class TransportAdapterImplTests
     }
 
     [Fact]
-    [Trait("SpecRef", "5.1.1")]
     public void Impl_AppDefinitionValidator_WhenDefinitionValid_ShouldParseModel()
     {
         var ok = _validator.TryParseAndValidate(
@@ -107,6 +104,7 @@ public sealed class TransportAdapterImplTests
                   "description": "adapter test",
                   "launch": {
                     "exePath": "dotnet",
+                    "args": ["--app", "{appId}"],
                     "argsTemplate": "--info",
                     "workingDirectory": "/tmp/devhub",
                     "dedupeKeyTemplate": "{appId}:{scopeOrGlobal}"
@@ -127,6 +125,7 @@ public sealed class TransportAdapterImplTests
         Assert.Equal("Transport Parser", definition.DisplayName);
         Assert.Equal("adapter test", definition.Description);
         Assert.Equal("dotnet", definition.Launch!.ExePath);
+        Assert.Equal(new[] { "--app", "{appId}" }, definition.Launch.Args);
         Assert.Equal("--info", definition.Launch.ArgsTemplate);
         Assert.Equal("/tmp/devhub", definition.Launch.WorkingDirectory);
         Assert.Equal("{appId}:{scopeOrGlobal}", definition.Launch.DedupeKeyTemplate);
@@ -135,7 +134,56 @@ public sealed class TransportAdapterImplTests
     }
 
     [Fact]
-    [Trait("SpecRef", "6.1")]
+    public void Impl_AppDefinitionValidator_WhenLaunchExePathBlank_ShouldParseModelAndPreserveValue()
+    {
+        var ok = _validator.TryParseAndValidate(
+            ParseElement(
+                """
+                {
+                  "appId": "transport.blank-launch",
+                  "scope": "",
+                  "displayName": "Blank Launch",
+                  "launch": {
+                    "exePath": "   ",
+                    "argsTemplate": "--info"
+                  }
+                }
+                """),
+            out var definition,
+            out var validationResult);
+
+        Assert.True(ok);
+        Assert.True(validationResult.Valid);
+        Assert.NotNull(definition);
+        Assert.Equal("   ", definition.Launch!.ExePath);
+    }
+
+    [Fact]
+    public void Impl_AppDefinitionValidator_WhenLaunchExePathMissing_ShouldParseLaunchModel()
+    {
+        var ok = _validator.TryParseAndValidate(
+            ParseElement(
+                """
+                {
+                  "appId": "transport.optional-launch",
+                  "scope": "",
+                  "displayName": "Optional Launch",
+                  "launch": {
+                    "args": ["--mode", "manual"]
+                  }
+                }
+                """),
+            out var definition,
+            out var validationResult);
+
+        Assert.True(ok);
+        Assert.True(validationResult.Valid);
+        Assert.NotNull(definition);
+        Assert.Null(definition.Launch!.ExePath);
+        Assert.Equal(new[] { "--mode", "manual" }, definition.Launch.Args);
+    }
+
+    [Fact]
     public void Impl_RpcParamReader_StringHelpers_ShouldFollowObjectAndWhitespaceRules()
     {
         var request = new JsonRpcRequest
@@ -181,7 +229,6 @@ public sealed class TransportAdapterImplTests
     }
 
     [Fact]
-    [Trait("SpecRef", "5.5")]
     public void Impl_RpcParamReader_ScopeHelpers_ShouldRequireExplicitScopeAndSeparateListFilters()
     {
         var requiredMissingOk = RpcParamReader.TryGetRequiredScope(
@@ -226,8 +273,6 @@ public sealed class TransportAdapterImplTests
     }
 
     [Fact]
-    [Trait("SpecRef", "5.5")]
-    [Trait("SpecRef", "6.3.13")]
     public void Impl_RpcParamReader_TryParseInvocationTarget_ShouldRequireTargetAndExplicitScope()
     {
         var missingTargetOk = RpcParamReader.TryParseInvocationTarget(
@@ -274,13 +319,11 @@ public sealed class TransportAdapterImplTests
     }
 
     [Fact]
-    [Trait("SpecRef", "6.3.16")]
-    public void Impl_RpcParamReader_TryParseRespondError_ShouldValidateShapeAndDeserializeDataObject()
+    public void Impl_RpcParamReader_TryParseRespondError_ShouldValidateShapeAndDeserializeAnyJsonData()
     {
         Assert.False(RpcParamReader.TryParseRespondError(ParseElement("""1"""), out _));
         Assert.False(RpcParamReader.TryParseRespondError(ParseElement("""{ "message": "bad" }"""), out _));
         Assert.False(RpcParamReader.TryParseRespondError(ParseElement("""{ "code": 1001, "message": 1 }"""), out _));
-        Assert.False(RpcParamReader.TryParseRespondError(ParseElement("""{ "code": 1001, "message": "bad", "data": "boom" }"""), out _));
 
         var ok = RpcParamReader.TryParseRespondError(
             ParseElement("""{ "code": 1001, "message": "app_error", "data": { "detail": "boom" } }"""),
@@ -294,6 +337,20 @@ public sealed class TransportAdapterImplTests
 
         var data = Assert.IsType<JsonElement>(payload["data"]);
         Assert.Equal("boom", data.GetProperty("detail").GetString());
+
+        Assert.True(RpcParamReader.TryParseRespondError(
+            ParseElement("""{ "code": 1002, "message": "app_error", "data": "boom" }"""),
+            out var scalarError));
+        var scalarPayload = Assert.IsAssignableFrom<IDictionary<string, object?>>(scalarError);
+        var scalarData = Assert.IsType<JsonElement>(scalarPayload["data"]);
+        Assert.Equal("boom", scalarData.GetString());
+
+        Assert.True(RpcParamReader.TryParseRespondError(
+            ParseElement("""{ "code": 1003, "message": "app_error", "data": null }"""),
+            out var nullError));
+        var nullPayload = Assert.IsAssignableFrom<IDictionary<string, object?>>(nullError);
+        Assert.True(nullPayload.ContainsKey("data"));
+        Assert.Null(nullPayload["data"]);
     }
 
     private static JsonElement ParseElement(string json)

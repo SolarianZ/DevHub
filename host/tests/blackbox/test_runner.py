@@ -156,7 +156,7 @@ def _read_boolean_env(name, default):
 def _read_log_tail(log_path, max_chars=4000):
     """读取 Host 日志尾部，便于拼接错误信息。"""
     try:
-        content = Path(log_path).read_text(encoding="utf-8")
+        content = Path(log_path).read_text(encoding="utf-8", errors="replace")
     except FileNotFoundError:
         return ""
     except OSError:

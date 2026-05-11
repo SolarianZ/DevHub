@@ -12,6 +12,9 @@ public sealed class DevHubClient : IAsyncDisposable
 {
     private readonly IDevHubHttpTransport _transport;
     private readonly ConcurrentDictionary<string, RegisteredInstanceState> _registeredInstances = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, InvocationLeaseState> _invocationLeases = new(StringComparer.Ordinal);
+    private readonly object _registrationIdentityLock = new();
+    private readonly Dictionary<string, RegistrationIdentity> _registrationIdentities = new(StringComparer.Ordinal);
     private bool _disposed;
 
     private DevHubClient(DevHubClientOptions options, DevHubRuntimeConnectionInfo connectionInfo, IDevHubHttpTransport transport)
@@ -41,7 +44,7 @@ public sealed class DevHubClient : IAsyncDisposable
     /// <returns>客户端实例。</returns>
     public static async Task<DevHubClient> FromRuntimeAsync(DevHubClientOptions options, CancellationToken cancellationToken = default)
     {
-        return await FromRuntimeAsync(options, dependencies: null, cancellationToken);
+        return await FromRuntimeAsync(options, dependencies: null, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -60,7 +63,8 @@ public sealed class DevHubClient : IAsyncDisposable
         clonedOptions.Validate();
 
         dependencies ??= new DevHubClientDependencies();
-        var connectionInfo = await dependencies.RuntimeResolver.ResolveAsync(clonedOptions, cancellationToken);
+        var connectionInfo = await dependencies.RuntimeResolver.ResolveAsync(clonedOptions, cancellationToken).ConfigureAwait(false);
+        RuntimeDiscovery.ValidateConnectionInfo(connectionInfo, "runtimeResolver");
         var transport = dependencies.TransportFactory.Create(clonedOptions, connectionInfo);
         return new DevHubClient(clonedOptions, connectionInfo, transport);
     }
@@ -77,7 +81,7 @@ public sealed class DevHubClient : IAsyncDisposable
             {
                 TransportFactory = new TestHttpTransportFactory(handler, requestIdFactory)
             },
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -89,7 +93,7 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<PingResult> PingAsync(object? echo = null, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return await ReadOnlyRpcExecutor.PingAsync(_transport.SendAsync, echo, cancellationToken);
+        return await ReadOnlyRpcExecutor.PingAsync(_transport.SendAsync, echo, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -100,7 +104,7 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<string> GetHostVersionAsync(CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return await ReadOnlyRpcExecutor.GetHostVersionAsync(_transport.SendAsync, cancellationToken);
+        return await ReadOnlyRpcExecutor.GetHostVersionAsync(_transport.SendAsync, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -112,7 +116,7 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<VersionCompatibilityResult> CheckVersionCompatibilityAsync(CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return await VersionCompatibilityEvaluator.CheckAsync(_transport.SendAsync, Runtime.HubVersion, cancellationToken);
+        return await VersionCompatibilityEvaluator.CheckAsync(_transport.SendAsync, Runtime.HubVersion, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -123,7 +127,7 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<IReadOnlyList<AppDefinition>> ListDefinitionsAsync(CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return await ListDefinitionsAsync(new ListDefinitionsRequest(), cancellationToken);
+        return await ListDefinitionsAsync(new ListDefinitionsRequest(), cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -137,19 +141,18 @@ public sealed class DevHubClient : IAsyncDisposable
         CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return await ReadOnlyRpcExecutor.ListDefinitionsAsync(_transport.SendAsync, request, cancellationToken);
+        return await ReadOnlyRpcExecutor.ListDefinitionsAsync(_transport.SendAsync, request, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
     /// 调用 <c>hub.apps.getDefinition</c>。
     /// </summary>
     /// <param name="appId">应用标识。</param>
-    /// <param name="scope">Definition 作用域。空字符串表示 Global Definition。</param>
     /// <param name="cancellationToken">取消令牌。</param>
     /// <returns>应用定义。</returns>
     public async Task<AppDefinition> GetDefinitionAsync(string appId, CancellationToken cancellationToken = default)
     {
-        return await GetDefinitionAsync(appId, string.Empty, cancellationToken);
+        return await GetDefinitionAsync(appId, string.Empty, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -165,7 +168,7 @@ public sealed class DevHubClient : IAsyncDisposable
         CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return await ReadOnlyRpcExecutor.GetDefinitionAsync(_transport.SendAsync, appId, scope, cancellationToken);
+        return await ReadOnlyRpcExecutor.GetDefinitionAsync(_transport.SendAsync, appId, scope, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -182,7 +185,7 @@ public sealed class DevHubClient : IAsyncDisposable
         var result = await _transport.SendAsync(
             "hub.apps.validateDefinition",
             RequestPayloadFactory.BuildValidateDefinitionParams(definition),
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
 
         var errorsElement = ResponsePayloadReader.EnsurePropertyExists(
             result,
@@ -227,7 +230,7 @@ public sealed class DevHubClient : IAsyncDisposable
         var result = await _transport.SendAsync(
             "hub.apps.upsertDefinition",
             RequestPayloadFactory.BuildUpsertDefinitionParams(definition),
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
         ResponsePayloadReader.ValidateAppDefinitionElement(
             ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.upsertDefinition.result", "definition", JTokenType.Object),
             "hub.apps.upsertDefinition.result.definition");
@@ -247,7 +250,7 @@ public sealed class DevHubClient : IAsyncDisposable
     /// <param name="cancellationToken">取消令牌。</param>
     public async Task DeleteDefinitionAsync(string appId, CancellationToken cancellationToken = default)
     {
-        await DeleteDefinitionAsync(appId, string.Empty, cancellationToken);
+        await DeleteDefinitionAsync(appId, string.Empty, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -265,7 +268,7 @@ public sealed class DevHubClient : IAsyncDisposable
         var result = await _transport.SendAsync(
             "hub.apps.deleteDefinition",
             RequestPayloadFactory.BuildDeleteDefinitionParams(appId, scope),
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
         var payload = ResponsePayloadReader.DeserializeRequired<OkOnlyContract>(result, "hub.apps.deleteDefinition.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.deleteDefinition.result");
     }
@@ -282,11 +285,31 @@ public sealed class DevHubClient : IAsyncDisposable
         string password,
         CancellationToken cancellationToken = default)
     {
+        return await RegisterInstanceAsync(instance, password, launchId: null, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// 调用 <c>hub.apps.registerInstance</c>。
+    /// </summary>
+    /// <param name="instance">实例注册载荷。</param>
+    /// <param name="password">实例密码。</param>
+    /// <param name="launchId">Host 通过 <c>DEVHUB_LAUNCH_ID</c> 传入的启动请求标识；自主注册时为 <see langword="null"/>。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>注册结果。</returns>
+    public async Task<RegisterInstanceResult> RegisterInstanceAsync(
+        AppInstanceRegistration instance,
+        string password,
+        string? launchId,
+        CancellationToken cancellationToken = default)
+    {
         ThrowIfDisposed();
+        CompatibilityGuards.ThrowIfNull(instance, nameof(instance));
+        CompatibilityGuards.ThrowIfNullOrWhiteSpace(password, nameof(password));
+        EnsureRegisterIdentityDoesNotDrift(instance);
         var result = await _transport.SendAsync(
             "hub.apps.registerInstance",
-            RequestPayloadFactory.BuildRegisterInstanceParams(instance, password),
-            cancellationToken);
+            RequestPayloadFactory.BuildRegisterInstanceParams(instance, password, launchId),
+            cancellationToken).ConfigureAwait(false);
         ResponsePayloadReader.ValidateAppInstanceElement(
             ResponsePayloadReader.EnsurePropertyExists(result, "hub.apps.registerInstance.result", "instance", JTokenType.Object),
             "hub.apps.registerInstance.result.instance");
@@ -310,6 +333,7 @@ public sealed class DevHubClient : IAsyncDisposable
             InstanceSessionToken = payload.InstanceSessionToken
         };
         _registeredInstances[payload.Instance.InstanceId] = new RegisteredInstanceState(password, payload.InstanceSessionToken);
+        RememberRegisteredInstance(payload.Instance);
         return registerResult;
     }
 
@@ -323,7 +347,7 @@ public sealed class DevHubClient : IAsyncDisposable
     {
         ThrowIfDisposed();
         var instanceSessionToken = ResolveInstanceSessionToken(instanceId);
-        return await HeartbeatAsync(instanceId, instanceSessionToken, cancellationToken);
+        return await HeartbeatAsync(instanceId, instanceSessionToken, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -342,7 +366,7 @@ public sealed class DevHubClient : IAsyncDisposable
         var result = await _transport.SendAsync(
             "hub.apps.heartbeat",
             RequestPayloadFactory.BuildHeartbeatParams(instanceId, instanceSessionToken),
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
         var payload = ResponsePayloadReader.DeserializeRequired<HeartbeatContract>(result, "hub.apps.heartbeat.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.heartbeat.result");
         ResponsePayloadReader.EnsureTimestamp(payload.LastSeenUtc, "hub.apps.heartbeat.result", "lastSeenUtc");
@@ -365,10 +389,11 @@ public sealed class DevHubClient : IAsyncDisposable
         var result = await _transport.SendAsync(
             "hub.apps.unregisterInstance",
             RequestPayloadFactory.BuildUnregisterParams(instanceId, resolvedSessionToken),
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
         var payload = ResponsePayloadReader.DeserializeRequired<OkOnlyContract>(result, "hub.apps.unregisterInstance.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.unregisterInstance.result");
         _registeredInstances.TryRemove(instanceId, out _);
+        ForgetRegisteredInstance(instanceId);
     }
 
     /// <summary>
@@ -383,7 +408,7 @@ public sealed class DevHubClient : IAsyncDisposable
         return await ReadOnlyRpcExecutor.ListInstancesAsync(
             _transport.SendAsync,
             request ?? new ListInstancesRequest(),
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -395,7 +420,7 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<AppInstance> GetInstanceAsync(string instanceId, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return await ReadOnlyRpcExecutor.GetInstanceAsync(_transport.SendAsync, instanceId, cancellationToken);
+        return await ReadOnlyRpcExecutor.GetInstanceAsync(_transport.SendAsync, instanceId, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -407,16 +432,31 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<LaunchResult> LaunchAsync(LaunchRequest request, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        var result = await _transport.SendAsync("hub.apps.launch", RequestPayloadFactory.BuildLaunchParams(request), cancellationToken);
+        var result = await _transport.SendAsync("hub.apps.launch", RequestPayloadFactory.BuildLaunchParams(request), cancellationToken).ConfigureAwait(false);
         var payload = ResponsePayloadReader.DeserializeRequired<LaunchResult>(result, "hub.apps.launch.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.apps.launch.result");
         ResponsePayloadReader.EnsureNotEmpty(payload.Status, "hub.apps.launch.result", "status");
-        ResponsePayloadReader.EnsureNotEmpty(payload.LaunchId, "hub.apps.launch.result", "launchId");
         if (!string.Equals(payload.Status, "started", StringComparison.Ordinal) &&
             !string.Equals(payload.Status, "starting", StringComparison.Ordinal) &&
             !string.Equals(payload.Status, "already_running", StringComparison.Ordinal))
         {
             throw new InvalidOperationException("hub.apps.launch.result 返回结果非法：status 取值不受支持。");
+        }
+
+        if (string.Equals(payload.Status, "started", StringComparison.Ordinal) ||
+            string.Equals(payload.Status, "starting", StringComparison.Ordinal))
+        {
+            ResponsePayloadReader.EnsureNotEmpty(payload.LaunchId, "hub.apps.launch.result", "launchId");
+            ResponsePayloadReader.EnsureNotEmpty(payload.DedupeKey, "hub.apps.launch.result", "dedupeKey");
+        }
+        else
+        {
+            var hasInstance = !string.IsNullOrWhiteSpace(payload.InstanceId);
+            var hasLaunchRecord = !string.IsNullOrWhiteSpace(payload.LaunchId) && !string.IsNullOrWhiteSpace(payload.DedupeKey);
+            if (!hasInstance && !hasLaunchRecord)
+            {
+                throw new InvalidOperationException("hub.apps.launch.result 返回结果非法：already_running 必须包含 instanceId 或 launchId + dedupeKey。");
+            }
         }
 
         return payload;
@@ -431,7 +471,7 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<NotifyResult> NotifyAsync(InvokeRequest request, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        var result = await _transport.SendAsync("hub.invoke.notify", RequestPayloadFactory.BuildNotifyParams(request), cancellationToken);
+        var result = await _transport.SendAsync("hub.invoke.notify", RequestPayloadFactory.BuildNotifyParams(request), cancellationToken).ConfigureAwait(false);
         var payload = ResponsePayloadReader.DeserializeRequired<NotifyResult>(result, "hub.invoke.notify.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.invoke.notify.result");
         ResponsePayloadReader.EnsureNotEmpty(payload.InvocationId, "hub.invoke.notify.result", "invocationId");
@@ -447,7 +487,7 @@ public sealed class DevHubClient : IAsyncDisposable
     public async Task<RequestResult> RequestAsync(InvokeRequest request, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        var result = await _transport.SendAsync("hub.invoke.request", RequestPayloadFactory.BuildRequestParams(request), cancellationToken);
+        var result = await _transport.SendAsync("hub.invoke.request", RequestPayloadFactory.BuildRequestParams(request), cancellationToken).ConfigureAwait(false);
         ResponsePayloadReader.EnsurePropertyExists(result, "hub.invoke.request.result", "value");
         var payload = ResponsePayloadReader.DeserializeRequired<RequestResult>(result, "hub.invoke.request.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.invoke.request.result");
@@ -469,7 +509,7 @@ public sealed class DevHubClient : IAsyncDisposable
             request.InstanceSessionToken = ResolveInstanceSessionToken(request.InstanceId);
         }
 
-        var result = await _transport.SendAsync("hub.invoke.poll", RequestPayloadFactory.BuildPollParams(request), cancellationToken);
+        var result = await _transport.SendAsync("hub.invoke.poll", RequestPayloadFactory.BuildPollParams(request), cancellationToken).ConfigureAwait(false);
         var itemsElement = ResponsePayloadReader.EnsurePropertyExists(result, "hub.invoke.poll.result", "items", JTokenType.Array);
 
         var index = 0;
@@ -483,6 +523,7 @@ public sealed class DevHubClient : IAsyncDisposable
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.invoke.poll.result");
         ResponsePayloadReader.EnsureTimestamp(payload.ServerTimeUtc, "hub.invoke.poll.result", "serverTimeUtc");
         ResponsePayloadReader.EnsureNotNull(payload.Items, "hub.invoke.poll.result", "items");
+        CacheInvocationLeases(request.InstanceId, payload.Items);
         return payload;
     }
 
@@ -499,7 +540,12 @@ public sealed class DevHubClient : IAsyncDisposable
             request.InstanceSessionToken = ResolveInstanceSessionToken(request.InstanceId);
         }
 
-        var result = await _transport.SendAsync("hub.invoke.respond", RequestPayloadFactory.BuildRespondParams(request), cancellationToken);
+        if (string.IsNullOrWhiteSpace(request.LeaseToken))
+        {
+            request.LeaseToken = ResolveInvocationLeaseToken(request.InstanceId, request.InvocationId);
+        }
+
+        var result = await _transport.SendAsync("hub.invoke.respond", RequestPayloadFactory.BuildRespondParams(request), cancellationToken).ConfigureAwait(false);
         var payload = ResponsePayloadReader.DeserializeRequired<OkOnlyContract>(result, "hub.invoke.respond.result");
         ResponsePayloadReader.EnsureOk(payload.Ok, "hub.invoke.respond.result");
     }
@@ -513,12 +559,66 @@ public sealed class DevHubClient : IAsyncDisposable
         }
 
         _disposed = true;
-        await _transport.DisposeAsync();
+        await _transport.DisposeAsync().ConfigureAwait(false);
     }
 
     private void ThrowIfDisposed()
     {
         CompatibilityGuards.ThrowIfDisposed(_disposed, this);
+    }
+
+    private void EnsureRegisterIdentityDoesNotDrift(AppInstanceRegistration instance)
+    {
+        var identity = RegistrationIdentity.From(instance);
+
+        lock (_registrationIdentityLock)
+        {
+            if (_registrationIdentities.TryGetValue(identity.InstanceId, out var existing) &&
+                (!string.Equals(existing.AppId, identity.AppId, StringComparison.Ordinal) ||
+                 !string.Equals(existing.Scope, identity.Scope, StringComparison.Ordinal)))
+            {
+                throw new ArgumentException("当前客户端已将该 instanceId 关联到不同 appId 或 scope。", nameof(instance));
+            }
+        }
+    }
+
+    private void RememberRegisteredInstance(AppInstance instance)
+    {
+        var identity = RegistrationIdentity.From(instance);
+
+        lock (_registrationIdentityLock)
+        {
+            _registrationIdentities[identity.InstanceId] = identity;
+        }
+    }
+
+    private void ForgetRegisteredInstance(string instanceId)
+    {
+        var validatedInstanceId = ProtocolIdentifier.EnsureInstanceId(instanceId, nameof(instanceId));
+
+        lock (_registrationIdentityLock)
+        {
+            _registrationIdentities.Remove(validatedInstanceId);
+        }
+    }
+
+    private void CacheInvocationLeases(string instanceId, IReadOnlyList<Invocation> invocations)
+    {
+        var validatedInstanceId = ProtocolIdentifier.EnsureInstanceId(instanceId, nameof(instanceId));
+
+        foreach (var invocation in invocations)
+        {
+            if (invocation?.Delivery is null || string.IsNullOrWhiteSpace(invocation.Delivery.LeaseToken))
+            {
+                continue;
+            }
+
+            var resolvedInstanceId = invocation.Target is not null && !string.IsNullOrWhiteSpace(invocation.Target.InstanceId)
+                ? invocation.Target.InstanceId!
+                : validatedInstanceId;
+            var key = BuildInvocationLeaseKey(resolvedInstanceId, invocation.InvocationId);
+            _invocationLeases[key] = new InvocationLeaseState(invocation.Delivery.LeaseToken);
+        }
     }
 
     private string ResolveInstanceSessionToken(string instanceId)
@@ -530,6 +630,17 @@ public sealed class DevHubClient : IAsyncDisposable
         }
 
         throw new InvalidOperationException($"未找到实例 {instanceId} 的会话令牌，请先通过 RegisterInstanceAsync 注册并保留返回结果。");
+    }
+
+    private string ResolveInvocationLeaseToken(string instanceId, string invocationId)
+    {
+        var key = BuildInvocationLeaseKey(instanceId, invocationId);
+        if (_invocationLeases.TryGetValue(key, out var state))
+        {
+            return state.LeaseToken;
+        }
+
+        throw new InvalidOperationException($"未找到调用 {invocationId} 的租约令牌，请先通过 PollAsync 拉取对应调用，或在 RespondRequest 中显式提供 LeaseToken。");
     }
 
     private string ResolveUnregisterCredential(string instanceId, string credential)
@@ -546,6 +657,11 @@ public sealed class DevHubClient : IAsyncDisposable
         return credential;
     }
 
+    private static string BuildInvocationLeaseKey(string instanceId, string invocationId)
+    {
+        return $"{ProtocolIdentifier.EnsureInstanceId(instanceId, nameof(instanceId))}\n{ProtocolIdentifier.EnsureInvocationId(invocationId, nameof(invocationId))}";
+    }
+
     private sealed class RegisteredInstanceState
     {
         public RegisteredInstanceState(string password, string instanceSessionToken)
@@ -557,6 +673,48 @@ public sealed class DevHubClient : IAsyncDisposable
         public string Password { get; }
 
         public string InstanceSessionToken { get; }
+    }
+
+    private sealed class InvocationLeaseState
+    {
+        public InvocationLeaseState(string leaseToken)
+        {
+            LeaseToken = leaseToken;
+        }
+
+        public string LeaseToken { get; }
+    }
+
+    private sealed class RegistrationIdentity
+    {
+        private RegistrationIdentity(string instanceId, string appId, string scope)
+        {
+            InstanceId = instanceId;
+            AppId = appId;
+            Scope = scope;
+        }
+
+        internal string InstanceId { get; }
+
+        internal string AppId { get; }
+
+        internal string Scope { get; }
+
+        internal static RegistrationIdentity From(AppInstanceRegistration instance)
+        {
+            return new RegistrationIdentity(
+                ProtocolIdentifier.EnsureInstanceId(instance.InstanceId, nameof(AppInstanceRegistration.InstanceId)),
+                ProtocolIdentifier.EnsureAppId(instance.AppId, nameof(AppInstanceRegistration.AppId)),
+                ScopeContract.EnsureScopedString(instance.Scope, nameof(instance.Scope)));
+        }
+
+        internal static RegistrationIdentity From(AppInstance instance)
+        {
+            return new RegistrationIdentity(
+                ProtocolIdentifier.EnsureInstanceId(instance.InstanceId, nameof(AppInstance.InstanceId)),
+                ProtocolIdentifier.EnsureAppId(instance.AppId, nameof(AppInstance.AppId)),
+                ScopeContract.EnsureScopedString(instance.Scope, nameof(instance.Scope)));
+        }
     }
 
     private sealed class TestHttpTransportFactory : IDevHubHttpTransportFactory

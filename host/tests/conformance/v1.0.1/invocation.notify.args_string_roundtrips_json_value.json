@@ -1,0 +1,81 @@
+{
+  "id": "invocation.notify.args_string_roundtrips_json_value",
+  "caseId": "CONF-004",
+  "description": "SDK notify 的 args=string 必须原样投递给 callee。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "appId": "invoke.notify.args-string",
+        "scopeEntry": {
+          "scope": "",
+          "displayName": "invoke.notify.args-string"
+        }
+      }
+    ]
+  },
+  "orchestration": {
+    "beforeCaller": [
+      {
+        "action": "register_instance",
+        "password": "conformance-password",
+        "instance": {
+          "instanceId": "notify-args-string-inst",
+          "appId": "invoke.notify.args-string",
+          "scope": "",
+          "pid": 32106,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      }
+    ],
+    "duringCaller": [
+      {
+        "action": "poll_expect_invocation",
+        "instanceId": "notify-args-string-inst",
+        "waitMs": 1500,
+        "expected": {
+          "appId": "invoke.notify.args-string",
+          "method": "demo.notify.args-string",
+          "kind": "notify",
+          "args": "literal-args"
+        }
+      }
+    ]
+  },
+  "request": {
+    "kind": "sdk.notify",
+    "clientId": "ConformanceNotifyArgsString",
+    "invokeRequest": {
+      "appId": "invoke.notify.args-string",
+      "method": "demo.notify.args-string",
+      "args": "literal-args",
+      "target": {
+        "scope": ""
+      },
+      "options": {
+        "ttlMs": 60000,
+        "queueIfOffline": false,
+        "autoLaunch": false
+      }
+    }
+  },
+  "expectedResponse": {
+    "phase": "sdk-invocation",
+    "operation": "notify",
+    "outcome": "success",
+    "actual": {
+      "ok": true,
+      "invocationId": "${ANY_NON_EMPTY_STRING}"
+    }
+  },
+  "tags": [
+    "invocation",
+    "notify",
+    "args",
+    "json-value",
+    "sdk"
+  ]
+}

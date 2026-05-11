@@ -6,7 +6,7 @@ import { DevHubClient } from "@devhub/sdk";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { DevHubHostFixture } from "../../../sdks/javascript/tests/integration/host";
 import App from "./App";
-import { registerInstanceCompat } from "./lib/sdk-compat";
+import { deleteDefinitionCompat, registerInstanceCompat } from "./lib/sdk-compat";
 import type {
   BootstrapSnapshot,
   FrontendLogInput,
@@ -171,8 +171,9 @@ beforeAll(async () => {
       },
     }, INSTANCE_PASSWORD);
 
-    await fs.rm(join(getHost().definitionsDirectory, `${MISSING_APP_ID}--global.json`), {
-      force: true,
+    await deleteDefinitionCompat(setupClient, {
+      appId: MISSING_APP_ID,
+      scope: "",
     });
   } finally {
     await setupClient.dispose();
@@ -257,7 +258,7 @@ describe("Monitor App real-host integration", () => {
       );
       expect(within(missingInstanceRow).getAllByText(MISSING_APP_ID)).toHaveLength(2);
       within(missingInstanceRow).getByText("scope：Global");
-      within(missingInstanceRow).getByText("未提供 App 描述");
+      within(missingInstanceRow).getByText("未找到精确 App Definition；该实例仅支持在线路由，不具备离线队列或自动启动能力");
 
       const existingDefinitionRow = getInventoryRowByActionLabel(
         definitionsSection,
@@ -351,7 +352,7 @@ describe("Monitor App real-host integration", () => {
       );
       expect(within(missingInstanceRowAfterUpdate).getAllByText(MISSING_APP_ID)).toHaveLength(2);
       within(missingInstanceRowAfterUpdate).getByText("scope：Global");
-      within(missingInstanceRowAfterUpdate).getByText("未提供 App 描述");
+      within(missingInstanceRowAfterUpdate).getByText("未找到精确 App Definition；该实例仅支持在线路由，不具备离线队列或自动启动能力");
 
       await user.click(within(missingInstanceRowAfterUpdate).getByRole("button", {
         name: getInstanceActionLabel(MISSING_INSTANCE_ID, MISSING_APP_ID, null),
@@ -695,6 +696,7 @@ async function createConnection(activeHost: DevHubHostFixture): Promise<MonitorR
       leaseSeconds: number;
       onlineThresholdSeconds: number;
       launchDedupeWindowSeconds: number;
+      launchRegisterTimeoutSeconds: number;
     };
     hubVersion?: string;
   };
@@ -771,6 +773,7 @@ function createSdkRuntimeResolver(connection: MonitorRuntimeConnectionInfo) {
             leaseSeconds: connection.runtime.runtimeTuning.leaseSeconds,
             onlineThresholdSeconds: connection.runtime.runtimeTuning.onlineThresholdSeconds,
             launchDedupeWindowSeconds: connection.runtime.runtimeTuning.launchDedupeWindowSeconds,
+            launchRegisterTimeoutSeconds: connection.runtime.runtimeTuning.launchRegisterTimeoutSeconds,
           },
           hubVersion: connection.runtime.hubVersion ?? undefined,
         },

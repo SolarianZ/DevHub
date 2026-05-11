@@ -13,15 +13,15 @@ import unittest
 
 from tests.blackbox.test_base import (
     DiscoveryService,
+    delete_definitions,
     RpcClient,
     RpcAssertions,
     TestResult,
     get_shared_test_asset_path,
     get_test_python_executable,
     new_instance_id,
-    safe_remove,
     sleep_with_long_wait_status,
-    write_app_definition,
+    upsert_app_definition,
 )
 
 
@@ -33,12 +33,12 @@ class TestScopeRouting(unittest.TestCase):
         if include_launch:
             launch_config = {
                 "exePath": get_test_python_executable(),
-                "argsTemplate": get_shared_test_asset_path("launch_noop.py"),
+                "args": [get_shared_test_asset_path("launch_noop.py")],
             }
             if dedupe_key_template is not None:
                 launch_config["dedupeKeyTemplate"] = dedupe_key_template
 
-        return write_app_definition(
+        return upsert_app_definition(
             app_id,
             scope=scope,
             rpc=True,
@@ -247,7 +247,13 @@ class TestScopeRouting(unittest.TestCase):
                 wait_for_register_ms=0,
                 request_id="scope-003-launch-empty",
             )
-            if not RpcAssertions.expect_success(result, launch_empty_scope, ["status", "launchId"]):
+            if not RpcAssertions.expect_success(result, launch_empty_scope, ["status", "instanceId"]):
+                return result
+            if launch_empty_scope["result"].get("status") != "already_running":
+                result.mark_failure(f"❌ scope='' launch 未命中在线 Global 实例: {launch_empty_scope}")
+                return result
+            if launch_empty_scope["result"].get("instanceId") != empty_instance:
+                result.mark_failure(f"❌ scope='' launch 命中实例不匹配: {launch_empty_scope}")
                 return result
 
             launch_null_scope = client.launch_app(
@@ -273,7 +279,7 @@ class TestScopeRouting(unittest.TestCase):
             except Exception:
                 pass
 
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -346,7 +352,13 @@ class TestScopeRouting(unittest.TestCase):
                 wait_for_register_ms=0,
                 request_id="scope-004-launch",
             )
-            if not RpcAssertions.expect_success(result, launch_response, ["status", "launchId"]):
+            if not RpcAssertions.expect_success(result, launch_response, ["status", "instanceId"]):
+                return result
+            if launch_response["result"].get("status") != "already_running":
+                result.mark_failure(f"❌ scope='global' launch 未命中显式作用域在线实例: {launch_response}")
+                return result
+            if launch_response["result"].get("instanceId") != scoped_global_instance:
+                result.mark_failure(f"❌ scope='global' launch 命中实例不匹配: {launch_response}")
                 return result
 
             launch_global_default = client.launch_app(
@@ -355,7 +367,13 @@ class TestScopeRouting(unittest.TestCase):
                 wait_for_register_ms=0,
                 request_id="scope-004-launch-default",
             )
-            if not RpcAssertions.expect_success(result, launch_global_default, ["status", "launchId"]):
+            if not RpcAssertions.expect_success(result, launch_global_default, ["status", "instanceId"]):
+                return result
+            if launch_global_default["result"].get("status") != "already_running":
+                result.mark_failure(f"❌ 默认 Global launch 未命中在线实例: {launch_global_default}")
+                return result
+            if launch_global_default["result"].get("instanceId") != global_instance:
+                result.mark_failure(f"❌ 默认 Global launch 命中实例不匹配: {launch_global_default}")
                 return result
 
             result.mark_success()
@@ -373,7 +391,7 @@ class TestScopeRouting(unittest.TestCase):
                 pass
 
             for definition_path in definition_paths:
-                safe_remove(definition_path)
+                delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -458,12 +476,14 @@ class TestScopeRouting(unittest.TestCase):
                     return
 
                 invocation_id = items[0].get("invocationId")
+                lease_token = items[0].get("delivery", {}).get("leaseToken")
                 request_holder["invocationId"] = invocation_id
                 if invocation_id:
                     request_holder["respond"] = poll_client.respond_value(
                         global_instance,
                         invocation_id,
                         {"handledBy": "global"},
+                        lease_token=lease_token,
                     )
 
             def poll_scoped_for_request():
@@ -607,7 +627,7 @@ class TestScopeRouting(unittest.TestCase):
             except Exception:
                 pass
 
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -664,7 +684,7 @@ class TestScopeRouting(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            safe_remove(definition_path)
+            delete_definitions([definition_path] if definition_path else [])
 
         return result
 
@@ -1078,7 +1098,7 @@ class TestScopeRouting(unittest.TestCase):
                 pass
 
             for definition_path in definition_paths:
-                safe_remove(definition_path)
+                delete_definitions([definition_path] if definition_path else [])
 
         return result
 

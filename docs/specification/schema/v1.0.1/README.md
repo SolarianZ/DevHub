@@ -51,22 +51,22 @@
 
 本目录可作为 DevHub v1.0.1 的版本化协议资产；各文件与 [`Specification.md`](../../protocol/Specification.md) 保持同一套公开契约约束：
 
-- 读取 `hub.json` 后，用 `hub-runtime.json` 做发现文件校验；该 schema 要求 `httpBaseUrl` 与 `wsUrl` 使用 loopback 地址、禁止末尾斜杠，并要求 `tokenFile` 为绝对路径。
-- 读取或生成应用定义时，用 `app-definition.json` 校验；该 schema 要求 payload 显式携带 `scope`，其中 Global Definition 使用 `""`，显式作用域 Definition 使用 canonical identifier grammar 的非空字符串。
+- 读取 `hub.json` 后，用 `hub-runtime.json` 做发现文件校验；该 schema 要求 `httpBaseUrl` 使用 loopback origin，`wsUrl` 使用 loopback WebSocket 绝对 URL 且路径固定为 `/ws`，并要求 `tokenFile` 为绝对路径。
+- 读取或生成应用定义时，用 `app-definition.json` 校验；该 schema 要求 payload 显式携带 `scope`，其中 Global Definition 使用 `""`，显式作用域 Definition 使用 canonical identifier grammar 的非空字符串。`launch` 与 `launch.exePath` 均为可选结构；`launch.args` 为可选字符串数组，每个元素对应一个 argv 参数。
 - 读取实例镜像或注册返回值时，用 `app-instance.json` 校验；该 schema 明确禁止 `password` 与 `instanceSessionToken` 出现在公共实例结构中。
 - 组织 `hub.apps.registerInstance.params.instance` 时，用 `app-instance-registration.json` 校验；注册类 `scope` 字段必须显式出现，且 Global 作用域使用 `""`。该 schema 同样禁止 `password` 与 `instanceSessionToken` 混入 `params.instance`。注册成功结果顶层返回的 `instanceSessionToken` 属于方法结果信封字段，不属于 `AppInstance` / `AppInstanceRegistration` 结构本体。
-- 处理轮询项或调用上下文时，用 `invocation.json` 校验；其中 `appId`、`target.scope` 与可选 `target.instanceId` 都遵循同一套 canonical identifier grammar，`caller.clientSessionId` **必须**是 canonical UUID string。
+- 处理轮询项或调用上下文时，用 `invocation.json` 校验；其中 `appId`、`target.scope` 与可选 `target.instanceId` 都遵循同一套 canonical identifier grammar，非 null `target.instanceId` 长度不超过 256 字符，`caller.clientSessionId` **必须**是 canonical UUID string。`delivery` 存在时必须包含 `leaseSeconds`、`attempt` 与 Hub 签发的 `leaseToken`。
 - 解析 `hub.apps.validateDefinition` 或 `definition_invalid` 错误中的字段级诊断时，用 `validation-issue.json` 校验。
-- 发送带 `id` 的 JSON-RPC request 时，用 `rpc-request.json` 校验；该 schema 接受 `params: null`，但具体方法仍受 [`Specification.md`](../../protocol/Specification.md) 的方法级约束。
-- 发送省略 `id` 的 JSON-RPC notification 时，用 `rpc-notification.json` 校验。
-- 接收成功响应时，用 `rpc-response.json` 校验；接收错误响应时，用 `error-response.json` 校验。这两个 schema 分别约束成功/错误信封，不能同时接受同一个同时带 `result` 与 `error` 的响应对象。
-- 接收 `hub.event` 事件通知时，用 `event-notification.json` 校验；该 schema 限定当前支持的 8 种事件类型，并对 Definition / Instance 生命周期事件施加最小 payload 约束。
+- 发送带 `id` 的 JSON-RPC request 时，用 `rpc-request.json` 校验；其中 numeric `id` 只接受有符号 64 位整数范围内的整数值。该 schema 作为 DevHub 当前公开方法集合的 envelope schema，将 `params` 的通用形状收敛为对象，并仅为 `hub.ping` / `hub.getVersion` 提供 `params: null` 的方法级例外；更细的方法级字段约束仍以 [`Specification.md`](../../protocol/Specification.md) 为准。
+- 发送省略 `id` 的 JSON-RPC notification 时，用 `rpc-notification.json` 校验；该 schema 同样服务于 DevHub 当前公开方法集合，默认要求 `params` 为对象，并仅为 `hub.ping` / `hub.getVersion` 提供 `params: null` 的方法级例外。
+- 接收成功响应时，用 `rpc-response.json` 校验；接收错误响应时，用 `error-response.json` 校验。两个响应 schema 中的 numeric `id` 同样只接受有符号 64 位整数范围内的整数值。这两个 schema 分别约束成功/错误信封，不能同时接受同一个同时带 `result` 与 `error` 的响应对象。
+- 接收 `hub.event` 事件通知时，用 `event-notification.json` 校验；该 schema 限定当前支持的 8 种事件类型，并对 Definition 生命周期事件、Instance 生命周期事件与 invocation 事件施加最小 payload 约束。`app.definition.upserted.payload.definition.scope` 与 `payload.scope` 的相等性属于 [`Specification.md`](../../protocol/Specification.md) §6.3.19 的规范要求；标准 Draft-07 schema 不表达跨字段动态相等校验，该一致性由协议实现或 conformance 测试校验。
 
-实例所有权相关的 `instanceSessionToken` 还适用于 `hub.apps.heartbeat`、`hub.apps.unregisterInstance`、`hub.invoke.poll` 与 `hub.invoke.respond` 的顶层 `params`，这些字段属于方法级参数而不是通用数据模型，因此未单独收敛到 `app-instance*.json` 中。
+实例所有权相关的 `instanceSessionToken` 还适用于 `hub.apps.heartbeat`、`hub.apps.unregisterInstance`、`hub.invoke.poll` 与 `hub.invoke.respond` 的顶层 `params`。`hub.invoke.respond` 还必须携带当前 delivery 的 `leaseToken`。这些字段属于方法级参数而不是通用数据模型，因此未单独收敛到 `app-instance*.json` 中。
 
-`app-definition.json` 只描述单个 Definition payload 的结构；持久化文件名与 Definition 公开身份仍以 [`Specification.md`](../../protocol/Specification.md) §4.1.4 / §5.1.1 为准，即精确 `(appId, scope)` 复合身份与 `{appId}--{scopeKey}.json` 的 canonical 存储形状，其中 `scopeKey = "global"` 对应 Global，`scopeKey = "scope-" + scope` 对应显式 scope。
+`app-definition.json` 只描述单个 Definition payload 的结构；Definition 的公开身份仍以 [`Specification.md`](../../protocol/Specification.md) §4.1.4 / §5.1.1 为准，即精确 `(appId, scope)` 复合身份，并持久化到 `apps/definitions.json` 的版本化目录索引中。
 
-[`protocol-examples/v1.0.1`](../../protocol-examples/v1.0.1/README.md) 中的原始协议示例使用固定合法字面值，可直接作为本目录 schema 的结构校验样例。
+[`protocol-examples/v1.0.1`](../../protocol-examples/v1.0.1/README.md) 中的原始协议示例可直接作为对应 JSON-RPC 信封与事件通知 schema 的结构校验样例；其中演示失败路径的业务载荷应按具体方法语义理解，不作为通用数据模型 schema 的正向样例。
 
 如果需要请求/响应示例，请同时参考：
 

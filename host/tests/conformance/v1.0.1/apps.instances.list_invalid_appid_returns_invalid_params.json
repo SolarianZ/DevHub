@@ -1,0 +1,38 @@
+{
+  "id": "apps.instances.list_invalid_appid_returns_invalid_params",
+  "caseId": "CONF-003",
+  "description": "hub.apps.listInstances 提供非法 appId 过滤值时，必须返回 invalid_params。",
+  "transport": "http",
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceApps",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000204"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "apps-instances-list-invalid-appid",
+    "method": "hub.apps.listInstances",
+    "params": {
+      "appId": "sample.",
+      "scope": null
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "apps-instances-list-invalid-appid",
+    "error": {
+      "code": -32602,
+      "message": "invalid_params"
+    }
+  },
+  "tags": [
+    "apps",
+    "instances",
+    "http",
+    "negative"
+  ]
+}

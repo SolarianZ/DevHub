@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, AsyncIterator
 
 import pytest
@@ -21,6 +22,10 @@ from devhub_sdk import (
     VersionCompatibilityStatus,
 )
 from devhub_sdk import _versioning
+
+
+def _absolute_test_path(name: str) -> str:
+    return str((Path.cwd() / ".tmp-test-paths" / name).resolve())
 
 
 @dataclass(slots=True)
@@ -306,20 +311,23 @@ async def test_events_client_check_version_compatibility_should_require_authenti
 
 
 def _create_connection_info(hub_version: str | None = "0.7.0") -> RuntimeConnectionInfo:
+    runtime_directory = _absolute_test_path("devhub-version-tests/runtime")
+    token_file = _absolute_test_path("devhub-version-tests/runtime/token.txt")
     return RuntimeConnectionInfo(
-        runtime_directory="/tmp/devhub-version-tests/runtime",
+        runtime_directory=runtime_directory,
         token="token-version-tests",
         runtime=HubRuntime(
             protocol_version=1,
             pid=12345,
             http_base_url="http://127.0.0.1:57231",
             ws_url="ws://127.0.0.1:57231/ws",
-            token_file="/tmp/devhub-version-tests/runtime/token.txt",
+            token_file=token_file,
             started_at_utc=datetime(2026, 3, 9, tzinfo=timezone.utc),
             runtime_tuning=HubRuntimeTuning(
                 lease_seconds=15,
                 online_threshold_seconds=30,
                 launch_dedupe_window_seconds=45,
+                launch_register_timeout_seconds=60,
             ),
             hub_version=hub_version,
         ),

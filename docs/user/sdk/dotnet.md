@@ -5,7 +5,7 @@
 ## 1. 前置条件
 
 - 已按 [`../host/quickstart.md`](../host/quickstart.md) 启动 Host，并确认 `hub.json` 与 `tokenFile` 可读。
-- 本地具备 `.NET SDK 8` 或 `.NET SDK 10`，以便构建和运行消费端程序。
+- 本地具备可运行消费端程序的 `.NET SDK`；如需在仓库内联调或运行 SDK 工作区测试，使用 `.NET SDK 10`。
 - 若当前分发渠道尚未提供正式安装资产，请按 [`../../developer/publishing/README.md`](../../developer/publishing/README.md) 中的 `TODO(devhub-release)` 占位规范书写安装说明。
 
 ## 2. 获取 SDK
@@ -44,7 +44,7 @@ Unity 工程统一通过 `python3 scripts/sdk/publish_unity_dotnet_sdk.py` 生�
 
 ## 3. 能力概览
 
-- Runtime discovery：读取并校验 `hub.json` / `token.txt`。
+- Runtime discovery：读取并校验 `hub.json` / `token.txt`，接受 `localhost`、IPv4 loopback 与 IPv6 loopback 端点。
 - HTTP JSON-RPC：覆盖 `hub.ping`、`hub.apps.*` 与 `hub.invoke.*`。
 - WebSocket Events：覆盖 `hub.ws.authenticate`、`hub.events.subscribe`、`hub.events.unsubscribe` 与 `hub.event`。
 - 版本查询与兼容性检查：`GetHostVersionAsync(...)` 与 `CheckVersionCompatibilityAsync(...)`。
@@ -52,7 +52,8 @@ Unity 工程统一通过 `python3 scripts/sdk/publish_unity_dotnet_sdk.py` 生�
 - 事件恢复与本地维护：单活动读取器、已放弃请求计数/清理，以及订阅结果未知时的会话重建约束。
 - 公开扩展点：`runtime resolver`、`HTTP transport factory`、`WebSocket session factory`、依赖注入工厂。
 - 闭集事件类型模型：`DevHubEventType` / `DevHubEventTypes`。
-- 统一错误模型：`DevHubRpcException`；协议要求 `error.data` 为对象，非对象响应会被视为非法 JSON-RPC 包。
+- 统一错误模型：`DevHubRpcException` 通过 `Data` / `ErrorData` 暴露 `error.data`；协议允许 `error.data` 为对象或 JSON `null`，其他 JSON 类型会被视为非法 JSON-RPC 包。
+- 请求标识边界：SDK 默认生成 string 形式的 JSON-RPC `id`；若收到 numeric `id`，仅 `Int64` 范围内整数会被视为合法响应标识。
 
 ## 4. 运行时发现
 
@@ -82,6 +83,8 @@ SDK 会按以下优先级解析数据根目录：
 - Linux：`$XDG_DATA_HOME/DevHub/`，若未设置则回退到 `~/.local/share/DevHub/`
 
 SDK 固定从 `<dataDir>/runtime/hub.json` 读取发现文件，再通过 `hub.json.tokenFile` 读取令牌。若误传 `runtime` 子目录，SDK 会直接拒绝该路径并要求传入数据根目录。
+`hub.json.httpBaseUrl` 仅接受 loopback 主机、根路径 `/`，且不能包含尾随斜杠、userinfo、query 或 fragment；`hub.json.wsUrl` 仅接受 loopback 主机、固定路径 `/ws`，且同样不能包含上述附加成分。
+`hub.json.runtimeTuning` 公开视图固定包含 `leaseSeconds`、`onlineThresholdSeconds`、`launchDedupeWindowSeconds` 与 `launchRegisterTimeoutSeconds`；缺失任一字段都会导致运行时发现失败。
 
 ## 5. 快速开始
 
@@ -111,6 +114,8 @@ await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOpt
 ```
 
 ### 5.3 使用依赖注入工厂
+
+依赖注入扩展由 companion package `DevHub.Sdk.DotNet.DependencyInjection` 提供，公开类型仍位于 `DevHub.Sdk` 命名空间。
 
 ```csharp
 using DevHub.Sdk;
@@ -175,6 +180,7 @@ await using var client = await DevHubClient.FromRuntimeAsync(new DevHubClientOpt
 var definition = new AppDefinition
 {
     AppId = "sample.app",
+    Scope = string.Empty,
     DisplayName = "Sample App",
     Launch = new LaunchConfiguration
     {
@@ -206,6 +212,7 @@ var registered = await client.RegisterInstanceAsync(
     {
         InstanceId = "sample-inst-1",
         AppId = "sample.app",
+        Scope = string.Empty,
         Pid = Environment.ProcessId,
         Invoke = new InvokeCapability
         {
@@ -225,11 +232,13 @@ var polled = await client.PollAsync(new PollRequest
 });
 ```
 
-- `RegisterInstanceResult.Instance` 是可序列化的实例快照，`RegisterInstanceResult.InstanceSessionToken` 是实例所有权凭据。
-- 在同一个 `DevHubClient` 实例内，`HeartbeatAsync(instanceId)`、`PollAsync(...)` 与 `RespondAsync(...)` 可复用该客户端先前注册时缓存的 `InstanceSessionToken`。
-- `UnregisterInstanceAsync(instanceId, credential)` 接受 `InstanceSessionToken`；若使用同一 `DevHubClient` 注册实例，也可传入当时使用的 `password`。
+- `RegisterInstanceAsync(...)` 返回 `RegisterInstanceResult`，其中 `Instance` 为可序列化的 `AppInstance` 快照，`InstanceSessionToken` 为实例所有权凭据。
+- Host 启动的 App 可从环境变量 `DEVHUB_LAUNCH_ID` 读取启动请求标识，并调用 `RegisterInstanceAsync(instance, password, launchId)` 将该值作为顶层 `launchId` 传回 Host；自主注册可省略该参数。
+- `password` 只作为 `RegisterInstanceAsync(..., password)` 的独立参数出现；`AppInstanceRegistration`、`AppInstance`、`GetInstanceAsync(...)`、`ListInstancesAsync(...)` 与 `app.instance.*` 事件载荷都不包含 `password` 或 `instanceSessionToken`。
+- 在同一个 `DevHubClient` 实例内，`HeartbeatAsync(instanceId)`、`PollAsync(...)` 与 `RespondAsync(...)` 可省略 `InstanceSessionToken`，复用该客户端先前注册时缓存的会话令牌；`RespondAsync(...)` 还可复用先前 `PollAsync(...)` 缓存的 `LeaseToken`。
+- `UnregisterInstanceAsync(instanceId, credential)` 接受 `InstanceSessionToken`；若使用同一 `DevHubClient` 注册实例，也可传入当时使用的 `password`，SDK 会在本地换算为对应的 `InstanceSessionToken`。
 
-### 6.4 事件订阅与已放弃请求维护
+### 6.4 事件订阅
 
 ```csharp
 using DevHub.Sdk;
@@ -252,17 +261,46 @@ await foreach (var evt in eventsClient.ReadEventsAsync())
     Console.WriteLine($"{evt.TimeUtc:O} {evt.Type}");
 }
 
-var abandoned = eventsClient.GetAbandonedRequestCount(new AbandonedRequestFilter
+await eventsClient.UnsubscribeAsync(subscriptionId);
+```
+
+`DevHubEventsClient` 的运行时约束如下：
+
+- 同一时刻只允许一个活动中的 `ReadEventsAsync` 读取器。
+- 同一实例上的 `AuthenticateAsync(...)` 会串行执行，避免并发认证竞态。
+- 若底层 WebSocket 终止，当前活动读取器只会排空已缓冲事件并结束；后续读取前需要重新执行 `AuthenticateAsync()`，并重新执行 `SubscribeAsync()` 恢复订阅。
+- `SubscribeAsync(...)` 或 `UnsubscribeAsync(...)` 在请求发出后若因超时或取消进入结果未知状态，SDK 会主动废弃当前 WebSocket 会话；后续必须重新认证并重新订阅。
+- 本地事件缓冲采用有界 fail-fast 队列；消费者处理速度落后导致缓冲溢出时，当前事件流会终止，并要求重新认证与重新订阅。
+- `DevHubEventsClient.DisposeAsync()` 与底层 WebSocket 断开流程采用 best-effort 清理；关闭握手最多等待 1 秒，超时后直接继续释放本地资源。
+- `DevHubClientOptions.RequestTimeout` 只用于请求-响应等待阶段；关闭或释放客户端时的清理上限由 SDK 内部固定控制，不形成可无限阻塞的关闭契约。
+
+### 6.5 已放弃请求维护
+
+`DevHubEventsClient` 暴露两组纯本地维护接口：
+
+```csharp
+using System;
+using DevHub.Sdk.Models;
+
+var total = eventsClient.GetAbandonedRequestCount();
+var appScoped = eventsClient.GetAbandonedRequestCount(new AbandonedRequestFilter
 {
+    AppId = "sample.app",
     Method = "hub.apps.getDefinition"
+});
+
+var removed = eventsClient.ClearAbandonedRequests(new AbandonedRequestFilter
+{
+    OlderThan = TimeSpan.FromMinutes(2)
 });
 
 await eventsClient.UnsubscribeAsync(subscriptionId);
 ```
 
-- 同一 `DevHubEventsClient` 同一时刻只允许一个活动中的 `ReadEventsAsync()` 读取器。
-- `SubscribeAsync(...)` 或 `UnsubscribeAsync(...)` 在结果未知后会废弃当前 WebSocket 会话；恢复时需要重新 `AuthenticateAsync()` 并重新订阅。
-- `GetAbandonedRequestCount(...)` 与 `ClearAbandonedRequests(...)` 只维护当前事件客户端本地记录，不会发送额外 JSON-RPC 请求。
+- `GetAbandonedRequestCount(...)` 返回当前匹配过滤条件的已放弃请求数量。
+- `ClearAbandonedRequests(...)` 只移除匹配条件的本地记录，并返回本次实际移除数量。
+- `AbandonedRequestFilter` 支持 `OlderThan`、`AppId`、`Method` 三个可选条件；同时提供多个条件时按逻辑与匹配。
+- 两个接口都只读取或修改当前 `DevHubEventsClient` 关联 WebSocket 会话中的本地 tombstone 记录，不发送 JSON-RPC 请求，也不会隐式重连。
 
 ## 7. 高级扩展
 
@@ -299,6 +337,7 @@ var eventsClient = await DevHubEventsClient.FromRuntimeAsync(
 ```
 
 `IDevHubHttpTransportFactory` 与 `IDevHubWebSocketSessionFactory` 负责承接底层通信；JSON-RPC 请求封装、错误映射与响应校验仍由 SDK 内部负责。低层具体实现类型不构成稳定公开契约。
+如需按客户端粒度提供底层 `HttpClient`，可组合 `JsonRpcHttpTransportFactory(IDevHubHttpClientProvider)`，或在依赖注入场景替换 `IDevHubHttpClientProvider` 的实现。
 
 ## 8. 最小验证方式
 

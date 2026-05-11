@@ -1,0 +1,91 @@
+{
+  "id": "invocation.notify.args_array_roundtrips_json_value",
+  "caseId": "CONF-004",
+  "description": "SDK notify 的 args=array 必须原样投递给 callee。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "appId": "invoke.notify.args-array",
+        "scopeEntry": {
+          "scope": "",
+          "displayName": "invoke.notify.args-array"
+        }
+      }
+    ]
+  },
+  "orchestration": {
+    "beforeCaller": [
+      {
+        "action": "register_instance",
+        "password": "conformance-password",
+        "instance": {
+          "instanceId": "notify-args-array-inst",
+          "appId": "invoke.notify.args-array",
+          "scope": "",
+          "pid": 32105,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      }
+    ],
+    "duringCaller": [
+      {
+        "action": "poll_expect_invocation",
+        "instanceId": "notify-args-array-inst",
+        "waitMs": 1500,
+        "expected": {
+          "appId": "invoke.notify.args-array",
+          "method": "demo.notify.args-array",
+          "kind": "notify",
+          "args": [
+            "alpha",
+            2,
+            true,
+            null
+          ]
+        }
+      }
+    ]
+  },
+  "request": {
+    "kind": "sdk.notify",
+    "clientId": "ConformanceNotifyArgsArray",
+    "invokeRequest": {
+      "appId": "invoke.notify.args-array",
+      "method": "demo.notify.args-array",
+      "args": [
+        "alpha",
+        2,
+        true,
+        null
+      ],
+      "target": {
+        "scope": ""
+      },
+      "options": {
+        "ttlMs": 60000,
+        "queueIfOffline": false,
+        "autoLaunch": false
+      }
+    }
+  },
+  "expectedResponse": {
+    "phase": "sdk-invocation",
+    "operation": "notify",
+    "outcome": "success",
+    "actual": {
+      "ok": true,
+      "invocationId": "${ANY_NON_EMPTY_STRING}"
+    }
+  },
+  "tags": [
+    "invocation",
+    "notify",
+    "args",
+    "json-value",
+    "sdk"
+  ]
+}

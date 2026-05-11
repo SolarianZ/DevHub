@@ -10,15 +10,17 @@ import unittest
 
 
 from tests.blackbox.test_base import (
+    _UNSET,
+    build_app_definition,
+    build_json_rpc_request,
     build_definition_identity_params,
     RpcClient,
     RpcAssertions,
     TestResult,
     get_runtime_hub_info,
+    http_post,
     new_instance_id,
-    safe_remove,
     unregister_instances,
-    write_app_definition,
 )
 from tests.blackbox.test_ws_events import SimpleWebSocketClient
 
@@ -39,8 +41,9 @@ class TestWsTransportMatrix(unittest.TestCase):
     def _new_instance_id(suffix):
         return new_instance_id(f"ws-transport-{suffix}")
 
-    def _create_definition(self, app_id):
-        return write_app_definition(app_id, rpc=True, events=False)
+    def _create_definition(self, client, app_id, result):
+        response = client.upsert_definition(build_app_definition(app_id, rpc=True, events=False))
+        return RpcAssertions.expect_success(result, response, ["definition"])
 
     @staticmethod
     def _authenticate(ws, token, request_id):
@@ -58,13 +61,8 @@ class TestWsTransportMatrix(unittest.TestCase):
         return ws.recv_json(timeout=3)
 
     @staticmethod
-    def _ws_call(ws, request_id, method, params):
-        ws.send_json({
-            "jsonrpc": "2.0",
-            "id": request_id,
-            "method": method,
-            "params": params,
-        })
+    def _ws_call(ws, request_id, method, params=_UNSET):
+        ws.send_json(build_json_rpc_request(method, request_id=request_id, params=params))
         return ws.recv_json(timeout=3)
 
     @staticmethod
@@ -95,9 +93,15 @@ class TestWsTransportMatrix(unittest.TestCase):
                 if not RpcAssertions.expect_success(result, auth_response, ["protocolVersion"]):
                     return result
 
-                response = self._ws_call(ws, "matrix-ping-001", "hub.ping", {})
-                if not RpcAssertions.expect_success(result, response, ["serverTimeUtc"]):
-                    return result
+                cases = [
+                    ("省略 params", self._ws_call(ws, "matrix-ping-001-omitted", "hub.ping", params=_UNSET)),
+                    ("params=null", self._ws_call(ws, "matrix-ping-001-null", "hub.ping", params=None)),
+                    ("params={}", self._ws_call(ws, "matrix-ping-001-empty", "hub.ping", params={})),
+                ]
+                for shape_name, response in cases:
+                    if not RpcAssertions.expect_success(result, response, ["serverTimeUtc"]):
+                        return result
+                    result.add_detail(f"✅ {shape_name} 的 WS hub.ping 成功")
 
             result.mark_success()
         except Exception as e:
@@ -116,14 +120,19 @@ class TestWsTransportMatrix(unittest.TestCase):
                 if not RpcAssertions.expect_success(result, auth_response, ["protocolVersion"]):
                     return result
 
-                response = self._ws_call(ws, "matrix-get-version-001a", "hub.getVersion", {})
-                if not RpcAssertions.expect_success(result, response, ["version"]):
-                    return result
-
-                version = response.get("result", {}).get("version")
-                if not isinstance(version, str) or not version.strip():
-                    result.mark_failure(f"❌ version 非法: {response}")
-                    return result
+                cases = [
+                    ("省略 params", self._ws_call(ws, "matrix-get-version-001a-omitted", "hub.getVersion", params=_UNSET)),
+                    ("params=null", self._ws_call(ws, "matrix-get-version-001a-null", "hub.getVersion", params=None)),
+                    ("params={}", self._ws_call(ws, "matrix-get-version-001a-empty", "hub.getVersion", params={})),
+                ]
+                for shape_name, response in cases:
+                    if not RpcAssertions.expect_success(result, response, ["version"]):
+                        return result
+                    version = response.get("result", {}).get("version")
+                    if not isinstance(version, str) or not version.strip():
+                        result.mark_failure(f"❌ {shape_name} 的 version 非法: {response}")
+                        return result
+                    result.add_detail(f"✅ {shape_name} 的 WS hub.getVersion 成功")
 
             result.mark_success()
         except Exception as e:
@@ -160,12 +169,13 @@ class TestWsTransportMatrix(unittest.TestCase):
     def test_ws_matrix_003_get_definition_should_work_after_auth(self):
         """WS-MATRIX-003: 鉴权后 hub.apps.getDefinition 可在 WS 调用。"""
         result = TestResult("WS-MATRIX-003 鉴权后 WS hub.apps.getDefinition")
-        definition_path = None
 
         try:
             app_id = self._new_app_id("get-definition")
-            definition_path = self._create_definition(app_id)
-            _, ws_url, token = self._runtime_hub_info()
+            http_base_url, ws_url, token = self._runtime_hub_info()
+            http_client = RpcClient(http_base_url, token)
+            if not self._create_definition(http_client, app_id, result):
+                return result
 
             with SimpleWebSocketClient(ws_url) as ws:
                 auth_response = self._authenticate(ws, token, "matrix-auth-003")
@@ -190,7 +200,11 @@ class TestWsTransportMatrix(unittest.TestCase):
         except Exception as e:
             result.mark_failure(str(e))
         finally:
-            safe_remove(definition_path)
+            try:
+                if "http_client" in locals() and "app_id" in locals():
+                    http_client.delete_definition(app_id)
+            except Exception:
+                pass
 
         return result
 
@@ -345,6 +359,40 @@ class TestWsTransportMatrix(unittest.TestCase):
                         response,
                         -32602,
                         "invalid_params",
+                        expected_id=request_id,
+                    ):
+                        return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_ws_matrix_005a_scalar_params_should_be_invalid_request_for_hub_ping(self):
+        """WS-MATRIX-005A: 鉴权后 hub.ping 顶层标量 params 必须返回 invalid_request。"""
+        result = TestResult("WS-MATRIX-005A 鉴权后 WS hub.ping 标量 params")
+
+        try:
+            _, ws_url, token = self._runtime_hub_info()
+            with SimpleWebSocketClient(ws_url) as ws:
+                auth_response = self._authenticate(ws, token, "matrix-auth-005a")
+                if not RpcAssertions.expect_success(result, auth_response, ["protocolVersion"]):
+                    return result
+
+                cases = [
+                    ("matrix-invalid-ping-string", "invalid"),
+                    ("matrix-invalid-ping-number", 1),
+                    ("matrix-invalid-ping-bool", True),
+                ]
+
+                for request_id, params in cases:
+                    response = self._ws_call(ws, request_id, "hub.ping", params)
+                    if not RpcAssertions.expect_error(
+                        result,
+                        response,
+                        -32600,
+                        "invalid_request",
                         expected_id=request_id,
                     ):
                         return result
@@ -528,6 +576,31 @@ class TestWsTransportMatrix(unittest.TestCase):
             if not self._expect_transport_rejected(result, unsubscribe_response, "matrix-http-ws-unsubscribe"):
                 return result
 
+            notification_payload = {
+                "jsonrpc": "2.0",
+                "method": "hub.events.subscribe",
+                "params": {"types": ["app.instance.registered"]},
+            }
+            response = http_post(
+                f"{http_base_url}/rpc",
+                json_body=notification_payload,
+                headers=client.headers,
+                timeout=30,
+            )
+            if response.status_code != 200:
+                result.mark_failure(f"HTTP notification 状态码不正确: {response.status_code}")
+                return result
+
+            notification_response = response.json()
+            if not RpcAssertions.expect_error(
+                result,
+                notification_response,
+                -32099,
+                "not_supported",
+                expected_id=None,
+            ):
+                return result
+
             result.mark_success()
         except Exception as e:
             result.mark_failure(str(e))
@@ -537,11 +610,13 @@ class TestWsTransportMatrix(unittest.TestCase):
     def run_all_tests(self, full=False):
         return [
             self.test_ws_matrix_001_ping_should_work_after_auth(),
+            self.test_ws_matrix_001a_get_version_should_work_after_auth(),
             self.test_ws_matrix_002_list_definitions_should_work_after_auth(),
             self.test_ws_matrix_003_get_definition_should_work_after_auth(),
             self.test_ws_matrix_004_list_instances_should_work_after_auth(),
             self.test_ws_matrix_004a_get_instance_should_work_after_auth(),
             self.test_ws_matrix_005_invalid_params_should_be_enforced_after_auth(),
+            self.test_ws_matrix_005a_scalar_params_should_be_invalid_request_for_hub_ping(),
             self.test_ws_matrix_006_http_only_methods_should_be_rejected_over_ws(),
             self.test_ws_matrix_007_ws_only_methods_should_be_rejected_over_http(),
         ]

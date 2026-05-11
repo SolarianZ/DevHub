@@ -34,6 +34,7 @@ from tests.conformance.vector_setup import (  # type: ignore  # noqa: E402
     VectorExecutionContext,
     materialize_vector,
     read_log_tail,
+    restart_suite_host,
     sanitize_file_name,
     start_suite_host,
     stop_process,
@@ -46,13 +47,10 @@ MANIFEST_VERSION = 1
 WILDCARD_ANY_ISO_UTC = "${ANY_ISO_UTC}"
 WILDCARD_ANY_NON_EMPTY_STRING = "${ANY_NON_EMPTY_STRING}"
 WILDCARD_ANY_NON_NEGATIVE_INT = "${ANY_NON_NEGATIVE_INT}"
-OPTIONAL_APP_INSTANCE_EVENT_TYPES = {
-    "app.instance.registered",
-    "app.instance.unregistered",
-}
 SNAPSHOT_DIR_NAME = "conformance_snapshots"
 CASE_ID_PATTERN = re.compile(r"^CONF-\d{3}$")
 ALLOWED_ADAPTER_OUTCOMES = frozenset({"success", "error"})
+ALLOWED_MATCH_MODES = frozenset({"strict", "subset"})
 ADAPTER_TIMEOUT_SECONDS = 60
 
 
@@ -108,12 +106,14 @@ def main() -> int:
         try:
             for vector_path, vector in vectors:
                 try:
-                    result = run_vector(
+                    result, host_context, process = run_vector(
                         vector_path,
                         vector,
                         host_context,
                         temp_root,
                         adapter_targets,
+                        process,
+                        log_file,
                     )
                 except Exception as exc:  # noqa: BLE001
                     failure_count += 1
@@ -493,19 +493,34 @@ def run_vector(
     host_context: HostRuntimeContext,
     temp_root: Path,
     adapter_targets: list[AdapterTarget],
-) -> dict[str, Any]:
+    suite_process: subprocess.Popen[str],
+    suite_log_file,
+) -> tuple[dict[str, Any], HostRuntimeContext, subprocess.Popen[str]]:
     is_discovery = "expectedDiscovery" in vector
     failures: list[dict[str, Any]] = []
     normalized_results: dict[str, Any] = {}
-
     for adapter in adapter_targets:
         execution: VectorExecutionContext | None = None
         try:
-            execution = materialize_vector(
+            def restart_current_suite_host(
+                current_context: HostRuntimeContext,
+                host_env_overrides: dict[str, str] | None = None,
+            ) -> HostRuntimeContext:
+                nonlocal host_context, suite_process
+                host_context, suite_process = restart_suite_host(
+                    current_context,
+                    suite_process,
+                    suite_log_file,
+                    host_env_overrides,
+                )
+                return host_context
+
+            execution, host_context = materialize_vector(
                 vector_path,
                 vector,
                 host_context,
                 temp_root,
+                restart_current_suite_host,
                 execution_name=adapter.name,
             )
             adapter_result = execute_adapter_vector(adapter, execution, host_context)
@@ -556,12 +571,18 @@ def run_vector(
                     )
                     continue
 
+            expected_spec = (
+                execution.resolved_vector["expectedDiscovery"]
+                if is_discovery
+                else execution.resolved_vector["expectedResponse"]
+            )
+
             if adapter_result.get("error") is not None:
                 failures.append(
                     {
                         "vectorId": execution.resolved_vector["id"],
                         "sdk": adapter.name,
-                        "expected": expected,
+                        "expected": expected_spec,
                         "actual": adapter_result.get("actual"),
                         "diffFields": ["$process"],
                         "message": adapter_result["error"],
@@ -572,15 +593,16 @@ def run_vector(
                 )
                 continue
 
+            expected, match_mode, forbid_paths = parse_expected_spec(expected_spec)
             comparable = build_comparable_payload(adapter_result, is_discovery)
-            comparable = normalize_optional_event_payload_fields(comparable, expected)
-            diffs = collect_differences(expected, comparable)
+            diffs = collect_comparison_differences(expected, comparable, match_mode)
+            diffs.extend(collect_forbidden_path_differences(comparable, forbid_paths))
             if diffs:
                 failures.append(
                     {
                         "vectorId": execution.resolved_vector["id"],
                         "sdk": adapter.name,
-                        "expected": expected,
+                        "expected": expected_spec,
                         "actual": comparable,
                         "diffFields": diffs,
                         "vectorPath": str(vector_path),
@@ -591,7 +613,7 @@ def run_vector(
                 continue
 
             if not is_discovery:
-                normalized_results[adapter.name] = canonicalize_with_expected(comparable, expected)
+                normalized_results[adapter.name] = canonicalize_for_match_mode(comparable, expected, match_mode)
         except OrchestrationFailure as exc:
             failures.append(
                 {
@@ -606,7 +628,7 @@ def run_vector(
                     ),
                     "vectorPath": str(vector_path),
                     "resolvedVector": execution.resolved_vector if execution is not None else vector,
-                    "adapterMeta": build_static_adapter_meta(adapter),
+                    "adapterMeta": getattr(exc, "adapter_meta", build_static_adapter_meta(adapter)),
                 }
             )
         except Exception as exc:  # noqa: BLE001
@@ -625,7 +647,7 @@ def run_vector(
             )
         finally:
             if execution is not None:
-                execution.cleanup(host_context)
+                host_context = execution.cleanup(host_context, restart_current_suite_host)
 
     if not failures and normalized_results:
         baseline_sdk, baseline_payload = next(iter(normalized_results.items()))
@@ -647,10 +669,14 @@ def run_vector(
                     }
                 )
 
-    return {
-        "passed": not failures,
-        "failures": failures,
-    }
+    return (
+        {
+            "passed": not failures,
+            "failures": failures,
+        },
+        host_context,
+        suite_process,
+    )
 
 
 def execute_adapter_vector(
@@ -668,7 +694,7 @@ def should_use_orchestration(vector: dict[str, Any]) -> bool:
     request = vector.get("request")
     if isinstance(request, dict):
         kind = request.get("kind")
-        if isinstance(kind, str) and kind.startswith("sdk."):
+        if isinstance(kind, str) and (kind.startswith("sdk.") or kind == "raw.rpc.helper"):
             return True
     return isinstance(vector.get("orchestration"), dict)
 
@@ -701,8 +727,11 @@ def run_adapter_with_orchestration(
         helper.run_phase("duringCaller", load_orchestration_phase(execution.resolved_vector, "duringCaller"))
         result = wait_adapter_process(adapter, process)
         helper.run_phase("afterCaller", load_orchestration_phase(execution.resolved_vector, "afterCaller"))
-    except Exception:
-        terminate_adapter_process(process)
+    except Exception as exc:
+        if isinstance(exc, OrchestrationFailure):
+            exc.adapter_meta = collect_adapter_process_meta(adapter, process)
+        else:
+            terminate_adapter_process(process)
         raise
     finally:
         if process.poll() is None:
@@ -841,6 +870,21 @@ def terminate_adapter_process(process: subprocess.Popen[str]) -> None:
         pass
 
 
+def collect_adapter_process_meta(adapter: AdapterTarget, process: subprocess.Popen[str]) -> dict[str, Any]:
+    """在 helper 失败时收集 adapter 输出，便于失败快照暴露 caller 侧错误。"""
+
+    if process.poll() is None:
+        process.kill()
+
+    try:
+        stdout, stderr = process.communicate(timeout=5)
+    except subprocess.TimeoutExpired:
+        stdout = ""
+        stderr = "适配器进程终止后仍未退出。"
+
+    return build_adapter_meta(adapter, process.returncode, stdout, stderr)
+
+
 def try_parse_json_line(stdout: str) -> dict[str, Any] | None:
     if not stdout:
         return None
@@ -864,7 +908,7 @@ def build_comparable_payload(result: dict[str, Any], is_discovery: bool) -> Any:
         }
 
     phase = result.get("phase")
-    if phase in {"sdk-invocation", "sdk-events", "ws"}:
+    if phase in {"sdk-invocation", "sdk-events", "ws", "http"}:
         comparable = {
             "phase": phase,
             "outcome": result.get("outcome"),
@@ -875,6 +919,101 @@ def build_comparable_payload(result: dict[str, Any], is_discovery: bool) -> Any:
         return comparable
 
     return result.get("actual")
+
+
+def parse_expected_spec(spec: Any) -> tuple[Any, str, tuple[str, ...]]:
+    if not isinstance(spec, dict):
+        return spec, "strict", ()
+
+    match_mode = spec.get("matchMode", "strict")
+    if not isinstance(match_mode, str) or match_mode not in ALLOWED_MATCH_MODES:
+        raise ValueError(f"expected.matchMode 不支持：{match_mode!r}")
+
+    forbid_paths_value = spec.get("forbidPaths", [])
+    if forbid_paths_value is None:
+        forbid_paths: tuple[str, ...] = ()
+    elif isinstance(forbid_paths_value, list):
+        parsed_paths: list[str] = []
+        for index, raw_path in enumerate(forbid_paths_value):
+            if not isinstance(raw_path, str) or not raw_path.strip():
+                raise ValueError(f"expected.forbidPaths[{index}] 必须为非空字符串。")
+            parsed_paths.append(raw_path)
+        forbid_paths = tuple(parsed_paths)
+    else:
+        raise ValueError("expected.forbidPaths 必须为字符串数组。")
+
+    expected_payload = {
+        key: value
+        for key, value in spec.items()
+        if key not in {"matchMode", "forbidPaths"}
+    }
+    return expected_payload, match_mode, forbid_paths
+
+
+def collect_comparison_differences(expected: Any, actual: Any, match_mode: str) -> list[str]:
+    if match_mode == "subset":
+        return collect_subset_differences(expected, actual)
+    return collect_differences(expected, actual)
+
+
+def canonicalize_for_match_mode(actual: Any, expected: Any, match_mode: str) -> Any:
+    if match_mode == "subset":
+        return canonicalize_subset_with_expected(actual, expected)
+    return canonicalize_with_expected(actual, expected)
+
+
+def collect_forbidden_path_differences(actual: Any, forbid_paths: Iterable[str]) -> list[str]:
+    diffs: list[str] = []
+    for raw_path in forbid_paths:
+        if path_exists(actual, raw_path):
+            diffs.append(raw_path)
+    return diffs
+
+
+def path_exists(value: Any, path: str) -> bool:
+    if path == "$":
+        return True
+    if not isinstance(path, str) or not path.startswith("$"):
+        raise ValueError(f"禁止路径必须以 '$' 开头：{path!r}")
+
+    current = value
+    position = 1
+    while position < len(path):
+        current_char = path[position]
+        if current_char == ".":
+            next_position = position + 1
+            end_position = next_position
+            while end_position < len(path) and path[end_position] not in ".[":
+                end_position += 1
+            if end_position == next_position:
+                raise ValueError(f"禁止路径语法非法：{path!r}")
+
+            key = path[next_position:end_position]
+            if not isinstance(current, dict) or key not in current:
+                return False
+            current = current[key]
+            position = end_position
+            continue
+
+        if current_char == "[":
+            end_position = path.find("]", position)
+            if end_position < 0:
+                raise ValueError(f"禁止路径语法非法：{path!r}")
+
+            index_text = path[position + 1:end_position]
+            if not index_text.isdigit():
+                raise ValueError(f"禁止路径数组下标非法：{path!r}")
+
+            index = int(index_text)
+            if not isinstance(current, list) or index >= len(current):
+                return False
+            current = current[index]
+            position = end_position + 1
+            continue
+
+        raise ValueError(f"禁止路径语法非法：{path!r}")
+
+    return True
 
 
 def maybe_track_registered_instance_session_token(execution: VectorExecutionContext, result: dict[str, Any]) -> None:
@@ -961,6 +1100,8 @@ def resolve_adapter_output_contract(vector: dict[str, Any]) -> AdapterOutputCont
 
     request = vector.get("request")
     kind = request.get("kind") if isinstance(request, dict) else None
+    if kind == "raw.http":
+        return AdapterOutputContract(phase="http")
     if kind in {"sdk.notify", "sdk.request"}:
         return AdapterOutputContract(phase="sdk-invocation", allowed_operations=("notify", "request"))
     if kind == "sdk.events":
@@ -1029,54 +1170,61 @@ def canonicalize_with_expected(actual: Any, expected: Any) -> Any:
     return actual
 
 
-def normalize_optional_event_payload_fields(
-    actual: Any,
-    expected: Any,
-    event_type: str | None = None,
-    within_event_payload: bool = False,
-) -> Any:
-    if isinstance(actual, dict):
-        expected_mapping = expected if isinstance(expected, dict) else {}
-        current_event_type = event_type
-        candidate_event_type = actual.get("type")
-        if isinstance(candidate_event_type, str):
-            current_event_type = candidate_event_type
+def canonicalize_subset_with_expected(actual: Any, expected: Any) -> Any:
+    if is_wildcard(expected, actual):
+        return expected
 
-        normalized: dict[str, Any] = {}
-        for key, value in actual.items():
-            if (
-                within_event_payload
-                and key == "scope"
-                and key not in expected_mapping
-                and current_event_type in OPTIONAL_APP_INSTANCE_EVENT_TYPES
-                and (value is None or isinstance(value, str))
-            ):
-                continue
+    if isinstance(expected, dict):
+        if not isinstance(actual, dict):
+            return actual
+        return {
+            key: canonicalize_subset_with_expected(actual[key], expected[key])
+            for key in expected
+            if key in actual
+        }
 
-            child_expected = expected_mapping.get(key)
-            child_within_payload = key == "payload" and current_event_type in OPTIONAL_APP_INSTANCE_EVENT_TYPES
-            normalized[key] = normalize_optional_event_payload_fields(
-                value,
-                child_expected,
-                current_event_type,
-                child_within_payload,
-            )
-
-        return normalized
-
-    if isinstance(actual, list):
-        expected_items = expected if isinstance(expected, list) else []
+    if isinstance(expected, list):
+        if not isinstance(actual, list):
+            return actual
         return [
-            normalize_optional_event_payload_fields(
-                item,
-                expected_items[index] if index < len(expected_items) else None,
-                event_type,
-                False,
-            )
-            for index, item in enumerate(actual)
+            canonicalize_subset_with_expected(actual[index], expected[index])
+            for index in range(min(len(expected), len(actual)))
         ]
 
     return actual
+
+
+def collect_subset_differences(expected: Any, actual: Any, path: str = "$") -> list[str]:
+    if is_wildcard(expected, actual):
+        return []
+
+    if isinstance(expected, dict):
+        if not isinstance(actual, dict):
+            return [path]
+
+        diffs: list[str] = []
+        for key in expected:
+            child_path = f"{path}.{key}"
+            if key not in actual:
+                diffs.append(child_path)
+                continue
+            diffs.extend(collect_subset_differences(expected[key], actual[key], child_path))
+        return diffs
+
+    if isinstance(expected, list):
+        if not isinstance(actual, list):
+            return [path]
+        if len(expected) != len(actual):
+            return [path]
+
+        diffs: list[str] = []
+        for index in range(len(expected)):
+            diffs.extend(collect_subset_differences(expected[index], actual[index], f"{path}[{index}]"))
+        return diffs
+
+    if expected != actual:
+        return [path]
+    return []
 
 
 def collect_differences(expected: Any, actual: Any, path: str = "$") -> list[str]:

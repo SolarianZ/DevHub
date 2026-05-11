@@ -7,6 +7,7 @@ afterEach(() => {
   vi.resetModules();
   vi.restoreAllMocks();
   ControlledWebSocket.instances = [];
+  ControlledWebSocket.closeBehavior = "immediate";
 });
 
 it("全局 WebSocket 应优先处理文本帧且不加载 ws", async () => {
@@ -104,6 +105,84 @@ it("并发首个 sendRequest 应共享同一建连等待过程且只在 open 后
   }
 });
 
+it("disconnect 在 close 事件不抵达时应于内部超时后完成", async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal("WebSocket", ControlledWebSocket as unknown as typeof WebSocket);
+  ControlledWebSocket.closeBehavior = "never";
+
+  const { JsonRpcWsSession } = await import("../../src/ws-session.js");
+  const session = new JsonRpcWsSession({
+    websocketEndpoint: "ws://127.0.0.1:47231/ws"
+  });
+
+  const connectPromise = session.ensureConnected();
+  await flushMicrotasks();
+
+  const socket = ControlledWebSocket.instances[0]!;
+  socket.emitOpen();
+  await connectPromise;
+
+  const disconnectPromise = session.disconnect("manual_disconnect");
+  let resolved = false;
+  void disconnectPromise.then(() => {
+    resolved = true;
+  });
+  await flushMicrotasks();
+
+  expect(socket.closeCalls).toEqual([{
+    code: 1000,
+    reason: "manual_disconnect"
+  }]);
+  expect(resolved).toBe(false);
+
+  await vi.advanceTimersByTimeAsync(999);
+  expect(resolved).toBe(false);
+
+  await vi.advanceTimersByTimeAsync(1);
+  await disconnectPromise;
+  expect(resolved).toBe(true);
+
+  await session.dispose();
+});
+
+it("dispose 在 close 事件及时抵达时应提前完成且保持幂等", async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal("WebSocket", ControlledWebSocket as unknown as typeof WebSocket);
+  ControlledWebSocket.closeBehavior = "manual";
+
+  const { JsonRpcWsSession } = await import("../../src/ws-session.js");
+  const session = new JsonRpcWsSession({
+    websocketEndpoint: "ws://127.0.0.1:47231/ws"
+  });
+
+  const connectPromise = session.ensureConnected();
+  await flushMicrotasks();
+
+  const socket = ControlledWebSocket.instances[0]!;
+  socket.emitOpen();
+  await connectPromise;
+
+  const disposePromise = session.dispose();
+  let resolved = false;
+  void disposePromise.then(() => {
+    resolved = true;
+  });
+  await flushMicrotasks();
+
+  expect(socket.closeCalls).toEqual([{
+    code: 1000,
+    reason: "client_dispose"
+  }]);
+  expect(resolved).toBe(false);
+
+  socket.emitClose();
+  await disposePromise;
+  expect(resolved).toBe(true);
+
+  await session.dispose();
+  expect(socket.closeCalls).toHaveLength(1);
+});
+
 it("本地超时请求的迟到响应应被忽略且会话保持可用", async () => {
   vi.stubGlobal("WebSocket", ControlledWebSocket as unknown as typeof WebSocket);
 
@@ -174,6 +253,8 @@ it("超时很久后的迟到响应仍应被忽略且会话保持可用", async (
 });
 
 it("应统计并按过滤条件清理已放弃请求记录", async () => {
+  const dateNowSpy = vi.spyOn(Date, "now");
+  dateNowSpy.mockReturnValue(0);
   vi.stubGlobal("WebSocket", ControlledWebSocket as unknown as typeof WebSocket);
 
   const { JsonRpcWsSession } = await import("../../src/ws-session.js");
@@ -193,14 +274,16 @@ it("应统计并按过滤条件清理已放弃请求记录", async () => {
     socket.emitOpen();
     await waitForSentRequestCount(socket, 1);
 
+    dateNowSpy.mockReturnValue(20);
     await expect(firstRequest).rejects.toThrow("WebSocket request timed out.");
-    await sleep(60);
+    dateNowSpy.mockReturnValue(60);
 
     const secondRequest = session.sendRequest("hub.apps.listInstances", {
       appId: "app-b",
       scope: ""
     });
     await waitForSentRequestCount(socket, 2);
+    dateNowSpy.mockReturnValue(80);
     await expect(secondRequest).rejects.toThrow("WebSocket request timed out.");
 
     expect(session.getAbandonedRequestCount()).toBe(2);
@@ -374,6 +457,7 @@ class AutoOpenWebSocket {
 
 class ControlledWebSocket {
   static instances: ControlledWebSocket[] = [];
+  static closeBehavior: "immediate" | "manual" | "never" = "immediate";
 
   readonly sentRequests: Array<{ id: string; method: string; params?: Record<string, unknown> }> = [];
   readonly closeCalls: Array<{ code?: number; reason?: string }> = [];
@@ -405,7 +489,9 @@ class ControlledWebSocket {
     }
 
     this.readyState = 3;
-    this.emit("close", { code: code ?? 1000, reason: reason ?? "" });
+    if (ControlledWebSocket.closeBehavior === "immediate") {
+      this.emitClose(code, reason);
+    }
   }
 
   addEventListener(type: string, listener: (event: unknown, ...args: unknown[]) => void): void {
@@ -437,6 +523,11 @@ class ControlledWebSocket {
     }, false);
   }
 
+  emitClose(code = 1000, reason = ""): void {
+    this.readyState = 3;
+    this.emit("close", { code, reason });
+  }
+
   private emit(type: string, event: unknown, ...args: unknown[]): void {
     for (const listener of this.listeners.get(type) ?? []) {
       listener(event, ...args);
@@ -460,8 +551,4 @@ async function waitForSentRequestCount(socket: ControlledWebSocket, count: numbe
   }
 
   expect(socket.sentRequests).toHaveLength(count);
-}
-
-async function sleep(ms: number): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, ms));
 }

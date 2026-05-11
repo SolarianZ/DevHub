@@ -48,6 +48,7 @@ SDK 固定从以下位置发现运行时信息：
 - `hub.json.tokenFile` 指向的令牌文件
 
 `discover_runtime(...)` 返回的 `RuntimeConnectionInfo` 以及 `DevHubClient.runtime`、`DevHubEventsClient.runtime` 暴露的 `HubRuntime` 都是不可变 dataclass。公开运行时视图用于读取连接信息；字段赋值会触发 `FrozenInstanceError`，后续 HTTP / WebSocket 连接端点与令牌保持稳定。
+`HubRuntime.runtime_tuning` 固定包含 `lease_seconds`、`online_threshold_seconds`、`launch_dedupe_window_seconds` 与 `launch_register_timeout_seconds`；缺失任一字段都会导致运行时发现失败。
 
 不支持以下输入：
 
@@ -69,7 +70,7 @@ print(ping.ok, ping.server_time_utc)
 
 ## 6. 常见交互场景
 
-定义写接口由 `DevHubClient` 通过 HTTP 暴露；实例密码是独立方法参数，不进入 `AppInstanceRegistration`、`AppInstance` 或事件 payload。列表查询同样必须显式提供 `scope`；如需查询全部作用域，只在 `list_definitions` / `list_instances` 中传入 `None`。
+定义写接口由 `DevHubClient` 通过 HTTP 暴露；`display_name` 必须是至少包含一个非空白字符的字符串。实例密码是独立方法参数，不进入 `AppInstanceRegistration`、`AppInstance` 或事件 payload。列表查询同样必须显式提供 `scope`；如需查询全部作用域，只在 `list_definitions` / `list_instances` 中传入 `None`。由 Host 启动的 App 可读取 `DEVHUB_LAUNCH_ID` 环境变量，并通过 `register_instance(..., launch_id=...)` 顶层参数回传启动绑定标识。
 
 ```python
 from devhub_sdk import (
@@ -116,6 +117,10 @@ client.delete_definition(definition.app_id, definition.scope)
 
 `get_instance(...)` 按精确 `instance_id` 返回单个 `AppInstance` 快照；实例离线但仍保留时仍可读取，未命中则透传 `instance_not_found`。
 
+内置 HTTP transport 与 WebSocket session 始终生成 string 类型的 JSON-RPC `id`。若自定义 transport / session 直接处理原始 JSON-RPC 信封，只应接受 string `id` 或处于 `Int64` 范围内的整数 numeric `id`；跨语言场景继续优先使用 string `id`。
+
+`register_instance(...)` 的第一个参数固定为 `AppInstanceRegistration`。若已持有 `register_instance(...)` / `get_instance(...)` 返回的 `AppInstance`，应重新构造 `AppInstanceRegistration` 后再注册；返回的 `instance_session_token` 只用于 `heartbeat`、`unregister_instance`、`poll`、`respond` 等后续受保护调用。
+
 ## 7. WebSocket 事件流约定
 
 ```python
@@ -141,6 +146,10 @@ await events_client.unsubscribe(subscription_id)
 `DevHubEventsClient` 同一时刻只允许一个活动中的 `read_events()` 读取器。若业务需要多个消费者，应在调用方内部对读取到的事件做扇出。
 
 底层 WebSocket 终止时，当前活动读取器只排空终止前已经进入本地缓冲的事件，然后结束。后续新的读取前需要重新执行 `authenticate()`，并重新执行 `subscribe()` 恢复订阅；旧订阅不会自动恢复。
+
+`close()` / `disconnect()` 对底层 WebSocket 采用 best-effort 清理。关闭握手等待上限固定为 1 秒；达到上限后继续完成本地释放。
+
+`request_timeout` 只用于请求-响应等待阶段，不代表 `close()`、`disconnect()` 或对象释放路径可以无限等待远端响应。
 
 ## 8. 已放弃请求维护
 

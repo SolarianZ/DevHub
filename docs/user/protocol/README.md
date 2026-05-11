@@ -40,12 +40,11 @@
 │   ├── hub.json
 │   └── token.txt
 ├── apps/
-│   ├── definitions/
-│   └── instances/
+│   └── definitions.json
 └── logs/
 ```
 
-其中 `apps/definitions/` 的公开持久化契约是“一份 Definition 对应一个 `{appId}--{scopeKey}.json` 文件，且 payload 显式包含 `scope`”。Global Definition 使用 `scope: ""` 与 `scopeKey = global`；显式作用域 Definition 使用首尾均不含空白字符的非空 scope 字符串和对应的稳定文件名安全编码。旧式 `{appId}.json`、缺失 `scope`、`scope: null` 或首尾包含空白字符的 `scope` 都不属于合法 Definition 资产。
+其中 `apps/definitions.json` 是唯一公开的 Definition 持久化入口。该文件保存版本化目录索引：顶层包含固定 `version: 1` 与 `definitions` 数组；数组中的每一项都是完整 AppDefinition 记录，并显式包含 `appId` 与 `scope` 字段。Global Definition 使用 `scope: ""`；显式作用域 Definition 直接按原值保留 `scope`，例如 `scope: "global"` 与 Global Definition 可并存且按精确 `appId + scope` 定位。
 
 `hub.json` 至少需要读取这些字段：
 
@@ -54,6 +53,13 @@
 - `wsUrl`
 - `tokenFile`
 - `runtimeTuning`
+
+其中 `runtimeTuning` 根对象固定包含：
+
+- `leaseSeconds`
+- `onlineThresholdSeconds`
+- `launchDedupeWindowSeconds`
+- `launchRegisterTimeoutSeconds`
 
 接入侧必须把 `hub.json` 当作地址与端口的唯一权威来源，禁止硬编码 `http://127.0.0.1:<port>` 或 WebSocket URL。
 
@@ -80,7 +86,7 @@ HTTP JSON-RPC 端点固定为 `POST {httpBaseUrl}/rpc`，请求体使用 JSON-RP
 
 JSON-RPC 信封约束：
 
-- `id` 是 JSON-RPC 请求标识，由调用方生成，用于让响应与请求对应；合法类型只有 `string` 或 `number`。
+- `id` 是 JSON-RPC 请求标识，由调用方生成，用于让响应与请求对应；合法类型只有 `string` 或可无损往返的 `number`。无法无损保留的数字 `id` 属于非法请求。
 - 需要同步读取成功结果或错误结果时，必须发送带 `id` 的普通 request；Host 会返回 JSON-RPC `result` 或 `error`。
 - notification 必须完全省略 `id` 字段；只要请求体中存在 `id`，该消息就属于普通 request，而不是 notification。
 - `"id": null` 不属于合法 notification 标记，属于非法 JSON-RPC 请求。
@@ -125,12 +131,12 @@ JSON-RPC 信封约束：
 
 其中：
 
-- `AppDefinition` 的公开身份是 `appId + scope`；持久化或提交 Definition 时必须显式携带 `scope`，其中 Global Definition 使用 `scope: ""`。
+- `AppDefinition` 的公开身份是 `appId + scope`；持久化或提交 Definition 时必须显式携带 `scope`，其中 Global Definition 使用 `scope: ""`，字面量 `scope: "global"` 属于独立显式作用域。
 - `hub.apps.validateDefinition` 用于提交前预校验，不修改任何持久化状态。
 - `hub.apps.listDefinitions` 支持可选 `appId` 过滤，并要求显式提供 `scope`；`scope: null` 时不按作用域过滤，`scope: ""` 时仅返回 Global Definition，其他合法字符串按精确作用域过滤。
 - `hub.apps.upsertDefinition` / `hub.apps.deleteDefinition` 仅支持 HTTP；`hub.apps.getDefinition` 仍支持 HTTP 与 WebSocket。
 - `hub.apps.getDefinition` / `hub.apps.deleteDefinition` 都必须按精确 `appId + scope` 传参，并显式提供合法字符串 `scope`；仅按 `appId` 或使用 `scope: null` 都不是合法的 Definition 定位方式。
-- `hub.apps.registerInstance` 的 `password` 是顶层参数，不属于 `AppInstanceRegistration` 或 `AppInstance`，也不会出现在成功响应或事件载荷中；注册成功后，结果顶层会返回 `instanceSessionToken`，供 `hub.apps.heartbeat`、`hub.apps.unregisterInstance`、`hub.invoke.poll` 与 `hub.invoke.respond` 作为实例所有权凭据复用；该 token 不会出现在 `AppInstance`、`hub.apps.listInstances` 或事件载荷中。
+- `hub.apps.registerInstance` 的 `password` 是顶层参数，不属于 `AppInstanceRegistration` 或 `AppInstance`，也不会出现在成功响应或事件载荷中；`instanceId` 是 Hub 注册表全局实例身份，同一 `instanceId` 的再次注册必须保持相同 `appId + scope` 且 password 匹配；注册成功后，结果顶层会返回 `instanceSessionToken`，供 `hub.apps.heartbeat`、`hub.apps.unregisterInstance`、`hub.invoke.poll` 与 `hub.invoke.respond` 作为实例所有权凭据复用；该 token 不会出现在 `AppInstance`、`hub.apps.listInstances` 或事件载荷中。
 - `hub.apps.listInstances` 支持可选 `appId` 与 `includeOffline`，并要求显式提供 `scope`；`scope: null` 时不按作用域过滤，`scope: ""` 时仅返回 Global 实例，其他合法字符串按精确作用域过滤。
 - 只有 `hub.apps.listDefinitions.scope` 与 `hub.apps.listInstances.scope` 接受 `scope: null` 表示“不限制作用域”，且这两个接口也必须显式携带 `scope` 字段。
 - `hub.apps.launch.scope` 与 `hub.invoke.*.target.scope` 都必须显式给出合法字符串；`scope: ""` 表示仅限 Global，缺失 `scope` 或使用 `scope: null` 都属于非法请求。
@@ -140,7 +146,7 @@ JSON-RPC 信封约束：
 
 ## 4. WebSocket 鉴权与事件订阅
 
-WebSocket 连接地址必须直接使用 `hub.json.wsUrl`。
+WebSocket 连接地址必须直接使用 `hub.json.wsUrl`。该地址是回环地址上的固定 `/ws` 端点，不包含 query、fragment、userinfo、自定义路径或末尾斜杠。
 
 连接建立后：
 
@@ -203,9 +209,12 @@ DevHub v1 还定义了一组 `-320xx` 错误，例如：
 - `hub.apps.validateDefinition` 中，`definition.scope` 缺失、为 `null` 或为非法字符串时，会进入定义校验失败结果，而不是 JSON-RPC `error`。
 - `hub.apps.upsertDefinition` 的业务校验失败走 `-32602 invalid_params`，并在 `error.data.reason="definition_invalid"` 下携带 `errors: ValidationIssue[]`。
 - 除 `hub.apps.listDefinitions`、`hub.apps.listInstances`、`hub.apps.validateDefinition` 与 `hub.apps.upsertDefinition` 的 Definition 校验分支外，其余带 `scope` / `target.scope` 的请求在缺失该字段或传入 `null` 时都返回 `-32602 invalid_params`。
+- `hub.invoke.notify` 与 `hub.invoke.request` 的非 null `target.instanceId` 必须满足 canonical `instanceId` grammar 与 256 字符长度上限；非法值返回 `-32602 invalid_params`。
 - 同一 `instanceId` 的再次 `hub.apps.registerInstance` 在密码不匹配时返回 `-32002 forbidden`，并携带 `error.data.reason="instance_password_mismatch"`。
+- 同一 `instanceId` 的再次 `hub.apps.registerInstance` 在 password 匹配但 `appId` 或 `scope` 与既有绑定不一致时返回 `-32002 forbidden`，并携带 `error.data.reason="instance_identity_mismatch"`。
 - `hub.apps.heartbeat`、`hub.apps.unregisterInstance`、`hub.invoke.poll` 与 `hub.invoke.respond` 在 `instanceSessionToken` 不匹配时返回 `-32002 forbidden`，并携带 `error.data.reason="instance_session_token_mismatch"`。
 - `hub.apps.getDefinition` / `hub.apps.deleteDefinition` 查找未知 Definition 时返回 `-32014 app_definition_not_found`，并在 `error.data.appId` 与 `error.data.scope` 中回传请求目标。
+- `hub.apps.launch` 在 `launch.exePath` 缺失或为空白字符串时返回 `-32020 launch_failed`，并携带 `error.data.reason="launch_config_missing"`；Definition 校验与写入接口允许保存这种启动配置。
 
 ### 5.3 客户端兼容建议
 
@@ -213,6 +222,7 @@ DevHub v1 还定义了一组 `-320xx` 错误，例如：
 - 必须将未知错误码按通用错误处理，而不是直接崩溃。
 - 必须把 HTTP 状态码 `200 OK` 与 JSON-RPC `error` 区分开看：HTTP 成功不代表 RPC 成功。
 - 必须区分“HTTP 空 `200` notification 响应”和“带 JSON-RPC `result` 或 `error` 的普通 request 响应”；`hub.invoke.notify` 若省略 `id`，空响应体仅表示 notification 路径已结束，不能据此判断业务成功或失败。
+- 运行时数据只服务当前版本 Host 的本机运行态。改动前版本生成的 `runtime/token.txt`、`runtime/hub.json`、单实例锁状态、无凭据实例注册状态和未完成 invocation 状态不提供兼容或迁移保证。
 
 ## 6. Schema 与原始协议示例
 
@@ -288,7 +298,7 @@ python host/tests/conformance/vector_runner.py \
 - SDK 包版本号不要求与 Hub 版本号完全一致；第三方接入也不需要追求版本号对齐。
 - 兼容边界以 [`Specification.md`](../../specification/protocol/Specification.md) §9 为准；第三方接入应直接遵循该节。
 
-当前 v1.x 的 `scope` 基线已经固定为：Definition 持久化只承认 `{appId}--{scopeKey}.json` + 显式 `scope`，其中 `scope: ""` 是 Global 的唯一显式表示；`hub.apps.getDefinition`、`hub.apps.deleteDefinition`、`hub.apps.registerInstance`、`hub.apps.launch` 与 `hub.invoke.*` 都要求显式合法字符串 `scope`；仅 `hub.apps.listDefinitions` 与 `hub.apps.listInstances` 接受 `scope: null` 表示不限制具体作用域，且这两个接口也必须显式携带 `scope` 字段。
+当前 v1.x 的 `scope` 基线已经固定为：Definition 持久化只承认 `apps/definitions.json` 中的显式 `appId + scope` 复合身份，其中 `scope: ""` 是 Global 的唯一显式表示；`hub.apps.getDefinition`、`hub.apps.deleteDefinition`、`hub.apps.registerInstance`、`hub.apps.launch` 与 `hub.invoke.*` 都要求显式合法字符串 `scope`；仅 `hub.apps.listDefinitions` 与 `hub.apps.listInstances` 接受 `scope: null` 表示不限制具体作用域，且这两个接口也必须显式携带 `scope` 字段。
 
 `Specification.md` §9 中允许的兼容扩展包括：
 

@@ -46,6 +46,7 @@ import {
   type DevHubRuntimeView
 } from "./runtime-view.js";
 import type { RuntimeConnectionInfo, RuntimeResolver } from "./runtime.js";
+import { validateRuntimeConnectionInfo } from "./runtime-validation.js";
 import type { AbandonedRequestFilter } from "./abandoned-request-filter.js";
 import { JsonRpcWsSession, type JsonRpcWsSessionOptions } from "./ws-session.js";
 import { checkVersionCompatibilityWithFallback } from "./versioning.js";
@@ -128,6 +129,7 @@ export class DevHubEventsClient {
     validateClientOptions(normalized);
     const runtimeResolver = await getRuntimeResolver(dependencies.runtimeResolver);
     const connection = await runtimeResolver.resolve(normalized);
+    validateRuntimeConnectionInfo(connection);
     let client: DevHubEventsClient | undefined;
     const sessionOptions: JsonRpcWsSessionOptions = {
       websocketEndpoint: connection.websocketEndpoint,

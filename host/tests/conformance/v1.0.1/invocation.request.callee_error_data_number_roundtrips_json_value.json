@@ -1,0 +1,95 @@
+{
+  "id": "invocation.request.callee_error_data_number_roundtrips_json_value",
+  "caseId": "CONF-004",
+  "description": "SDK request 的 calleeError.data=number 必须原样暴露给 caller。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "appId": "invoke.request.callee-data-number",
+        "scopeEntry": {
+          "scope": "",
+          "displayName": "invoke.request.callee-data-number"
+        }
+      }
+    ]
+  },
+  "orchestration": {
+    "beforeCaller": [
+      {
+        "action": "register_instance",
+        "password": "conformance-password",
+        "instance": {
+          "instanceId": "request-callee-data-number-inst",
+          "appId": "invoke.request.callee-data-number",
+          "scope": "",
+          "pid": 32306,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      }
+    ],
+    "duringCaller": [
+      {
+        "action": "poll_expect_invocation",
+        "instanceId": "request-callee-data-number-inst",
+        "waitMs": 1500,
+        "expected": {
+          "appId": "invoke.request.callee-data-number",
+          "method": "demo.request.callee-data-number",
+          "kind": "request"
+        }
+      },
+      {
+        "action": "respond_error",
+        "instanceId": "request-callee-data-number-inst",
+        "error": {
+          "code": 1901,
+          "message": "app_error",
+          "data": 42
+        }
+      }
+    ]
+  },
+  "request": {
+    "kind": "sdk.request",
+    "clientId": "ConformanceRequestCalleeDataNumber",
+    "invokeRequest": {
+      "appId": "invoke.request.callee-data-number",
+      "method": "demo.request.callee-data-number",
+      "target": {
+        "scope": ""
+      },
+      "options": {
+        "ttlMs": 5000,
+        "waitTimeoutMs": 3000,
+        "queueIfOffline": false,
+        "autoLaunch": false
+      }
+    }
+  },
+  "expectedResponse": {
+    "phase": "sdk-invocation",
+    "operation": "request",
+    "outcome": "error",
+    "actual": {
+      "code": -32050,
+      "message": "invocation_failed",
+      "invocationId": "${ANY_NON_EMPTY_STRING}",
+      "calleeError": {
+        "code": 1901,
+        "message": "app_error",
+        "data": 42
+      }
+    }
+  },
+  "tags": [
+    "invocation",
+    "request",
+    "callee-error",
+    "json-value",
+    "sdk"
+  ]
+}

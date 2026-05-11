@@ -291,11 +291,6 @@ internal static class RpcParamReader
 
         if (errorElement.TryGetProperty("data", out var dataElement))
         {
-            if (dataElement.ValueKind != JsonValueKind.Object)
-            {
-                return false;
-            }
-
             payload["data"] = JsonSerializer.Deserialize<object>(dataElement.GetRawText());
         }
 

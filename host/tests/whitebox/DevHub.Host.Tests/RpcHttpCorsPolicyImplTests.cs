@@ -135,6 +135,40 @@ public sealed class RpcHttpCorsPolicyImplTests : IDisposable
     }
 
     [Fact]
+    public async Task Impl_RpcHttpEndpointHandler_WhenAuthorizationMissingAndBodyInvalidJson_ShouldReturnUnauthorizedWithNullId()
+    {
+        using var harness = new HostTransportTestHarness(_tempRoot);
+
+        var httpContext = CreatePostContext(
+            harness.Token,
+            "{ invalid json",
+            includeProtocolHeader: true);
+        httpContext.Request.Headers.Remove("Authorization");
+
+        var result = await harness.HttpHandler.HandleAsync(httpContext.Request, CancellationToken.None);
+        await result.ExecuteAsync(httpContext);
+
+        AssertTransportError(httpContext, -32001, "unauthorized", "missing_token");
+    }
+
+    [Fact]
+    public async Task Impl_RpcHttpEndpointHandler_WhenAuthorizationInvalidAndBodyInvalidJson_ShouldReturnUnauthorizedWithNullId()
+    {
+        using var harness = new HostTransportTestHarness(_tempRoot);
+
+        var httpContext = CreatePostContext(
+            harness.Token,
+            "{ invalid json",
+            includeProtocolHeader: true);
+        httpContext.Request.Headers["Authorization"] = "Bearer invalid-token";
+
+        var result = await harness.HttpHandler.HandleAsync(httpContext.Request, CancellationToken.None);
+        await result.ExecuteAsync(httpContext);
+
+        AssertTransportError(httpContext, -32001, "unauthorized", "invalid_token");
+    }
+
+    [Fact]
     public async Task Impl_RpcHttpEndpointHandler_AppDefinitionNotFoundError_ShouldPreserveExplicitGlobalScopeInJson()
     {
         using var harness = new HostTransportTestHarness(_tempRoot);
@@ -208,5 +242,19 @@ public sealed class RpcHttpCorsPolicyImplTests : IDisposable
             .BuildServiceProvider();
         httpContext.Response.Body = new MemoryStream();
         return httpContext;
+    }
+
+    private static void AssertTransportError(DefaultHttpContext httpContext, int code, string message, string reason)
+    {
+        Assert.Equal(StatusCodes.Status200OK, httpContext.Response.StatusCode);
+
+        httpContext.Response.Body.Position = 0;
+        using var document = JsonDocument.Parse(httpContext.Response.Body);
+        Assert.Equal(JsonValueKind.Null, document.RootElement.GetProperty("id").ValueKind);
+
+        var error = document.RootElement.GetProperty("error");
+        Assert.Equal(code, error.GetProperty("code").GetInt32());
+        Assert.Equal(message, error.GetProperty("message").GetString());
+        Assert.Equal(reason, error.GetProperty("data").GetProperty("reason").GetString());
     }
 }

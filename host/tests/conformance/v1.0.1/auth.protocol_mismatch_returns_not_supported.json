@@ -20,7 +20,7 @@
   },
   "expectedResponse": {
     "jsonrpc": "2.0",
-    "id": "auth-protocol-mismatch",
+    "id": null,
     "error": {
       "code": -32099,
       "message": "not_supported",

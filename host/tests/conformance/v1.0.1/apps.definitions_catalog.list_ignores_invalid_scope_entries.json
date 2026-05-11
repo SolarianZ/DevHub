@@ -1,0 +1,79 @@
+{
+  "id": "apps.definitions_catalog.list_ignores_invalid_scope_entries",
+  "caseId": "CONF-003",
+  "description": "definitions.json 顶层结构合法但某些 scope 条目无效时，hub.apps.listDefinitions 必须忽略这些无效条目并继续加载其他合法 Definition。",
+  "transport": "http",
+  "setup": {
+    "definitions": [
+      {
+        "appId": "apps.list.valid-scoped.app",
+        "scopeEntry": {
+          "scope": "",
+          "displayName": "Apps List Valid Scoped"
+        }
+      },
+      {
+        "appId": "apps.list.invalid-legacy.app",
+        "scopeEntry": {
+          "scope": null,
+          "displayName": "Apps List Invalid Legacy"
+        }
+      },
+      {
+        "appId": "apps.list.invalid-missing-scope.app",
+        "rawScopeEntry": "{\"displayName\": \"Apps List Invalid Missing Scope\"}"
+      },
+      {
+        "appId": "apps.list.invalid-null-scope.app",
+        "scopeEntry": {
+          "scope": null,
+          "displayName": "Apps List Invalid Null Scope"
+        }
+      },
+      {
+        "appId": "apps.list.invalid-whitespace-scope.app",
+        "scopeEntry": {
+          "scope": "   ",
+          "displayName": "Apps List Invalid Whitespace Scope"
+        }
+      }
+    ]
+  },
+  "http": {
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer ${HOST_TOKEN}",
+      "X-DevHub-Protocol": "1",
+      "X-DevHub-ClientId": "ConformanceApps",
+      "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000129"
+    }
+  },
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "apps-definitions-list-ignore-invalid-scoped-files",
+    "method": "hub.apps.listDefinitions",
+    "params": {
+      "scope": null
+    }
+  },
+  "expectedResponse": {
+    "jsonrpc": "2.0",
+    "id": "apps-definitions-list-ignore-invalid-scoped-files",
+    "result": {
+      "ok": true,
+      "definitions": [
+        {
+          "appId": "apps.list.valid-scoped.app",
+          "scope": "",
+          "displayName": "Apps List Valid Scoped"
+        }
+      ]
+    }
+  },
+  "tags": [
+    "apps",
+    "definitions",
+    "http",
+    "invalid-definition"
+  ]
+}

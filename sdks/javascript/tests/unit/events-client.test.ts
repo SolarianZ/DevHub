@@ -2,7 +2,6 @@ import { promises as fsPromises } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import { WebSocketServer } from "ws";
 import type { AbandonedRequestFilter, JsonRpcEventSession } from "../../src/index.js";
 import { DevHubClient } from "../../src/client.js";
 import { DevHubEventsClient } from "../../src/events.js";
@@ -15,6 +14,9 @@ import type { NormalizedDevHubClientOptions } from "../../src/models.js";
 import type { JsonRpcWsSessionOptions } from "../../src/ws-session.js";
 
 const tempRoots: string[] = [];
+const TEST_DATA_DIR = path.resolve(".tmp-test-paths/devhub-js-sdk-runtime");
+const TEST_RUNTIME_DIRECTORY = path.join(TEST_DATA_DIR, "runtime");
+const TEST_TOKEN_FILE = path.join(TEST_RUNTIME_DIRECTORY, "token.txt");
 
 afterEach(async () => {
   vi.doUnmock("ws");
@@ -32,7 +34,7 @@ it("fromRuntime 应支持注入 runtimeResolver 与 sessionFactory", async () =>
     resolve: vi.fn(async (options: Readonly<NormalizedDevHubClientOptions>) => {
       expect(options).toMatchObject({
         clientId: "unit-events-injected-client",
-        dataDir: "/tmp/devhub-js-sdk-runtime",
+        dataDir: TEST_DATA_DIR,
         protocolVersion: 1
       });
       expect(options.clientSessionId).toEqual(expect.any(String));
@@ -48,7 +50,7 @@ it("fromRuntime 应支持注入 runtimeResolver 与 sessionFactory", async () =>
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-injected-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver,
@@ -78,6 +80,30 @@ it("fromRuntime 应支持注入 runtimeResolver 与 sessionFactory", async () =>
   expect(session?.disposedReason).toBe("client_dispose");
 });
 
+it("fromRuntime 应拒绝注入 resolver 返回的非法 WebSocket 端点", async () => {
+  const connection = createConnectionInfo({
+    runtime: {
+      wsUrl: " ws://127.0.0.1:57231/ws"
+    },
+    websocketEndpoint: " ws://127.0.0.1:57231/ws"
+  });
+
+  await expect(DevHubEventsClient.fromRuntime(
+    {
+      clientId: "unit-events-invalid-resolver-client",
+      dataDir: TEST_DATA_DIR
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      sessionFactory: () => {
+        throw new Error("sessionFactory should not be called.");
+      }
+    }
+  )).rejects.toThrow(/wsUrl/);
+});
+
 it("本地已放弃请求维护接口应直接委托 session 且不要求认证", async () => {
   const connection = createConnectionInfo();
   const ensureConnected = vi.fn(async () => {});
@@ -90,7 +116,7 @@ it("本地已放弃请求维护接口应直接委托 session 且不要求认证"
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-local-abandoned-request-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -129,7 +155,7 @@ it("同一个 events client 实例一次只允许一个活动中的 readEvents �
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-single-reader-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -179,7 +205,7 @@ it("HTTP/Events 客户端应复用默认 clientSessionId 并隐藏原始连接�
   const client = await DevHubClient.fromRuntime(
     {
       clientId: "unit-shared-http-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver,
@@ -190,7 +216,7 @@ it("HTTP/Events 客户端应复用默认 clientSessionId 并隐藏原始连接�
   const eventsClient = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-shared-events-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver,
@@ -238,7 +264,7 @@ it("authenticate should support WS ping and apps queries", async () => {
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-ws-rpc-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -310,6 +336,125 @@ it("authenticate should support WS ping and apps queries", async () => {
   }
 });
 
+it("authenticated WS listDefinitions should reject blank displayName from transport", async () => {
+  const connection = createConnectionInfo();
+
+  const client = await DevHubEventsClient.fromRuntime(
+    {
+      clientId: "unit-events-list-definitions-invalid-display-name-client",
+      dataDir: TEST_DATA_DIR
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      sessionFactory: () => createStubEventSession({
+        async ensureConnected(): Promise<void> {
+        },
+        async sendRequest(method: string): Promise<Record<string, unknown>> {
+          if (method === "hub.ws.authenticate") {
+            return {
+              ok: true,
+              protocolVersion: 1
+            };
+          }
+
+          if (method === "hub.apps.listDefinitions") {
+            return {
+              ok: true,
+              definitions: [
+                {
+                  appId: "test.invalid-display-name.app",
+                  scope: "",
+                  displayName: " ",
+                  launch: {
+                    exePath: ""
+                  }
+                }
+              ]
+            };
+          }
+
+          throw new Error(`unexpected method: ${method}`);
+        },
+        async disconnect(): Promise<void> {
+        },
+        async dispose(): Promise<void> {
+        }
+      })
+    }
+  );
+
+  try {
+    await client.authenticate();
+    await expect(client.listDefinitions({
+      scope: null
+    })).rejects.toThrow("hub.apps.listDefinitions.result.definitions[0].displayName must be a non-empty string.");
+  } finally {
+    await client.dispose();
+  }
+});
+
+it("authenticated WS getDefinition should continue accepting blank launch.exePath when displayName is valid", async () => {
+  const connection = createConnectionInfo();
+
+  const client = await DevHubEventsClient.fromRuntime(
+    {
+      clientId: "unit-events-get-definition-blank-launch-exepath-client",
+      dataDir: TEST_DATA_DIR
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      sessionFactory: () => createStubEventSession({
+        async ensureConnected(): Promise<void> {
+        },
+        async sendRequest(method: string): Promise<Record<string, unknown>> {
+          if (method === "hub.ws.authenticate") {
+            return {
+              ok: true,
+              protocolVersion: 1
+            };
+          }
+
+          if (method === "hub.apps.getDefinition") {
+            return {
+              ok: true,
+              definition: {
+                appId: "test.blank-launch-exepath.app",
+                scope: "",
+                displayName: "Blank Launch ExePath App",
+                launch: {
+                  exePath: ""
+                }
+              }
+            };
+          }
+
+          throw new Error(`unexpected method: ${method}`);
+        },
+        async disconnect(): Promise<void> {
+        },
+        async dispose(): Promise<void> {
+        }
+      })
+    }
+  );
+
+  try {
+    await client.authenticate();
+    const definition = await client.getDefinition({
+      appId: "test.blank-launch-exepath.app",
+      scope: ""
+    });
+    expect(definition.launch?.exePath).toBe("");
+    expect(definition.displayName).toBe("Blank Launch ExePath App");
+  } finally {
+    await client.dispose();
+  }
+});
+
 it("getInstance should reject an invalid instanceId before sending the WS request", async () => {
   const connection = createConnectionInfo();
   let session: FakeInjectedWsSession | undefined;
@@ -317,7 +462,7 @@ it("getInstance should reject an invalid instanceId before sending the WS reques
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-invalid-instance-id-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -346,7 +491,7 @@ it("getDefinition 应将 WS 非法入站标识符视为 invalid_response", async
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-invalid-identifier-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -413,7 +558,7 @@ it("getInstance should propagate instance_not_found over WS without rewriting th
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-get-instance-not-found-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -479,7 +624,7 @@ it("事件流应拒绝注入 session 返回的非法 payload JSON", async () => 
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-invalid-payload-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -538,7 +683,7 @@ it("定义事件应拒绝缺失结构化 payload 的通知", async () => {
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-invalid-definition-payload-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -598,7 +743,7 @@ it("实例事件应拒绝包含 password 的 payload", async () => {
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-password-leak-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -654,13 +799,81 @@ it("实例事件应拒绝包含 password 的 payload", async () => {
   }
 });
 
-it("实例事件应接受省略 scope 的 payload", async () => {
+it("definition upserted 事件应拒绝空白 displayName，即使 launch.exePath 为空白字符串", async () => {
+  const connection = createConnectionInfo();
+
+  const client = await DevHubEventsClient.fromRuntime(
+    {
+      clientId: "unit-events-blank-display-name-event-client",
+      dataDir: TEST_DATA_DIR
+    },
+    {
+      runtimeResolver: {
+        resolve: async () => connection
+      },
+      sessionFactory: (options) => createStubEventSession({
+        async ensureConnected(): Promise<void> {
+        },
+        async sendRequest(method: string): Promise<Record<string, unknown>> {
+          if (method === "hub.ws.authenticate") {
+            return {
+              ok: true,
+              protocolVersion: 1
+            };
+          }
+
+          if (method === "hub.events.subscribe") {
+            options.onEvent?.({
+              subscriptionId: "sub-blank-display-name",
+              type: "app.definition.upserted",
+              timeUtc: "2026-03-09T00:00:00Z",
+              payload: {
+                appId: "test.app",
+                scope: "",
+                definition: {
+                  appId: "test.app",
+                  scope: "",
+                  displayName: "   ",
+                  launch: {
+                    exePath: ""
+                  }
+                }
+              }
+            });
+
+            return {
+              ok: true,
+              subscriptionId: "sub-blank-display-name"
+            };
+          }
+
+          throw new Error(`unexpected method: ${method}`);
+        },
+        async disconnect(): Promise<void> {
+        },
+        async dispose(): Promise<void> {
+        }
+      })
+    }
+  );
+
+  try {
+    await client.authenticate();
+    await expect(client.subscribe(["app.definition.upserted"]))
+      .rejects
+      .toThrow(/displayName must be a non-empty string/i);
+  } finally {
+    await client.dispose();
+  }
+});
+
+it("实例事件应拒绝省略 scope 的 payload", async () => {
   const connection = createConnectionInfo();
 
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-omitted-scope-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -706,16 +919,11 @@ it("实例事件应接受省略 scope 的 payload", async () => {
 
   try {
     await client.authenticate();
-    const iterator = client.readEvents()[Symbol.asyncIterator]();
-    await client.subscribe(["app.instance.registered"]);
-
-    const first = await iterator.next();
-    expect(first.done).toBe(false);
-    expect(first.value.type).toBe("app.instance.registered");
-    expect(first.value.payload).toEqual({
-      appId: "test.app",
-      instanceId: "inst-1"
-    });
+    await expect(client.subscribe(["app.instance.registered"]))
+      .rejects
+      .toMatchObject({
+        kind: "invalid_response"
+      });
   } finally {
     await client.dispose();
   }
@@ -727,7 +935,7 @@ it("实例事件应继续拒绝非法 scope", async () => {
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-invalid-scope-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -796,7 +1004,7 @@ it("断线后重新认证应重建事件流并要求重新订阅", async () => {
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-reconnect-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -842,7 +1050,7 @@ it("断线后即使不继续消费旧 iterator 也应允许重新认证恢复", 
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-reconnect-with-abandoned-iterator-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -887,7 +1095,7 @@ it("旧 iterator 的收尾动作不应释放新 reader 租约", async () => {
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-stale-iterator-cleanup-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -957,7 +1165,7 @@ it("subscribe 应在发送请求前拒绝未知事件类型", async () => {
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-invalid-subscribe-type-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -1019,7 +1227,7 @@ it("连接终止后新的 readEvents 应抛出 session_terminated typed connecti
   const client = await DevHubEventsClient.fromRuntime(
     {
       clientId: "unit-events-terminated-stream-client",
-      dataDir: "/tmp/devhub-js-sdk-runtime"
+      dataDir: TEST_DATA_DIR
     },
     {
       runtimeResolver: {
@@ -1176,73 +1384,28 @@ it("收到未知事件类型时应使事件流报错", async () => {
 });
 
 it("缺少全局 WebSocket 时收到 binary frame 应使事件流报错", async () => {
+  vi.doMock("ws", () => ({
+    WebSocket: class extends FakeWebSocket {
+      constructor(url: string) {
+        super(url, [], createBinaryFrameScenario);
+      }
+    }
+  }));
+  vi.resetModules();
   vi.stubGlobal("WebSocket", undefined as unknown as typeof WebSocket);
-
-  const server = new WebSocketServer({
-    host: "127.0.0.1",
-    port: 0,
-    path: "/ws"
+  const { DevHubEventsClient: DynamicEventsClient } = await import("../../src/events.js");
+  const client = await DynamicEventsClient.fromRuntime({
+    clientId: "unit-events-fallback-binary-client",
+    dataDir: await createRuntime()
   });
 
   try {
-    await waitForWebSocketServer(server);
-
-    const address = server.address();
-    if (!address || typeof address === "string") {
-      throw new Error("无法获取测试 WebSocket 端口。");
-    }
-
-    const runtimeDir = await createRuntime({
-      httpBaseUrl: `http://127.0.0.1:${address.port}`,
-      wsUrl: `ws://127.0.0.1:${address.port}/ws`
-    });
-
-    server.once("connection", (socket: any) => {
-      socket.on("message", (data: Buffer) => {
-        const request = JSON.parse(data.toString("utf-8")) as Record<string, unknown>;
-        const method = String(request.method);
-
-        if (method === "hub.ws.authenticate") {
-          socket.send(JSON.stringify({
-            jsonrpc: "2.0",
-            id: String(request.id),
-            result: {
-              ok: true,
-              protocolVersion: 1
-            }
-          }));
-          return;
-        }
-
-        if (method === "hub.events.subscribe") {
-          socket.send(JSON.stringify({
-            jsonrpc: "2.0",
-            id: String(request.id),
-            result: {
-              ok: true,
-              subscriptionId: "sub-1"
-            }
-          }));
-          socket.send(Buffer.from([0x01, 0x02, 0x03]), { binary: true });
-        }
-      });
-    });
-
-    const client = await DevHubEventsClient.fromRuntime({
-      clientId: "unit-events-fallback-binary-client",
-      dataDir: runtimeDir
-    });
-
-    try {
-      await client.authenticate();
-      const iterator = client.readEvents()[Symbol.asyncIterator]();
-      await client.subscribe(["invocation.completed"]);
-      await expect(iterator.next()).rejects.toThrow(/text frame/i);
-    } finally {
-      await client.dispose();
-    }
+    await client.authenticate();
+    const iterator = client.readEvents()[Symbol.asyncIterator]();
+    await client.subscribe(["invocation.completed"]);
+    await expect(iterator.next()).rejects.toThrow(/text frame/i);
   } finally {
-    await closeWebSocketServer(server);
+    await client.dispose();
   }
 });
 
@@ -1289,64 +1452,33 @@ it("authenticate 应拒绝非法 JSON-RPC 版本", async () => {
 });
 
 it("缺少全局 WebSocket 时应回退到 ws 模块", async () => {
+  const sockets: FakeWebSocket[] = [];
+  vi.doMock("ws", () => ({
+    WebSocket: class extends FakeWebSocket {
+      constructor(url: string) {
+        super(url, sockets, createDefaultScenario);
+      }
+    }
+  }));
+  vi.resetModules();
   vi.stubGlobal("WebSocket", undefined as unknown as typeof WebSocket);
-
-  const server = new WebSocketServer({
-    host: "127.0.0.1",
-    port: 0,
-    path: "/ws"
+  const { DevHubEventsClient: DynamicEventsClient } = await import("../../src/events.js");
+  const client = await DynamicEventsClient.fromRuntime({
+    clientId: "unit-events-ws-fallback-client",
+    dataDir: await createRuntime()
   });
 
   try {
-    await waitForWebSocketServer(server);
-
-    const address = server.address();
-    if (!address || typeof address === "string") {
-      throw new Error("无法获取测试 WebSocket 端口。");
-    }
-
-    const runtimeDir = await createRuntime({
-      httpBaseUrl: `http://127.0.0.1:${address.port}`,
-      wsUrl: `ws://127.0.0.1:${address.port}/ws`
+    await client.authenticate();
+    expect(sockets).toHaveLength(1);
+    expect(sockets[0]?.sentRequests[0]?.method).toBe("hub.ws.authenticate");
+    expect(sockets[0]?.sentRequests[0]?.params).toMatchObject({
+      token: "token-1",
+      protocolVersion: 1,
+      clientId: "unit-events-ws-fallback-client"
     });
-
-    const authenticateRequestPromise = new Promise<Record<string, unknown>>((resolve, reject) => {
-      server.once("connection", (socket: any) => {
-        socket.once("error", reject);
-        socket.once("message", (data: Buffer) => {
-          const request = JSON.parse(data.toString("utf-8")) as Record<string, unknown>;
-          socket.send(JSON.stringify({
-            jsonrpc: "2.0",
-            id: String(request.id),
-            result: {
-              ok: true,
-              protocolVersion: 1
-            }
-          }));
-          resolve(request);
-        });
-      });
-    });
-
-    const client = await DevHubEventsClient.fromRuntime({
-      clientId: "unit-events-ws-fallback-client",
-      dataDir: runtimeDir
-    });
-
-    try {
-      await client.authenticate();
-      const request = await authenticateRequestPromise;
-      expect(request.method).toBe("hub.ws.authenticate");
-      expect(request.params).toMatchObject({
-        token: "token-1",
-        protocolVersion: 1,
-        clientId: "unit-events-ws-fallback-client"
-      });
-    } finally {
-      await client.dispose();
-    }
   } finally {
-    await closeWebSocketServer(server);
+    await client.dispose();
   }
 });
 
@@ -1424,7 +1556,8 @@ async function createRuntime(overrides?: {
       runtimeTuning: {
         leaseSeconds: 30,
         onlineThresholdSeconds: 30,
-        launchDedupeWindowSeconds: 30
+        launchDedupeWindowSeconds: 30,
+        launchRegisterTimeoutSeconds: 30
       }
     }),
     "utf-8"
@@ -1433,68 +1566,49 @@ async function createRuntime(overrides?: {
   return dataDir;
 }
 
-function createConnectionInfo() {
+type TestRuntimeConnectionInfo = ReturnType<typeof createBaseConnectionInfo>;
+
+function createConnectionInfo(overrides: {
+  runtime?: Partial<TestRuntimeConnectionInfo["runtime"]>;
+  rpcEndpoint?: string;
+  websocketEndpoint?: string;
+} = {}): TestRuntimeConnectionInfo {
+  const base = createBaseConnectionInfo();
+  const runtime = {
+    ...base.runtime,
+    ...overrides.runtime
+  };
+
   return {
-    runtimeDirectory: "/tmp/devhub-js-sdk-runtime/runtime",
+    ...base,
+    runtime,
+    rpcEndpoint: overrides.rpcEndpoint ?? `${runtime.httpBaseUrl}/rpc`,
+    websocketEndpoint: overrides.websocketEndpoint ?? runtime.wsUrl
+  };
+}
+
+function createBaseConnectionInfo() {
+  return {
+    runtimeDirectory: TEST_RUNTIME_DIRECTORY,
     token: "token-fake",
     runtime: {
       protocolVersion: 1,
       pid: 12345,
       httpBaseUrl: "http://127.0.0.1:57231",
       wsUrl: "ws://127.0.0.1:57231/ws",
-      tokenFile: "/tmp/devhub-js-sdk-runtime/runtime/token.txt",
+      tokenFile: TEST_TOKEN_FILE,
       startedAtUtc: new Date("2026-03-09T00:00:00Z"),
       hubVersion: "0.7.0-test",
       runtimeTuning: {
         leaseSeconds: 30,
         onlineThresholdSeconds: 30,
-        launchDedupeWindowSeconds: 30
+        launchDedupeWindowSeconds: 30,
+        launchRegisterTimeoutSeconds: 30
       }
     },
     rpcEndpoint: "http://127.0.0.1:57231/rpc",
     websocketEndpoint: "ws://127.0.0.1:57231/ws"
   };
-}
-
-async function waitForWebSocketServer(server: any): Promise<void> {
-  if (server.address()) {
-    return;
-  }
-
-  await new Promise<void>((resolve, reject) => {
-    const onListening = () => {
-      cleanup();
-      resolve();
-    };
-    const onError = (error: Error) => {
-      cleanup();
-      reject(error);
-    };
-    const cleanup = () => {
-      server.off("listening", onListening);
-      server.off("error", onError);
-    };
-
-    server.on("listening", onListening);
-    server.on("error", onError);
-  });
-}
-
-async function closeWebSocketServer(server: any): Promise<void> {
-  for (const client of server.clients) {
-    client.terminate();
-  }
-
-  await new Promise<void>((resolve, reject) => {
-    server.close((error: Error | undefined) => {
-      if (error) {
-        reject(error);
-        return;
-      }
-
-      resolve();
-    });
-  });
 }
 
 function createStubEventSession(
@@ -1658,6 +1772,7 @@ class FakeWebSocket {
   private readonly closePromise: Promise<void>;
   private closeResolver: (() => void) | undefined;
   private closed = false;
+  readonly sentRequests: Array<{ id: string; method: string; params?: Record<string, unknown> }> = [];
 
   constructor(
     readonly url: string,
@@ -1688,6 +1803,11 @@ class FakeWebSocket {
 
   send(data: string): void {
     const request = JSON.parse(data) as Record<string, unknown>;
+    this.sentRequests.push({
+      id: String(request.id),
+      method: String(request.method),
+      params: request.params as Record<string, unknown> | undefined
+    });
     for (const frame of this.scenarioFactory(request)) {
       queueMicrotask(() => {
         if (frame.type === "message") {
@@ -1851,6 +1971,38 @@ function createBlankTextScenario(request: Record<string, unknown>): ServerFrame[
       {
         type: "message",
         payload: "   "
+      }
+    ];
+  }
+
+  return [];
+}
+
+function createBinaryFrameScenario(request: Record<string, unknown>): ServerFrame[] {
+  const requestId = String(request.id);
+  const method = String(request.method);
+
+  if (method === "hub.ws.authenticate") {
+    return createDefaultScenario(request);
+  }
+
+  if (method === "hub.events.subscribe") {
+    return [
+      {
+        type: "message",
+        payload: JSON.stringify({
+          jsonrpc: "2.0",
+          id: requestId,
+          result: {
+            ok: true,
+            subscriptionId: "sub-1"
+          }
+        })
+      },
+      {
+        type: "message",
+        payload: new Uint8Array([0x01, 0x02, 0x03]),
+        isBinary: true
       }
     ];
   }

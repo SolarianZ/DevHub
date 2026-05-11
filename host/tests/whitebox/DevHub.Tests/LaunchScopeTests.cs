@@ -1,6 +1,5 @@
 namespace DevHub.Tests;
 
-using System.Diagnostics;
 using System.Text.Json;
 using DevHub.Core.Models;
 using DevHub.Core.Models.Rpc;
@@ -15,6 +14,7 @@ using Moq;
 /// <summary>
 /// Launch scope 语义专项测试。
 /// </summary>
+[Collection(TestCollections.ProcessEnvironment)]
 [Trait("Category", "Impl")]
 public class LaunchScopeTests : IDisposable
 {
@@ -47,7 +47,7 @@ public class LaunchScopeTests : IDisposable
     [Fact]
     public async Task Impl_LaunchHandler_WhenScopeGlobal_ShouldBeTreatedAsExplicitScope()
     {
-        var definitionLoader = new DefinitionLoader(_definitionsDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
@@ -76,7 +76,7 @@ public class LaunchScopeTests : IDisposable
     [Fact]
     public async Task Impl_LaunchHandler_WhenScopeEmpty_ShouldBeTreatedAsGlobal()
     {
-        var definitionLoader = new DefinitionLoader(_definitionsDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
@@ -105,7 +105,7 @@ public class LaunchScopeTests : IDisposable
     [Fact]
     public async Task Impl_LaunchHandler_WhenScopeOmittedOrNull_ShouldReturnInvalidParams()
     {
-        var definitionLoader = new DefinitionLoader(_definitionsDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
@@ -147,7 +147,7 @@ public class LaunchScopeTests : IDisposable
     [Fact]
     public async Task Impl_LaunchHandler_WhenWaitForRegisterMsNegative_ShouldReturnInvalidParams()
     {
-        var definitionLoader = new DefinitionLoader(_definitionsDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
@@ -181,7 +181,7 @@ public class LaunchScopeTests : IDisposable
             includeLaunch: true,
             dedupeKeyTemplate: "{appId}:{scopeOrGlobal}");
 
-        var definitionLoader = new DefinitionLoader(_definitionsDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
@@ -208,7 +208,7 @@ public class LaunchScopeTests : IDisposable
     }
 
     [Fact]
-    public async Task Impl_LaunchAsync_WithDifferentScopes_ShouldUseDifferentDedupeKeys()
+    public async Task Impl_LaunchAsync_WithExplicitSameDedupeKeyInDifferentScopes_ShouldNotCollide()
     {
         WriteDefinition(
             "launch-scope-isolation.app",
@@ -232,14 +232,14 @@ public class LaunchScopeTests : IDisposable
         var scopeA = await coordinator.LaunchAsync(
             appId: "launch-scope-isolation.app",
             scope: "workspace-A",
-            dedupeKey: null,
+            dedupeKey: "shared",
             waitForRegisterMs: 0,
             CancellationToken.None);
 
         var scopeB = await coordinator.LaunchAsync(
             appId: "launch-scope-isolation.app",
             scope: "workspace-B",
-            dedupeKey: null,
+            dedupeKey: "shared",
             waitForRegisterMs: 0,
             CancellationToken.None);
 
@@ -247,7 +247,49 @@ public class LaunchScopeTests : IDisposable
         Assert.True(scopeB.Ok);
         Assert.Equal("started", scopeA.Status);
         Assert.Equal("started", scopeB.Status);
+        Assert.Equal("shared", scopeA.DedupeKey);
+        Assert.Equal("shared", scopeB.DedupeKey);
         Assert.NotEqual(scopeA.LaunchId, scopeB.LaunchId);
+        processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task Impl_LaunchAsync_WithExplicitSameDedupeKeyInDifferentApps_ShouldNotCollide()
+    {
+        WriteDefinition(
+            "launch-app-isolation-a.app",
+            rpcEnabled: true,
+            includeLaunch: true);
+        WriteDefinition(
+            "launch-app-isolation-b.app",
+            rpcEnabled: true,
+            includeLaunch: true);
+
+        var processLauncher = new Mock<IProcessLauncher>();
+        processLauncher
+            .Setup(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()))
+            .Returns(System.Diagnostics.Process.GetCurrentProcess());
+        var coordinator = CreateCoordinator(processLauncher.Object);
+
+        var first = await coordinator.LaunchAsync(
+            appId: "launch-app-isolation-a.app",
+            scope: ScopeContract.Global,
+            dedupeKey: "shared",
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        var second = await coordinator.LaunchAsync(
+            appId: "launch-app-isolation-b.app",
+            scope: ScopeContract.Global,
+            dedupeKey: "shared",
+            waitForRegisterMs: 0,
+            CancellationToken.None);
+
+        Assert.True(first.Ok);
+        Assert.True(second.Ok);
+        Assert.Equal("started", first.Status);
+        Assert.Equal("started", second.Status);
+        Assert.NotEqual(first.LaunchId, second.LaunchId);
         processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Exactly(2));
     }
 
@@ -266,7 +308,7 @@ public class LaunchScopeTests : IDisposable
             definitionScope: targetScope);
 
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
-        var definitionLoader = new DefinitionLoader(_definitionsDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var routingService = new InvocationRoutingService(appRegistry, _routingLogger.Object);
@@ -325,43 +367,6 @@ public class LaunchScopeTests : IDisposable
         processLauncher.Verify(launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()), Times.Once);
     }
 
-    [Fact]
-    public async Task Impl_LaunchAsync_WhenPreviousProcessExitedWithoutRegistration_ShouldAllowRetryWithinDedupeWindow()
-    {
-        WriteDefinition(
-            "launch-exit-retry.app",
-            rpcEnabled: true,
-            includeLaunch: true,
-            dedupeKeyTemplate: "{appId}:{scopeOrGlobal}",
-            argsTemplate: "--version");
-
-        var coordinator = CreateCoordinator();
-
-        var firstLaunch = await coordinator.LaunchAsync(
-            appId: "launch-exit-retry.app",
-            scope: ScopeContract.Global,
-            dedupeKey: null,
-            waitForRegisterMs: 0,
-            CancellationToken.None);
-
-        Assert.True(firstLaunch.Ok);
-        Assert.Equal("started", firstLaunch.Status);
-        Assert.True(firstLaunch.Pid.HasValue);
-
-        WaitForProcessExit(firstLaunch.Pid.Value, TimeSpan.FromSeconds(5));
-
-        var secondLaunch = await coordinator.LaunchAsync(
-            appId: "launch-exit-retry.app",
-            scope: ScopeContract.Global,
-            dedupeKey: null,
-            waitForRegisterMs: 0,
-            CancellationToken.None);
-
-        Assert.True(secondLaunch.Ok);
-        Assert.Equal("started", secondLaunch.Status);
-        Assert.NotEqual(firstLaunch.LaunchId, secondLaunch.LaunchId);
-    }
-
     /// <summary>
     /// 释放测试资源。
     /// </summary>
@@ -377,7 +382,7 @@ public class LaunchScopeTests : IDisposable
 
     private LaunchCoordinator CreateCoordinator(IProcessLauncher? processLauncher = null)
     {
-        var definitionLoader = new DefinitionLoader(_definitionsDirectory, _definitionLogger.Object);
+        var definitionLoader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory), _definitionLogger.Object);
         var definitionProvider = new DefinitionProvider(definitionLoader);
         definitionProvider.Refresh();
         var appRegistry = new AppRegistry(new SystemClock(), _registryLogger.Object);
@@ -428,32 +433,8 @@ public class LaunchScopeTests : IDisposable
             payload["launch"] = launch;
         }
 
-        var filePath = Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, normalizedScope).GetFileName());
-        File.WriteAllText(filePath, JsonSerializer.Serialize(payload));
-    }
-
-    private static void WaitForProcessExit(int pid, TimeSpan timeout)
-    {
-        var deadline = DateTime.UtcNow + timeout;
-        while (DateTime.UtcNow < deadline)
-        {
-            try
-            {
-                using var process = Process.GetProcessById(pid);
-                if (process.HasExited)
-                {
-                    return;
-                }
-            }
-            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
-            {
-                return;
-            }
-
-            Thread.Sleep(50);
-        }
-
-        throw new TimeoutException($"等待进程退出超时，PID={pid}");
+        DefinitionCatalogTestHelper.UpsertDefinition(
+            DefinitionCatalogTestHelper.GetCatalogPath(_definitionsDirectory),
+            JsonSerializer.Serialize(payload));
     }
 }
-

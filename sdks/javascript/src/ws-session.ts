@@ -279,12 +279,17 @@ export class JsonRpcWsSession implements JsonRpcEventSession {
 
     this.socket = null;
     this.socketOpen = false;
+    const closeWaiter = createWebSocketCloseWaiter(socket, SOCKET_CLOSE_TIMEOUT_MS);
     this.cleanupSocketHandlers();
 
     try {
       socket.close(1000, reason);
     } catch {
+      closeWaiter.cancel();
+      return;
     }
+
+    await closeWaiter.promise;
   }
 
   private cleanupSocketHandlers(): void {
@@ -431,6 +436,7 @@ interface WebSocketLike {
 type WebSocketConstructor = new (url: string) => WebSocketLike;
 const TEXT_DECODER = new TextDecoder();
 const WEB_SOCKET_MODULE_NAME = "ws";
+const SOCKET_CLOSE_TIMEOUT_MS = 1_000;
 let webSocketConstructorPromise: Promise<WebSocketConstructor> | undefined;
 
 async function resolveWebSocketConstructor(): Promise<WebSocketConstructor> {
@@ -519,6 +525,54 @@ function waitForWebSocketOpen(socket: WebSocketLike, timeoutMs?: number): Promis
       cleanup.push(() => clearTimeout(timeoutId));
     }
   });
+}
+
+function createWebSocketCloseWaiter(
+  socket: WebSocketLike,
+  timeoutMs: number
+): { promise: Promise<void>; cancel: () => void } {
+  if (socket.readyState === 3) {
+    return {
+      promise: Promise.resolve(),
+      cancel: () => {
+      }
+    };
+  }
+
+  let finished = false;
+  const cleanup: Array<() => void> = [];
+  let resolvePromise!: () => void;
+
+  const finish = () => {
+    if (finished) {
+      return;
+    }
+
+    finished = true;
+    for (const item of cleanup) {
+      item();
+    }
+
+    resolvePromise();
+  };
+
+  const promise = new Promise<void>((resolve) => {
+    resolvePromise = resolve;
+  });
+
+  cleanup.push(addSocketListener(socket, "close", () => {
+    finish();
+  }));
+
+  const timeoutId = setTimeout(() => {
+    finish();
+  }, timeoutMs);
+  cleanup.push(() => clearTimeout(timeoutId));
+
+  return {
+    promise,
+    cancel: finish
+  };
 }
 
 function readMessageText(event: unknown, args: readonly unknown[] = []): string {

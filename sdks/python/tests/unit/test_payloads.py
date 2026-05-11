@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from devhub_sdk import (
@@ -15,6 +17,7 @@ from devhub_sdk._payloads import (
     build_heartbeat_params,
     build_get_definition_params,
     build_get_instance_params,
+    build_launch_params,
     build_list_definitions_params,
     build_list_instances_params,
     build_ping_params,
@@ -31,6 +34,7 @@ from devhub_sdk._payloads import (
 from devhub_sdk.models import (
     AppInstanceRegistration,
     InvokeRequest,
+    LaunchRequest,
     ListDefinitionsRequest,
     ListInstancesRequest,
     PollRequest,
@@ -209,6 +213,24 @@ def test_poll_builder_should_apply_defaults() -> None:
     assert payload["waitMs"] == 25000
 
 
+def test_launch_builder_should_preserve_public_protocol_fields() -> None:
+    payload = build_launch_params(
+        LaunchRequest(
+            app_id="Sample.App",
+            scope="Workspace-A.v2",
+            dedupe_key="dedupe-1",
+            wait_for_register_ms=1500,
+        )
+    )
+
+    assert payload == {
+        "appId": "Sample.App",
+        "scope": "Workspace-A.v2",
+        "dedupeKey": "dedupe-1",
+        "waitForRegisterMs": 1500,
+    }
+
+
 def test_definition_builder_should_preserve_supported_fields() -> None:
     payload = build_upsert_definition_params(
         AppDefinition(
@@ -219,6 +241,7 @@ def test_definition_builder_should_preserve_supported_fields() -> None:
             capabilities=AppCapabilities(rpc=False, events=True),
             launch=LaunchConfiguration(
                 exe_path="python",
+                args=["-m", "app", "--scope", "{scope}"],
                 args_template="-m app",
                 working_directory="/tmp",
                 dedupe_key_template="Sample.App",
@@ -238,12 +261,94 @@ def test_definition_builder_should_preserve_supported_fields() -> None:
             },
             "launch": {
                 "exePath": "python",
+                "args": ["-m", "app", "--scope", "{scope}"],
                 "argsTemplate": "-m app",
                 "workingDirectory": "/tmp",
                 "dedupeKeyTemplate": "Sample.App",
             },
         }
     }
+
+
+def test_definition_builder_should_allow_missing_launch_and_missing_exe_path() -> None:
+    assert build_upsert_definition_params(
+        AppDefinition(
+            app_id="test.app",
+            display_name="Test App",
+            scope="",
+        )
+    ) == {
+        "definition": {
+            "appId": "test.app",
+            "scope": "",
+            "displayName": "Test App",
+        }
+    }
+
+    assert build_upsert_definition_params(
+        AppDefinition(
+            app_id="test.app",
+            display_name="Test App",
+            scope="",
+            launch=LaunchConfiguration(args=["--workspace", "{scope}"]),
+        )
+    ) == {
+        "definition": {
+            "appId": "test.app",
+            "scope": "",
+            "displayName": "Test App",
+            "launch": {
+                "args": ["--workspace", "{scope}"],
+            },
+        }
+    }
+
+
+def test_definition_builder_when_display_name_is_blank_should_raise() -> None:
+    with pytest.raises(ValueError, match="definition.display_name"):
+        build_upsert_definition_params(
+            SimpleNamespace(
+                app_id="test.app",
+                display_name=" ",
+                scope="",
+                description=None,
+                capabilities=None,
+                launch=None,
+            )
+        )
+
+
+def test_definition_builder_should_allow_empty_launch_exe_path() -> None:
+    assert build_upsert_definition_params(
+        AppDefinition(
+            app_id="test.app",
+            display_name="Test App",
+            scope="",
+            launch=LaunchConfiguration(exe_path=""),
+        )
+    ) == {
+        "definition": {
+            "appId": "test.app",
+            "scope": "",
+            "displayName": "Test App",
+            "launch": {
+                "exePath": "",
+            },
+        }
+    }
+
+
+@pytest.mark.parametrize("args", ["--flag", [1], ["ok", 1]])
+def test_definition_builder_when_launch_args_is_not_string_list_should_raise(args: object) -> None:
+    with pytest.raises(ValueError, match="args"):
+        build_upsert_definition_params(
+            AppDefinition(
+                app_id="test.app",
+                display_name="Test App",
+                scope="",
+                launch=LaunchConfiguration(args=args),  # type: ignore[arg-type]
+            )
+        )
 
 
 def test_validate_definition_builder_when_app_id_violates_spec_should_raise() -> None:
@@ -314,6 +419,11 @@ def test_get_instance_builder_should_validate_instance_id() -> None:
         build_get_instance_params(None)  # type: ignore[arg-type]
 
 
+def test_get_instance_builder_when_instance_id_exceeds_limit_should_raise() -> None:
+    with pytest.raises(ValueError, match="instance_id"):
+        build_get_instance_params("a" * 257)
+
+
 def test_list_definitions_builder_should_include_explicit_scope_filter() -> None:
     assert build_list_definitions_params(ListDefinitionsRequest(scope=None)) == {"scope": None}
     assert build_list_definitions_params(ListDefinitionsRequest(scope="", app_id="test.app")) == {
@@ -357,6 +467,73 @@ def test_register_instance_builder_should_place_password_at_top_level() -> None:
     assert payload["password"] == "secret-1"
     assert payload["instance"]["instanceId"] == "inst-1"
     assert "password" not in payload["instance"]
+    assert "instanceSessionToken" not in payload["instance"]
+
+
+def test_register_instance_builder_should_place_launch_id_at_top_level() -> None:
+    payload = build_register_instance_params(
+        AppInstanceRegistration(
+            instance_id="inst-1",
+            app_id="test.app",
+            pid=1234,
+            invoke=InvokeCapability(poll=True, respond=True),
+            scope="",
+            meta={"launchId": "business-meta-value"},
+        ),
+        "secret-1",
+        launch_id="launch-1",
+    )
+
+    assert payload["launchId"] == "launch-1"
+    assert payload["instance"]["meta"] == {"launchId": "business-meta-value"}
+
+
+@pytest.mark.parametrize("launch_id", ["", "   ", 123])
+def test_register_instance_builder_when_launch_id_invalid_should_raise(launch_id: object) -> None:
+    with pytest.raises(ValueError, match=r"launch_id"):
+        build_register_instance_params(
+            AppInstanceRegistration(
+                instance_id="inst-1",
+                app_id="test.app",
+                pid=1234,
+                invoke=InvokeCapability(poll=True, respond=True),
+                scope="",
+            ),
+            "secret-1",
+            launch_id=launch_id,  # type: ignore[arg-type]
+        )
+
+
+def test_register_instance_builder_when_instance_payload_carries_password_should_raise() -> None:
+    with pytest.raises(ValueError, match=r"instance\.password"):
+        build_register_instance_params(
+            SimpleNamespace(
+                instance_id="inst-1",
+                app_id="test.app",
+                pid=1234,
+                invoke=InvokeCapability(poll=True, respond=True),
+                scope="",
+                meta=None,
+                password="secret-1",
+            ),
+            "secret-1",
+        )
+
+
+def test_register_instance_builder_when_instance_payload_carries_instance_session_token_should_raise() -> None:
+    with pytest.raises(ValueError, match=r"instance\.instance_session_token"):
+        build_register_instance_params(
+            SimpleNamespace(
+                instance_id="inst-1",
+                app_id="test.app",
+                pid=1234,
+                invoke=InvokeCapability(poll=True, respond=True),
+                scope="",
+                meta=None,
+                instance_session_token="token-1",
+            ),
+            "secret-1",
+        )
 
 
 def test_register_instance_builder_when_meta_is_not_object_should_raise() -> None:
@@ -417,6 +594,20 @@ def test_register_instance_builder_when_instance_id_violates_spec_should_raise()
         )
 
 
+def test_register_instance_builder_when_instance_id_exceeds_limit_should_raise() -> None:
+    with pytest.raises(ValueError):
+        build_register_instance_params(
+            AppInstanceRegistration(
+                instance_id="a" * 257,
+                app_id="test.app",
+                pid=1234,
+                invoke=InvokeCapability(poll=True, respond=True),
+                scope="",
+            ),
+            "secret-1",
+        )
+
+
 def test_heartbeat_builder_should_include_instance_session_token() -> None:
     assert build_heartbeat_params("inst-1", "token-1") == {
         "instanceId": "inst-1",
@@ -443,6 +634,7 @@ def test_respond_builder_when_error_message_missing_should_raise() -> None:
                 instance_id="inst-1",
                 instance_session_token="token-1",
                 invocation_id="invk-1",
+                lease_token="lease-1",
                 error=DevHubCalleeError(code=1001, message=""),
             )
         )
@@ -455,6 +647,18 @@ def test_notify_builder_when_target_instance_id_is_not_string_should_raise() -> 
                 app_id="test.app",
                 method="test.notify",
                 target=InvocationTarget(scope="", instance_id=123),  # type: ignore[arg-type]
+            )
+        )
+
+
+@pytest.mark.parametrize("builder", [build_notify_params, build_request_params])
+def test_invoke_builder_when_target_instance_id_exceeds_limit_should_raise(builder) -> None:
+    with pytest.raises(ValueError, match="instance_id"):
+        builder(
+            InvokeRequest(
+                app_id="test.app",
+                method="test.invoke",
+                target=InvocationTarget(scope="", instance_id="a" * 257),
             )
         )
 
@@ -488,13 +692,28 @@ def test_respond_builder_should_allow_null_value() -> None:
             instance_id="inst-1",
             instance_session_token="token-1",
             invocation_id="invk-1",
+            lease_token="lease-1",
             value=None,
         )
     )
 
     assert payload["instanceSessionToken"] == "token-1"
+    assert payload["leaseToken"] == "lease-1"
     assert payload["value"] is None
     assert "error" not in payload
+
+
+def test_respond_builder_when_lease_token_missing_should_raise() -> None:
+    with pytest.raises(ValueError, match="lease_token"):
+        build_respond_params(
+            RespondRequest(
+                instance_id="inst-1",
+                instance_session_token="token-1",
+                invocation_id="invk-1",
+                lease_token="",
+                value={"ok": True},
+            )
+        )
 
 
 def test_respond_builder_when_value_and_error_both_missing_should_raise() -> None:
@@ -504,6 +723,7 @@ def test_respond_builder_when_value_and_error_both_missing_should_raise() -> Non
                 instance_id="inst-1",
                 instance_session_token="token-1",
                 invocation_id="invk-1",
+                lease_token="lease-1",
             )
         )
 
@@ -515,6 +735,7 @@ def test_respond_builder_when_invocation_id_violates_spec_should_raise() -> None
                 instance_id="inst-1",
                 instance_session_token="token-1",
                 invocation_id="request-1",
+                lease_token="lease-1",
                 value={"ok": True},
             )
         )
@@ -527,6 +748,7 @@ def test_respond_builder_when_value_and_error_present_should_raise() -> None:
                 instance_id="inst-1",
                 instance_session_token="token-1",
                 invocation_id="invk-1",
+                lease_token="lease-1",
                 value={"ok": True},
                 error=DevHubCalleeError(code=1001, message="app_error"),
             )
@@ -540,18 +762,20 @@ def test_respond_builder_when_value_contains_unsupported_json_type_should_raise(
                 instance_id="inst-1",
                 instance_session_token="token-1",
                 invocation_id="invk-1",
+                lease_token="lease-1",
                 value={"callback": lambda: "ignored"},
             )
         )
 
 
-def test_respond_builder_when_error_data_is_not_json_object_should_raise() -> None:
+def test_respond_builder_when_error_data_is_not_json_value_should_raise() -> None:
     with pytest.raises(ValueError, match=r"error\.data\.callback 包含不支持的 JSON 类型。"):
         build_respond_params(
             RespondRequest(
                 instance_id="inst-1",
                 instance_session_token="token-1",
                 invocation_id="invk-1",
+                lease_token="lease-1",
                 error=DevHubCalleeError(
                     code=1001,
                     message="app_error",
@@ -559,3 +783,21 @@ def test_respond_builder_when_error_data_is_not_json_object_should_raise() -> No
                 ),
             )
         )
+
+
+def test_respond_builder_when_error_data_is_scalar_should_preserve_value() -> None:
+    payload = build_respond_params(
+        RespondRequest(
+            instance_id="inst-1",
+            instance_session_token="token-1",
+            invocation_id="invk-1",
+            lease_token="lease-1",
+            error=DevHubCalleeError(
+                code=1001,
+                message="app_error",
+                data="invalid-name",
+            ),
+        )
+    )
+
+    assert payload["error"]["data"] == "invalid-name"

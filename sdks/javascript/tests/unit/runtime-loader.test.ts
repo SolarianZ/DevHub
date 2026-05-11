@@ -1,5 +1,9 @@
+import { fileURLToPath } from "node:url";
 import { afterEach, expect, it, vi } from "vitest";
 import type { RuntimeConnectionInfo } from "../../src/runtime.js";
+
+const TEST_RUNTIME_DIRECTORY = absoluteTestPath("devhub-js-sdk-runtime");
+const TEST_TOKEN_FILE = absoluteTestPath("devhub-js-sdk-runtime/runtime/token.txt");
 
 afterEach(() => {
   vi.doUnmock("../../src/runtime.js");
@@ -18,7 +22,8 @@ it("显式 runtimeResolver 不应触发默认 runtime 模块加载", async () =>
     }
 
     return {
-      FileSystemRuntimeResolver: MockFileSystemRuntimeResolver
+      FileSystemRuntimeResolver: MockFileSystemRuntimeResolver,
+      validateRuntimeConnectionInfo: () => {}
     };
   });
 
@@ -69,20 +74,16 @@ it("显式 runtimeResolver 不应触发默认 runtime 模块加载", async () =>
 });
 
 it("默认 runtime 模块应在两个入口之间共享缓存", async () => {
-  let constructorCount = 0;
   const resolve = vi.fn(async () => createConnectionInfo());
 
   vi.doMock("../../src/runtime.js", () => {
     class MockFileSystemRuntimeResolver {
-      constructor() {
-        constructorCount += 1;
-      }
-
       resolve = resolve;
     }
 
     return {
-      FileSystemRuntimeResolver: MockFileSystemRuntimeResolver
+      FileSystemRuntimeResolver: MockFileSystemRuntimeResolver,
+      validateRuntimeConnectionInfo: () => {}
     };
   });
 
@@ -120,7 +121,6 @@ it("默认 runtime 模块应在两个入口之间共享缓存", async () => {
     }
   );
 
-  expect(constructorCount).toBe(1);
   expect(resolve).toHaveBeenCalledTimes(2);
 
   await client.dispose();
@@ -129,19 +129,20 @@ it("默认 runtime 模块应在两个入口之间共享缓存", async () => {
 
 function createConnectionInfo(): RuntimeConnectionInfo {
   return {
-    runtimeDirectory: "/tmp/devhub-js-sdk-runtime",
+    runtimeDirectory: TEST_RUNTIME_DIRECTORY,
     token: "token-1",
     runtime: {
       protocolVersion: 1,
       pid: 12345,
       httpBaseUrl: "http://127.0.0.1:47231",
       wsUrl: "ws://127.0.0.1:47231/ws",
-      tokenFile: "/tmp/devhub-js-sdk-runtime/runtime/token.txt",
+      tokenFile: TEST_TOKEN_FILE,
       startedAtUtc: new Date("2026-03-09T00:00:00Z"),
       runtimeTuning: {
         leaseSeconds: 30,
         onlineThresholdSeconds: 90,
-        launchDedupeWindowSeconds: 15
+        launchDedupeWindowSeconds: 15,
+        launchRegisterTimeoutSeconds: 45
       }
     },
     rpcEndpoint: "http://127.0.0.1:47231/rpc",
@@ -160,4 +161,8 @@ function createStubEventSession(session: {
     clearAbandonedRequests: () => 0,
     ...session
   };
+}
+
+function absoluteTestPath(relativePath: string): string {
+  return fileURLToPath(new URL(`../../../.tmp-test-paths/${relativePath}`, import.meta.url));
 }

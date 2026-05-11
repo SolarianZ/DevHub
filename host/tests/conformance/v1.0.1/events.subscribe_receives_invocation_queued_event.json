@@ -1,0 +1,152 @@
+{
+  "id": "events.subscribe_receives_invocation_queued_event",
+  "caseId": "CONF-007",
+  "description": "WS 订阅 invocation.queued 后，notify 入队必须收到 hub.event。",
+  "transport": "ws",
+  "setup": {
+    "definitions": [
+      {
+        "appId": "events.subscribe.invocation-queued",
+        "scopeEntry": {
+          "scope": "",
+          "displayName": "events.subscribe.invocation-queued"
+        }
+      }
+    ]
+  },
+  "orchestration": {
+    "duringCaller": [
+      {
+        "action": "sleep",
+        "waitMs": 5000
+      },
+      {
+        "action": "register_instance",
+        "password": "conformance-password",
+        "instance": {
+          "instanceId": "events-invocation-queued-inst-1",
+          "appId": "events.subscribe.invocation-queued",
+          "scope": "",
+          "pid": 33022,
+          "invoke": {
+            "poll": true,
+            "respond": true
+          }
+        }
+      },
+      {
+        "action": "call_rpc",
+        "method": "hub.invoke.notify",
+        "params": {
+          "appId": "events.subscribe.invocation-queued",
+          "target": {
+            "scope": "",
+            "instanceId": "events-invocation-queued-inst-1"
+          },
+          "method": "demo.notify.queued",
+          "args": {
+            "mode": "queued"
+          },
+          "options": {
+            "ttlMs": 60000,
+            "queueIfOffline": true,
+            "autoLaunch": false
+          }
+        }
+      }
+    ]
+  },
+  "request": {
+    "kind": "raw.ws",
+    "steps": [
+      {
+        "action": "send",
+        "message": {
+          "jsonrpc": "2.0",
+          "id": "ws-auth-events-queued",
+          "method": "hub.ws.authenticate",
+          "params": {
+            "token": "${HOST_TOKEN}",
+            "protocolVersion": 1,
+            "clientId": "ConformanceWsEventQueued",
+            "clientSessionId": "20000000-0000-0000-0000-000000000022"
+          }
+        }
+      },
+      {
+        "action": "receive",
+        "captureAs": "auth"
+      },
+      {
+        "action": "send",
+        "message": {
+          "jsonrpc": "2.0",
+          "id": "ws-subscribe-events-queued",
+          "method": "hub.events.subscribe",
+          "params": {
+            "types": [
+              "invocation.queued"
+            ]
+          }
+        }
+      },
+      {
+        "action": "receive",
+        "captureAs": "subscribe"
+      },
+      {
+        "action": "receive",
+        "captureAs": "event",
+        "timeoutMs": 15000
+      }
+    ]
+  },
+  "expectedResponse": {
+    "matchMode": "subset",
+    "phase": "ws",
+    "outcome": "success",
+    "actual": {
+      "auth": {
+        "jsonrpc": "2.0",
+        "id": "ws-auth-events-queued",
+        "result": {
+          "ok": true,
+          "protocolVersion": 1
+        }
+      },
+      "subscribe": {
+        "jsonrpc": "2.0",
+        "id": "ws-subscribe-events-queued",
+        "result": {
+          "ok": true,
+          "subscriptionId": "${ANY_NON_EMPTY_STRING}"
+        }
+      },
+      "event": {
+        "jsonrpc": "2.0",
+        "method": "hub.event",
+        "params": {
+          "subscriptionId": "${ANY_NON_EMPTY_STRING}",
+          "type": "invocation.queued",
+          "timeUtc": "${ANY_ISO_UTC}",
+          "payload": {
+            "invocationId": "${ANY_NON_EMPTY_STRING}",
+            "appId": "events.subscribe.invocation-queued",
+            "target": {
+              "scope": "",
+              "instanceId": "events-invocation-queued-inst-1"
+            },
+            "method": "demo.notify.queued",
+            "kind": "notify"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    "events",
+    "ws",
+    "raw",
+    "invocation"
+  ]
+}

@@ -6,6 +6,7 @@
     "instanceId": "NODE_01.alpha",
     "instanceSessionToken": "inst-session-node-01-alpha-001",
     "invocationId": "invk-sample-request-001",
+    "leaseToken": "lease-sample-request-001-attempt-1",
     "value": {
       "ok": true
     }

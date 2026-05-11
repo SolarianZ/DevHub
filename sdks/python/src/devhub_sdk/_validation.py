@@ -8,6 +8,7 @@ from uuid import UUID
 
 _CANONICAL_IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$")
 _INVOCATION_ID_PATTERN = re.compile(r"^invk-[a-zA-Z0-9._:-]+$")
+_INSTANCE_ID_MAX_LENGTH = 256
 _CANONICAL_UUID_PATTERN = re.compile(
     r"^[0-9a-fA-F]{8}-"
     r"[0-9a-fA-F]{4}-"
@@ -46,7 +47,7 @@ def require_instance_id(value: Any, name: str) -> str:
     """要求值必须符合 Spec 定义的 instanceId 格式。"""
 
     normalized = require_non_empty_string(value, name)
-    if _CANONICAL_IDENTIFIER_PATTERN.fullmatch(normalized) is None:
+    if len(normalized) > _INSTANCE_ID_MAX_LENGTH or _CANONICAL_IDENTIFIER_PATTERN.fullmatch(normalized) is None:
         raise ValueError(f"{name} 必须符合 instanceId 格式要求。")
     return normalized
 

@@ -1,5 +1,5 @@
-using DevHub.Sdk.Internal;
 using DevHub.Sdk.Models;
+using DevHub.Sdk.Internal;
 
 namespace DevHub.Sdk;
 
@@ -23,6 +23,8 @@ public sealed class DevHubRuntimeConnectionInfo
         RuntimeDirectory = runtimeDirectory;
         Token = token;
         Runtime = runtime;
+        RuntimeDiscovery.ValidateHttpBaseUrl(runtime.HttpBaseUrl, nameof(runtime));
+        RuntimeDiscovery.ValidateWebSocketUrl(runtime.WsUrl, nameof(runtime));
         RpcEndpoint = new Uri($"{runtime.HttpBaseUrl}/rpc", UriKind.Absolute);
         WebSocketEndpoint = new Uri(runtime.WsUrl, UriKind.Absolute);
     }

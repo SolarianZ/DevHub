@@ -17,8 +17,8 @@ public sealed class HostBootstrapperTests : IDisposable
     private const string ExpectedHubVersion = "test-host-version";
     private readonly string _tempRoot;
     private readonly string _runtimeDirectory;
-    private readonly string _definitionsDirectory;
-    private readonly string _instancesDirectory;
+    private readonly string _appsDirectory;
+    private readonly string _definitionsCatalogPath;
     private readonly string _logsDirectory;
 
     /// <summary>
@@ -28,14 +28,13 @@ public sealed class HostBootstrapperTests : IDisposable
     {
         _tempRoot = Path.Combine(Path.GetTempPath(), "DevHubHostBootstrapperTests", Guid.NewGuid().ToString("N"));
         _runtimeDirectory = Path.Combine(_tempRoot, "runtime");
-        _definitionsDirectory = Path.Combine(_tempRoot, "apps", "definitions");
-        _instancesDirectory = Path.Combine(_tempRoot, "apps", "instances");
+        _appsDirectory = Path.Combine(_tempRoot, "apps");
+        _definitionsCatalogPath = Path.Combine(_appsDirectory, "definitions.json");
         _logsDirectory = Path.Combine(_tempRoot, "logs");
 
         Directory.CreateDirectory(_tempRoot);
         Directory.CreateDirectory(_runtimeDirectory);
-        Directory.CreateDirectory(_definitionsDirectory);
-        Directory.CreateDirectory(_instancesDirectory);
+        Directory.CreateDirectory(_appsDirectory);
         Directory.CreateDirectory(_logsDirectory);
     }
 
@@ -104,6 +103,19 @@ public sealed class HostBootstrapperTests : IDisposable
     }
 
     [Fact]
+    public void Impl_HostRuntimeContext_WhenWsUrlShapeInvalid_ShouldReject()
+    {
+        var context = new HostRuntimeContext();
+
+        Assert.Throws<ArgumentException>(() => context.SetUrls("http://127.0.0.1:7100", "ws://127.0.0.1:7100/events"));
+        Assert.Throws<ArgumentException>(() => context.SetUrls("http://127.0.0.1:7100", "ws://127.0.0.1:7100/ws?debug=true"));
+        Assert.Throws<ArgumentException>(() => context.SetUrls("http://127.0.0.1:7100", "ws://127.0.0.1:7100/ws?"));
+        Assert.Throws<ArgumentException>(() => context.SetUrls("http://127.0.0.1:7100", " ws://127.0.0.1:7100/ws"));
+        Assert.Throws<ArgumentException>(() => context.SetUrls("http://127.0.0.1:7100", "ws://user@127.0.0.1:7100/ws"));
+        Assert.Throws<ArgumentException>(() => context.SetUrls("http://127.0.0.1:7100", "ws://127.0.0.1:7100/ws/"));
+    }
+
+    [Fact]
     public void Impl_Cleanup_WhenHubRuntimeExists_ShouldRotateHubJsonToPrevHubJson()
     {
         using var context = CreateContext();
@@ -159,7 +171,7 @@ public sealed class HostBootstrapperTests : IDisposable
             ExpectedHubVersion);
         var runtimeContext = new HostRuntimeContext();
 
-        var definitionLoader = new DefinitionLoader(runtimePathOptions.DefinitionsPath, Mock.Of<ILogger<DefinitionLoader>>());
+        var definitionLoader = new DefinitionLoader(runtimePathOptions.DefinitionsCatalogPath, Mock.Of<ILogger<DefinitionLoader>>());
         var definitionProvider = new DefinitionProvider(definitionLoader);
 
         var appRegistry = new AppRegistry(new SystemClock(), Mock.Of<ILogger<AppRegistry>>());
@@ -193,8 +205,7 @@ public sealed class HostBootstrapperTests : IDisposable
             }
         };
 
-        var filePath = Path.Combine(_definitionsDirectory, AppDefinitionIdentity.Create(appId, ScopeContract.Global).GetFileName());
-        File.WriteAllText(filePath, JsonSerializer.Serialize(payload));
+        DefinitionCatalogTestHelper.UpsertDefinition(_definitionsCatalogPath, JsonSerializer.Serialize(payload));
     }
 
     private sealed class BootstrapperContext : IDisposable

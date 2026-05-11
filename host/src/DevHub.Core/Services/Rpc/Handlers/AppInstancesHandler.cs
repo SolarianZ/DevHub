@@ -115,16 +115,19 @@ public class AppInstancesHandler : IRpcHandler
             _logger.LogDebug("尝试注册应用程序实例，InstanceId: {InstanceId}, AppId: {AppId}, Scope: {Scope}, PID: {PID}, RequestId: {RequestId}",
                 instance.InstanceId, instance.AppId, instance.Scope, instance.Pid, request.Id);
 
-            var launchId = TryGetLaunchId(instance.Meta);
+            if (!TryGetOptionalLaunchId(paramsElement, request.Id, out var launchId, out var launchIdErrorData))
+            {
+                return Task.FromResult(RpcErrorFactory.Create(request.Id, -32602, "invalid_params", launchIdErrorData));
+            }
+
             var launchBindingValidation = _launchRegistrationTracker.ValidateRegistration(launchId, instance.AppId, instance.Scope);
             if (launchBindingValidation.Status == LaunchRegistrationValidationStatus.Mismatched)
             {
                 _logger.LogWarning(
-                    "注册应用程序实例失败: 启动绑定不匹配，InstanceId: {InstanceId}, AppId: {AppId}, Scope: {Scope}, LaunchId: {LaunchId}, RequestId: {RequestId}",
+                    "注册应用程序实例失败: 启动绑定不匹配，InstanceId: {InstanceId}, AppId: {AppId}, Scope: {Scope}, RequestId: {RequestId}",
                     instance.InstanceId,
                     instance.AppId,
                     instance.Scope,
-                    launchId,
                     request.Id);
                 return Task.FromResult(RpcErrorFactory.Forbidden(request.Id, launchBindingValidation.ErrorData));
             }
@@ -134,14 +137,29 @@ public class AppInstancesHandler : IRpcHandler
                     password,
                     out var registeredInstance,
                     out var instanceSessionToken,
-                    out var passwordMismatch))
+                    out var registrationValidationStatus))
             {
-                if (passwordMismatch)
+                if (registrationValidationStatus == InstanceRegistrationValidationStatus.PasswordMismatch)
                 {
                     _logger.LogWarning("注册应用程序实例失败: 实例密码不匹配，InstanceId: {InstanceId}, RequestId: {RequestId}", instance.InstanceId, request.Id);
                     return Task.FromResult(RpcErrorFactory.Forbidden(request.Id, new
                     {
                         reason = "instance_password_mismatch",
+                        instanceId = instance.InstanceId
+                    }));
+                }
+
+                if (registrationValidationStatus == InstanceRegistrationValidationStatus.IdentityMismatch)
+                {
+                    _logger.LogWarning(
+                        "注册应用程序实例失败: 实例身份不匹配，InstanceId: {InstanceId}, AppId: {AppId}, Scope: {Scope}, RequestId: {RequestId}",
+                        instance.InstanceId,
+                        instance.AppId,
+                        instance.Scope,
+                        request.Id);
+                    return Task.FromResult(RpcErrorFactory.Forbidden(request.Id, new
+                    {
+                        reason = "instance_identity_mismatch",
                         instanceId = instance.InstanceId
                     }));
                 }
@@ -465,6 +483,18 @@ public class AppInstancesHandler : IRpcHandler
         instance = null!;
         errorData = null;
 
+        if (instanceElement.TryGetProperty("password", out _))
+        {
+            _logger.LogWarning("hub.apps.registerInstance参数无效: params.instance 不得包含 password, RequestId: {RequestId}", requestId);
+            return false;
+        }
+
+        if (instanceElement.TryGetProperty("instanceSessionToken", out _))
+        {
+            _logger.LogWarning("hub.apps.registerInstance参数无效: params.instance 不得包含 instanceSessionToken, RequestId: {RequestId}", requestId);
+            return false;
+        }
+
         if (!instanceElement.TryGetProperty("instanceId", out var instanceIdProperty) || instanceIdProperty.ValueKind != JsonValueKind.String)
         {
             _logger.LogWarning("hub.apps.registerInstance参数无效: 缺少 instanceId 或类型错误, RequestId: {RequestId}", requestId);
@@ -572,19 +602,33 @@ public class AppInstancesHandler : IRpcHandler
         });
     }
 
-    private static string? TryGetLaunchId(Dictionary<string, object?>? meta)
+    private bool TryGetOptionalLaunchId(JsonElement paramsElement, object? requestId, out string? launchId, out object? errorData)
     {
-        if (meta is null || !meta.TryGetValue(LaunchCoordinator.LaunchIdMetaKey, out var value) || value is null)
+        launchId = null;
+        errorData = null;
+
+        if (!paramsElement.TryGetProperty("launchId", out var launchIdElement))
         {
-            return null;
+            return true;
         }
 
-        return value switch
+        if (launchIdElement.ValueKind != JsonValueKind.String)
         {
-            string launchId when !string.IsNullOrWhiteSpace(launchId) => launchId,
-            JsonElement { ValueKind: JsonValueKind.String } element when !string.IsNullOrWhiteSpace(element.GetString()) => element.GetString(),
-            _ => null
-        };
+            _logger.LogWarning("hub.apps.registerInstance参数无效: launchId 必须为非空字符串, RequestId: {RequestId}", requestId);
+            errorData = new { reason = "invalid_launch_id" };
+            return false;
+        }
+
+        var value = launchIdElement.GetString();
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            _logger.LogWarning("hub.apps.registerInstance参数无效: launchId 必须为非空字符串, RequestId: {RequestId}", requestId);
+            errorData = new { reason = "invalid_launch_id" };
+            return false;
+        }
+
+        launchId = value;
+        return true;
     }
 
     private static JsonRpcResponse InstanceNotFound(object? id, string instanceId)

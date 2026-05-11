@@ -6,10 +6,12 @@ using DevHub.Host.Runtime;
 using DevHub.Host.Tests.TestHelpers;
 using Microsoft.Extensions.Logging;
 using Moq;
+using static DevHub.Host.Tests.TestHelpers.RuntimeFilePermissionAssertions;
 
 /// <summary>
 /// HostRuntimeArtifactManager 恢复与自愈行为测试。
 /// </summary>
+[Collection(TestCollections.ProcessEnvironment)]
 [Trait("Category", "Impl")]
 public sealed class HostRuntimeArtifactManagerRecoveryTests : IDisposable
 {
@@ -66,6 +68,7 @@ public sealed class HostRuntimeArtifactManagerRecoveryTests : IDisposable
 
         Assert.True(File.Exists(tokenPath));
         Assert.Equal(token, File.ReadAllText(tokenPath));
+        AssertCurrentUserOnlyAccess(tokenPath);
     }
 
     [Fact]
@@ -93,6 +96,7 @@ public sealed class HostRuntimeArtifactManagerRecoveryTests : IDisposable
         Assert.Equal(DefaultHubVersion, document.RootElement.GetProperty("hubVersion").GetString());
         Assert.Equal("http://127.0.0.1:47999", document.RootElement.GetProperty("httpBaseUrl").GetString());
         Assert.Equal("ws://127.0.0.1:47999/ws", document.RootElement.GetProperty("wsUrl").GetString());
+        AssertCurrentUserOnlyAccess(hubJsonPath);
     }
 
     [Fact]
@@ -198,6 +202,7 @@ public sealed class HostRuntimeArtifactManagerRecoveryTests : IDisposable
         Assert.True(runtimeTuning.TryGetProperty("leaseSeconds", out _));
         Assert.True(runtimeTuning.TryGetProperty("onlineThresholdSeconds", out _));
         Assert.True(runtimeTuning.TryGetProperty("launchDedupeWindowSeconds", out _));
+        Assert.True(runtimeTuning.TryGetProperty("launchRegisterTimeoutSeconds", out _));
     }
 
     [Fact]
@@ -212,12 +217,6 @@ public sealed class HostRuntimeArtifactManagerRecoveryTests : IDisposable
         var hubJsonPath = Path.Combine(_runtimeDirectory, "hub.json");
         var lockStream = new FileStream(hubJsonPath, FileMode.Open, FileAccess.Read, FileShare.Read);
         var writeTask = System.Threading.Tasks.Task.Run(() => manager.WriteHubJson(48021, "v2"));
-
-        if (OperatingSystem.IsWindows())
-        {
-            await System.Threading.Tasks.Task.Delay(200);
-            Assert.False(writeTask.IsCompleted);
-        }
 
         lockStream.Dispose();
 

@@ -20,7 +20,8 @@
       "pattern": "^$|^[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$"
     },
     "displayName": {
-      "type": "string"
+      "type": "string",
+      "pattern": ".*\\S.*"
     },
     "description": {
       "type": "string"
@@ -38,12 +39,15 @@
     },
     "launch": {
       "type": "object",
-      "required": [
-        "exePath"
-      ],
       "properties": {
         "exePath": {
           "type": "string"
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "argsTemplate": {
           "type": "string"

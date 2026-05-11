@@ -6,7 +6,6 @@ DevHub internal_error / parse_error / invalid_request 测试
 import os
 import uuid
 import unittest
-import requests
 
 
 from tests.blackbox.test_base import (
@@ -14,7 +13,8 @@ from tests.blackbox.test_base import (
     RpcAssertions,
     RpcClient,
     TestResult,
-    get_definitions_dir,
+    get_definitions_catalog_path,
+    http_post,
     safe_remove,
 )
 
@@ -61,7 +61,7 @@ class TestInternalErrors(unittest.TestCase):
             client = RpcClient(base_url, token)
 
             invalid_json = '{"jsonrpc":"2.0","id":"bad-json-id","method":"hub.ping","params":{'
-            response = requests.post(f"{base_url}/rpc", data=invalid_json, headers=headers, timeout=30)
+            response = http_post(f"{base_url}/rpc", data=invalid_json, headers=headers, timeout=30)
 
             if response.status_code != 200:
                 result.mark_failure(f"❌ HTTP 状态码不正确: {response.status_code}")
@@ -79,6 +79,36 @@ class TestInternalErrors(unittest.TestCase):
 
             result.mark_success()
 
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_parse_error_invalid_utf8(self):
+        """测试非法 UTF-8 字节返回 -32700 parse_error 且 id=null。"""
+        result = TestResult("测试非法 UTF-8 字节返回 parse_error 且 id=null")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            headers = self._headers(token)
+            invalid_utf8 = b'{"jsonrpc":"2.0","id":"bad-utf8","method":"hub.ping","params":{"echo":"\xc3("}}'
+            response = http_post(f"{base_url}/rpc", data=invalid_utf8, headers=headers, timeout=30)
+
+            if response.status_code != 200:
+                result.mark_failure(f"HTTP 状态码不正确: {response.status_code}")
+                return result
+
+            payload = response.json()
+            if not RpcAssertions.expect_error(
+                result,
+                payload,
+                expected_code=-32700,
+                expected_message="parse_error",
+                expected_id=None,
+            ):
+                return result
+
+            result.mark_success()
         except Exception as e:
             result.mark_failure(str(e))
 
@@ -113,16 +143,11 @@ class TestInternalErrors(unittest.TestCase):
                     "name": "params 非 object/array",
                     "payload": {"jsonrpc": "2.0", "id": "bad-envelope-3", "method": "hub.ping", "params": "invalid"},
                     "expected_id": "bad-envelope-3"
-                },
-                {
-                    "name": "params 为 null",
-                    "payload": {"jsonrpc": "2.0", "id": "bad-envelope-4", "method": "hub.ping", "params": None},
-                    "expected_id": "bad-envelope-4"
                 }
             ]
 
             for case in cases:
-                response = requests.post(f"{base_url}/rpc", json=case["payload"], headers=headers, timeout=30)
+                response = http_post(f"{base_url}/rpc", json_body=case["payload"], headers=headers, timeout=30)
                 if response.status_code != 200:
                     result.mark_failure(f"❌ {case['name']} 返回非200状态码: {response.status_code}")
                     return result
@@ -138,6 +163,26 @@ class TestInternalErrors(unittest.TestCase):
                     return result
 
                 result.add_detail(f"✅ {case['name']} 返回 invalid_request")
+
+            null_params_response = http_post(
+                f"{base_url}/rpc",
+                json_body={"jsonrpc": "2.0", "id": "ping-null-params", "method": "hub.ping", "params": None},
+                headers=headers,
+                timeout=30,
+            )
+            if null_params_response.status_code != 200:
+                result.mark_failure(f"❌ params 为 null 返回非200状态码: {null_params_response.status_code}")
+                return result
+
+            null_params_payload = null_params_response.json()
+            if null_params_payload.get("id") != "ping-null-params":
+                result.mark_failure(f"❌ hub.ping params 为 null 响应 id 不正确: {null_params_payload.get('id')}")
+                return result
+
+            if not RpcAssertions.expect_success(result, null_params_payload, ["serverTimeUtc"]):
+                return result
+
+            result.add_detail("✅ hub.ping params 为 null 正确返回成功")
 
             root_type_cases = [
                 {"name": "根节点为字符串", "body": '"not-an-object"'},
@@ -160,6 +205,47 @@ class TestInternalErrors(unittest.TestCase):
                     expected_code=-32600,
                     expected_message="invalid_request",
                     expected_id=None
+                ):
+                    return result
+
+                result.add_detail(f"✅ {case['name']} 正确返回 invalid_request")
+
+            result.mark_success()
+
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_invalid_request_numeric_id_must_be_supported_integer(self):
+        """测试 numeric JSON-RPC id 仅允许受支持整数"""
+        result = TestResult("测试 numeric JSON-RPC id 仅允许受支持整数")
+
+        try:
+            base_url, token = DiscoveryService.get_hub_info()
+            client = RpcClient(base_url, token)
+
+            cases = [
+                {"name": "id 为小数", "id": 1.5},
+                {"name": "id 超出 Int64 上界", "id": 9223372036854775808},
+            ]
+
+            for case in cases:
+                status_code, response = client.post_json({
+                    "jsonrpc": "2.0",
+                    "id": case["id"],
+                    "method": "hub.ping",
+                    "params": {},
+                })
+                if not RpcAssertions.expect_http_status(result, status_code):
+                    return result
+
+                if not RpcAssertions.expect_error(
+                    result,
+                    response,
+                    expected_code=-32600,
+                    expected_message="invalid_request",
+                    expected_id=None,
                 ):
                     return result
 
@@ -372,8 +458,7 @@ class TestInternalErrors(unittest.TestCase):
         invalid_app_path = None
 
         try:
-            definitions_dir = get_definitions_dir()
-            invalid_app_path = os.path.join(definitions_dir, "invalid-app-definition.json")
+            invalid_app_path = get_definitions_catalog_path()
             with open(invalid_app_path, "w", encoding="utf-8") as f:
                 f.write('{"invalid": "json"')
 
@@ -397,7 +482,9 @@ class TestInternalErrors(unittest.TestCase):
         """运行所有错误处理测试"""
         tests = [
             self.test_parse_error_invalid_json,
+            self.test_parse_error_invalid_utf8,
             self.test_invalid_request_envelope,
+            self.test_invalid_request_numeric_id_must_be_supported_integer,
             self.test_internal_error_handling,
             self.test_server_recovery_after_error,
             self.test_concurrent_invalid_requests,

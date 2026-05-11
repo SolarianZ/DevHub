@@ -40,6 +40,7 @@ function createConnection(overrides: Partial<MonitorRuntimeConnectionInfo> = {})
         leaseSeconds: 30,
         onlineThresholdSeconds: 15,
         launchDedupeWindowSeconds: 5,
+        launchRegisterTimeoutSeconds: 45,
       },
       hubVersion: "0.7.0",
       ...runtimeOverrides,

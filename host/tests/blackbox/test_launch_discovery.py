@@ -5,6 +5,8 @@ DevHub 启动与发现测试
 
 import os
 import json
+import ipaddress
+from urllib.parse import urlparse
 import time
 import tempfile
 import subprocess
@@ -16,9 +18,12 @@ from tests.blackbox.test_base import (
     DiscoveryService,
     PENDING_WAIT_STATUS,
     RpcClient,
+    RpcAssertions,
     TestResult,
     call_with_long_wait_status,
+    build_json_rpc_request,
     describe_test_hub_command,
+    http_post,
     poll_until_deadline_with_long_wait_status,
     paths_refer_to_same_location,
     start_isolated_hub_process,
@@ -29,6 +34,15 @@ from tests.blackbox.test_base import (
 
 class TestLaunchDiscovery(unittest.TestCase):
     """启动与发现测试类"""
+
+    @staticmethod
+    def _is_loopback_host(host):
+        if host == "localhost":
+            return True
+        try:
+            return ipaddress.ip_address(host).is_loopback
+        except ValueError:
+            return False
 
     @staticmethod
     def _read_open_log_tail(log_file, max_chars=4000):
@@ -51,6 +65,21 @@ class TestLaunchDiscovery(unittest.TestCase):
         return output
 
     @staticmethod
+    def _hub_runtime_identity(hub_info):
+        """提取可用于区分 Hub 会话的发现文件身份。"""
+        return (
+            hub_info.get("pid"),
+            hub_info.get("startedAtUtc"),
+            hub_info.get("httpBaseUrl"),
+        )
+
+    @staticmethod
+    def _read_hub_runtime_info(hub_json_path):
+        """读取 hub.json 并返回发现信息。"""
+        with open(hub_json_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+
+    @staticmethod
     def _stop_process(process):
         """安全停止子进程。"""
         if process is None or process.poll() is not None:
@@ -64,7 +93,7 @@ class TestLaunchDiscovery(unittest.TestCase):
             process.wait(timeout=5)
 
     @staticmethod
-    def _wait_for_hub_runtime_files(process, runtime_dir, timeout_seconds):
+    def _wait_for_hub_runtime_files(process, runtime_dir, timeout_seconds, previous_runtime_identity=None):
         """等待 Hub 在目标运行时目录写出发现文件。"""
         hub_json_path = os.path.join(runtime_dir, "hub.json")
 
@@ -72,6 +101,15 @@ class TestLaunchDiscovery(unittest.TestCase):
             if process.poll() is not None:
                 return False
             if os.path.exists(hub_json_path):
+                if previous_runtime_identity is not None:
+                    try:
+                        hub_info = TestLaunchDiscovery._read_hub_runtime_info(hub_json_path)
+                    except (OSError, json.JSONDecodeError):
+                        return PENDING_WAIT_STATUS
+
+                    if TestLaunchDiscovery._hub_runtime_identity(hub_info) == previous_runtime_identity:
+                        return PENDING_WAIT_STATUS
+
                 return True
             return PENDING_WAIT_STATUS
 
@@ -113,6 +151,58 @@ class TestLaunchDiscovery(unittest.TestCase):
             on_timeout=lambda: (False, last_error),
         )
 
+    def _start_hub_and_read_runtime(
+        self,
+        data_dir,
+        runtime_dir,
+        log_file,
+        timeout_seconds=45,
+        previous_runtime_identity=None,
+    ):
+        """启动隔离 Hub 并读取当前运行时发现信息与 token。"""
+        process = start_isolated_hub_process(data_dir, log_file)
+
+        try:
+            if not self._wait_for_hub_runtime_files(
+                process,
+                runtime_dir,
+                timeout_seconds=timeout_seconds,
+                previous_runtime_identity=previous_runtime_identity,
+            ):
+                process_output = self._read_open_log_tail(log_file)
+                if process.poll() is None:
+                    raise RuntimeError(f"等待超时：隔离 Hub 未生成新的 hub.json。日志片段: {process_output}")
+                raise RuntimeError(
+                    f"隔离 Hub 提前退出，未生成新的 hub.json。exit={process.returncode}, output={process_output}")
+
+            hub_json_path = os.path.join(runtime_dir, "hub.json")
+            hub_info = self._read_hub_runtime_info(hub_json_path)
+            if previous_runtime_identity is not None and self._hub_runtime_identity(hub_info) == previous_runtime_identity:
+                raise RuntimeError(f"隔离 Hub 未刷新 hub.json 会话身份: {hub_info}")
+
+            token_file = hub_info.get("tokenFile")
+            if not isinstance(token_file, str) or not os.path.exists(token_file):
+                raise RuntimeError(f"tokenFile 未正确生成: {token_file}")
+
+            with open(token_file, "r", encoding="utf-8") as f:
+                token = f.read().strip()
+            if not token:
+                raise RuntimeError(f"tokenFile 内容为空: {token_file}")
+
+            http_base_url = hub_info.get("httpBaseUrl")
+            if not isinstance(http_base_url, str) or not http_base_url:
+                raise RuntimeError(f"httpBaseUrl 未正确生成: {http_base_url}")
+
+            ok, error = self._wait_for_hub_ping(process, http_base_url, token, timeout_seconds=20)
+            if not ok:
+                process_output = self._read_open_log_tail(log_file)
+                raise RuntimeError(f"隔离 Hub hub.ping 不可达: {error}; output={process_output}")
+
+            return process, hub_info, token
+        except Exception:
+            self._stop_process(process)
+            raise
+
     def test_discovery_files_exist(self):
         """测试 hub.json 与 tokenFile 发现链路是否符合 Spec"""
         result = TestResult("测试发现文件是否存在")
@@ -150,6 +240,7 @@ class TestLaunchDiscovery(unittest.TestCase):
                 "leaseSeconds",
                 "onlineThresholdSeconds",
                 "launchDedupeWindowSeconds",
+                "launchRegisterTimeoutSeconds",
             ]
             for field in runtime_tuning_fields:
                 value = runtime_tuning.get(field)
@@ -167,29 +258,44 @@ class TestLaunchDiscovery(unittest.TestCase):
             # 验证 httpBaseUrl 规范
             http_base_url = hub_info["httpBaseUrl"]
             result.add_detail(f"HTTP 地址: {http_base_url}")
-            # 检查是否指向 loopback 地址
-            if not any(addr in http_base_url for addr in ["127.0.0.1", "localhost", "::1"]):
+            parsed_http_base_url = urlparse(http_base_url)
+            # 检查是否为 HTTP(S) origin 且指向 loopback 地址
+            if parsed_http_base_url.scheme not in ("http", "https"):
+                result.mark_failure(f"❌ httpBaseUrl 必须是 http:// 或 https:// origin: {http_base_url}")
+                return result
+            if parsed_http_base_url.hostname not in ("127.0.0.1", "localhost", "::1"):
                 result.mark_failure(f"❌ httpBaseUrl 必须指向 loopback 地址: {http_base_url}")
                 return result
-            # 检查是否有尾随斜杠
-            if http_base_url.endswith("/"):
-                result.mark_failure(f"❌ httpBaseUrl 不得有尾随斜杠: {http_base_url}")
+            if (
+                parsed_http_base_url.username
+                or parsed_http_base_url.password
+                or parsed_http_base_url.path
+                or parsed_http_base_url.query
+                or parsed_http_base_url.fragment
+                or http_base_url.endswith("/")
+            ):
+                result.mark_failure(f"❌ httpBaseUrl 必须是 origin，不能包含 path/query/fragment/userinfo 或尾随斜杠: {http_base_url}")
                 return result
 
             # 验证 wsUrl 规范
             ws_url = hub_info["wsUrl"]
             result.add_detail(f"WebSocket 地址: {ws_url}")
-            # 检查是否为有效的 WebSocket URL
-            if not ws_url.startswith("ws://") and not ws_url.startswith("wss://"):
+            parsed_ws_url = urlparse(ws_url)
+            if parsed_ws_url.scheme not in ("ws", "wss") or not parsed_ws_url.hostname:
                 result.mark_failure(f"❌ wsUrl 必须是 ws:// 或 wss:// 开头的绝对 URL: {ws_url}")
                 return result
-            # 检查是否指向 loopback 地址
-            if not any(addr in ws_url for addr in ["127.0.0.1", "localhost", "::1"]):
+            if not self._is_loopback_host(parsed_ws_url.hostname):
                 result.mark_failure(f"❌ wsUrl 必须指向 loopback 地址: {ws_url}")
                 return result
-            # 检查是否有尾随斜杠
-            if ws_url.endswith("/"):
-                result.mark_failure(f"❌ wsUrl 不得有尾随斜杠: {ws_url}")
+            if (
+                parsed_ws_url.username
+                or parsed_ws_url.password
+                or parsed_ws_url.path != "/ws"
+                or parsed_ws_url.query
+                or parsed_ws_url.fragment
+                or ws_url.endswith("/")
+            ):
+                result.mark_failure(f"❌ wsUrl 必须是固定 /ws 端点，不能包含 query/fragment/userinfo 或尾随斜杠: {ws_url}")
                 return result
 
             # 验证 tokenFile 规范
@@ -557,6 +663,92 @@ class TestLaunchDiscovery(unittest.TestCase):
 
         return result
 
+    def test_token_rotates_and_old_token_is_rejected_after_restart(self):
+        """测试同一数据根目录重启后旧 bearer token 被拒绝。"""
+        result = TestResult("测试 Host 重启后旧 token 被拒绝")
+        first_process = None
+        second_process = None
+
+        try:
+            with tempfile.TemporaryDirectory(prefix="devhub-test-token-rotation-") as data_dir:
+                try:
+                    runtime_dir = os.path.join(data_dir, "runtime")
+                    definitions_dir = os.path.join(data_dir, "apps", "definitions")
+                    os.makedirs(definitions_dir, exist_ok=True)
+                    result.add_detail(f"隔离 Hub 启动命令: {describe_test_hub_command()}")
+
+                    with temporary_env_var("DEVHUB_DATA_DIR", data_dir):
+                        first_log_path = os.path.join(data_dir, "host-token-first.log")
+                        with open(first_log_path, "w+", encoding="utf-8", errors="backslashreplace") as first_log:
+                            first_process, first_hub_info, first_token = self._start_hub_and_read_runtime(
+                                data_dir,
+                                runtime_dir,
+                                first_log)
+                            first_base_url = first_hub_info["httpBaseUrl"]
+                            first_runtime_identity = self._hub_runtime_identity(first_hub_info)
+                            result.add_detail(f"✅ 第一次启动 token 可用: {first_base_url}")
+
+                            self._stop_process(first_process)
+                            first_process = None
+
+                        second_log_path = os.path.join(data_dir, "host-token-second.log")
+                        with open(second_log_path, "w+", encoding="utf-8", errors="backslashreplace") as second_log:
+                            second_process, second_hub_info, second_token = self._start_hub_and_read_runtime(
+                                data_dir,
+                                runtime_dir,
+                                second_log,
+                                previous_runtime_identity=first_runtime_identity)
+                            second_base_url = second_hub_info["httpBaseUrl"]
+
+                            if first_token == second_token:
+                                result.mark_failure("❌ Host 重启后 token 未轮换")
+                                return result
+
+                            stale_headers = {
+                                "Content-Type": "application/json",
+                                "Authorization": f"Bearer {first_token}",
+                                "X-DevHub-Protocol": "1",
+                                "X-DevHub-ClientId": "TokenRotationTest",
+                                "X-DevHub-ClientSessionId": "00000000-0000-0000-0000-000000000777",
+                            }
+                            payload = build_json_rpc_request("hub.ping", request_id="stale-token-ping")
+                            stale_response = http_post(
+                                f"{second_base_url}/rpc",
+                                json_body=payload,
+                                headers=stale_headers,
+                                timeout=30)
+                            stale_body = stale_response.json()
+                            if not RpcAssertions.expect_error(
+                                result,
+                                stale_body,
+                                expected_code=-32001,
+                                expected_message="unauthorized",
+                                expected_id=None,
+                                expected_data={"reason": "invalid_token"}
+                            ):
+                                return result
+
+                            fresh_client = RpcClient(second_base_url, second_token)
+                            fresh_response = fresh_client.call("hub.ping", request_id="fresh-token-ping")
+                            if not RpcAssertions.expect_success(result, fresh_response, ["serverTimeUtc"]):
+                                return result
+
+                            result.add_detail("✅ 旧 token 被拒绝，新 token 可继续访问 Hub")
+                            result.mark_success()
+                finally:
+                    # 在临时目录回收前停止子进程，避免 Windows 文件句柄占用导致删除失败。
+                    self._stop_process(first_process)
+                    first_process = None
+                    self._stop_process(second_process)
+                    second_process = None
+        except Exception as e:
+            result.mark_failure(str(e))
+        finally:
+            self._stop_process(first_process)
+            self._stop_process(second_process)
+
+        return result
+
     def run_all_tests(self, full=False):
         """运行所有启动与发现测试"""
         results = []
@@ -590,6 +782,9 @@ class TestLaunchDiscovery(unittest.TestCase):
 
         # 测试 DEVHUB_DATA_DIR 环境变量支持（真实 Hub 进程路径）
         results.append(self.test_custom_data_dir_real_hub_files())
+
+        # 测试同一数据根目录重启后的 token 轮换与旧 token 失效语义
+        results.append(self.test_token_rotates_and_old_token_is_rejected_after_restart())
 
         return results
 

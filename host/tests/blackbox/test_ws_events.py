@@ -15,6 +15,8 @@ from urllib.parse import urlparse
 
 
 from tests.blackbox.test_base import (
+    _UNSET,
+    build_json_rpc_request,
     RpcClient,
     RpcAssertions,
     TestResult,
@@ -111,6 +113,9 @@ class SimpleWebSocketClient:
 
     def send_text(self, text):
         self._send_frame(0x1, text.encode("utf-8"))
+
+    def send_text_bytes(self, payload):
+        self._send_frame(0x1, payload)
 
     def recv_json(self, timeout=None):
         while True:
@@ -241,18 +246,21 @@ class TestWsEvents:
         }
 
     def _authenticate(self, ws, token, request_id="ws-auth-1"):
-        ws.send_json({
-            "jsonrpc": "2.0",
-            "id": request_id,
-            "method": "hub.ws.authenticate",
-            "params": {
+        ws.send_json(build_json_rpc_request(
+            "hub.ws.authenticate",
+            request_id=request_id,
+            params={
                 "token": token,
                 "protocolVersion": 1,
                 "clientId": "PyWsTestClient",
                 "clientSessionId": str(uuid.uuid4())
-            }
-        })
+            },
+        ))
         return ws.recv_json(timeout=3)
+
+    @staticmethod
+    def _send_ws_request(ws, request_id, method, params=_UNSET):
+        ws.send_json(build_json_rpc_request(method, request_id=request_id, params=params))
 
     @staticmethod
     def _assert_event_notification_contract(result: TestResult, message: dict, expected_subscription_id=None):
@@ -305,6 +313,64 @@ class TestWsEvents:
         return params
 
     @staticmethod
+    def _assert_invocation_event_payload(result: TestResult, event_type: str, payload: dict):
+        if event_type == "invocation.queued":
+            required_fields = ["invocationId", "appId", "target", "method", "kind"]
+            for field in required_fields:
+                if field not in payload:
+                    result.mark_failure(f"❌ invocation.queued payload 缺少 {field}: {payload}")
+                    return False
+            if not isinstance(payload.get("target"), dict):
+                result.mark_failure(f"❌ invocation.queued payload.target 非对象: {payload}")
+                return False
+            return True
+
+        if event_type == "invocation.delivered":
+            required_fields = ["invocationId", "appId", "target", "instanceId", "delivery"]
+            for field in required_fields:
+                if field not in payload:
+                    result.mark_failure(f"❌ invocation.delivered payload 缺少 {field}: {payload}")
+                    return False
+            if not isinstance(payload.get("target"), dict):
+                result.mark_failure(f"❌ invocation.delivered payload.target 非对象: {payload}")
+                return False
+            delivery = payload.get("delivery")
+            if not isinstance(delivery, dict):
+                result.mark_failure(f"❌ invocation.delivered payload.delivery 非对象: {payload}")
+                return False
+            if not isinstance(delivery.get("attempt"), int):
+                result.mark_failure(f"❌ invocation.delivered payload.delivery.attempt 非整数: {payload}")
+                return False
+            if "leaseToken" in delivery:
+                result.mark_failure(f"❌ invocation.delivered payload 泄漏 delivery.leaseToken: {payload}")
+                return False
+            return True
+
+        if event_type == "invocation.completed":
+            required_fields = ["invocationId", "appId", "target", "instanceId"]
+            for field in required_fields:
+                if field not in payload:
+                    result.mark_failure(f"❌ invocation.completed payload 缺少 {field}: {payload}")
+                    return False
+            if not isinstance(payload.get("target"), dict):
+                result.mark_failure(f"❌ invocation.completed payload.target 非对象: {payload}")
+                return False
+            return True
+
+        if event_type == "invocation.failed":
+            required_fields = ["invocationId", "appId", "target", "instanceId", "reason"]
+            for field in required_fields:
+                if field not in payload:
+                    result.mark_failure(f"❌ invocation.failed payload 缺少 {field}: {payload}")
+                    return False
+            if not isinstance(payload.get("target"), dict):
+                result.mark_failure(f"❌ invocation.failed payload.target 非对象: {payload}")
+                return False
+            return True
+
+        return True
+
+    @staticmethod
     def _collect_event_types(ws, expected_types, timeout_sec=6):
         deadline = time.time() + timeout_sec
         found_types = []
@@ -346,6 +412,8 @@ class TestWsEvents:
                 return None
 
             event_type = params.get("type")
+            if not self._assert_invocation_event_payload(result, event_type, params.get("payload", {})):
+                return None
             if isinstance(event_type, str):
                 found_types.append(event_type)
 
@@ -383,12 +451,7 @@ class TestWsEvents:
         try:
             _, ws_url, _ = self._runtime_hub_info()
             with SimpleWebSocketClient(ws_url) as ws:
-                ws.send_json({
-                    "jsonrpc": "2.0",
-                    "id": "pre-auth-req",
-                    "method": "hub.ping",
-                    "params": {}
-                })
+                self._send_ws_request(ws, "pre-auth-req", "hub.ping", {})
                 response = ws.recv_json(timeout=3)
 
                 if not RpcAssertions.expect_error(result, response, -32001, "unauthorized", expected_id="pre-auth-req"):
@@ -411,12 +474,7 @@ class TestWsEvents:
         try:
             _, ws_url, _ = self._runtime_hub_info()
             with SimpleWebSocketClient(ws_url) as ws:
-                ws.send_json({
-                    "jsonrpc": "2.0",
-                    "id": "pre-auth-get-version",
-                    "method": "hub.getVersion",
-                    "params": {}
-                })
+                self._send_ws_request(ws, "pre-auth-get-version", "hub.getVersion", {})
                 response = ws.recv_json(timeout=3)
 
                 if not RpcAssertions.expect_error(result, response, -32001, "unauthorized", expected_id="pre-auth-get-version"):
@@ -595,12 +653,7 @@ class TestWsEvents:
                 if not RpcAssertions.expect_success(result, auth_response):
                     return result
 
-                ws.send_json({
-                    "jsonrpc": "2.0",
-                    "id": "sub-5",
-                    "method": "hub.events.subscribe",
-                    "params": {}
-                })
+                self._send_ws_request(ws, "sub-5", "hub.events.subscribe", {})
                 subscribe_response = ws.recv_json(timeout=3)
                 if not RpcAssertions.expect_success(result, subscribe_response, ["subscriptionId"]):
                     return result
@@ -641,7 +694,8 @@ class TestWsEvents:
                     return result
 
                 invocation_id = items[0].get("invocationId")
-                respond_response = rpc_client.respond_value(instance_id, invocation_id, {"ok": True})
+                lease_token = items[0].get("delivery", {}).get("leaseToken")
+                respond_response = rpc_client.respond_value(instance_id, invocation_id, {"ok": True}, lease_token=lease_token)
                 if not RpcAssertions.expect_success(result, respond_response):
                     return result
 
@@ -900,14 +954,7 @@ class TestWsEvents:
                 if not RpcAssertions.expect_success(result, auth_response):
                     return result
 
-                ws.send_json({
-                    "jsonrpc": "2.0",
-                    "id": "sub-6",
-                    "method": "hub.events.subscribe",
-                    "params": {
-                        "types": ["invocation.failed"]
-                    }
-                })
+                self._send_ws_request(ws, "sub-6", "hub.events.subscribe", {"types": ["invocation.failed"]})
                 subscribe_response = ws.recv_json(timeout=3)
                 if not RpcAssertions.expect_success(result, subscribe_response, ["subscriptionId"]):
                     return result
@@ -948,11 +995,12 @@ class TestWsEvents:
                     return result
 
                 invocation_id = items[0].get("invocationId")
+                lease_token = items[0].get("delivery", {}).get("leaseToken")
                 respond_response = rpc_client.respond_error(instance_id, invocation_id, {
                     "code": 1001,
                     "message": "app_error",
                     "data": {"reason": "mock"}
-                })
+                }, lease_token=lease_token)
                 if not RpcAssertions.expect_success(result, respond_response):
                     return result
 
@@ -1190,7 +1238,7 @@ class TestWsEvents:
                     return result
                 subscription_id = subscribe_response["result"].get("subscriptionId")
 
-                upsert_response = rpc_client.call("hub.apps.upsertDefinition", {"definition": definition}, request_id="upsert-12d")
+                upsert_response = rpc_client.upsert_definition(definition, request_id="upsert-12d")
                 if not RpcAssertions.expect_success(result, upsert_response, ["definition"]):
                     return result
 
@@ -1236,11 +1284,7 @@ class TestWsEvents:
         finally:
             try:
                 http_base_url, _, token = self._runtime_hub_info()
-                RpcClient(http_base_url, token).call(
-                    "hub.apps.deleteDefinition",
-                    {"appId": app_id, "scope": ""},
-                    request_id="cleanup-12d",
-                )
+                RpcClient(http_base_url, token).delete_definition(app_id, scope="", request_id="cleanup-12d")
             except Exception:
                 pass
 
@@ -1256,7 +1300,7 @@ class TestWsEvents:
             rpc_client = RpcClient(http_base_url, token)
             definition = self._definition_payload(app_id, "Definition Deleted Event")
 
-            seed_response = rpc_client.call("hub.apps.upsertDefinition", {"definition": definition}, request_id="seed-12e")
+            seed_response = rpc_client.upsert_definition(definition, request_id="seed-12e")
             if not RpcAssertions.expect_success(result, seed_response, ["definition"]):
                 return result
 
@@ -1278,11 +1322,7 @@ class TestWsEvents:
                     return result
                 subscription_id = subscribe_response["result"].get("subscriptionId")
 
-                delete_response = rpc_client.call(
-                    "hub.apps.deleteDefinition",
-                    {"appId": app_id, "scope": ""},
-                    request_id="delete-12e",
-                )
+                delete_response = rpc_client.delete_definition(app_id, scope="", request_id="delete-12e")
                 if not RpcAssertions.expect_success(result, delete_response):
                     return result
 
@@ -1364,6 +1404,35 @@ class TestWsEvents:
 
         return result
 
+    def test_ws_013b_pre_auth_invalid_utf8_should_parse_error(self):
+        """WS-013B: 鉴权前非法 UTF-8 应返回 parse_error 并断连。"""
+        result = TestResult("WS-013B 鉴权前非法UTF-8返回 parse_error")
+
+        try:
+            _, ws_url, _ = self._runtime_hub_info()
+            with SimpleWebSocketClient(ws_url) as ws:
+                ws.send_text_bytes(b'{"jsonrpc":"2.0","id":"bad-utf8-13b","method":"hub.ping","params":{"echo":"\xc3("}}')
+
+                try:
+                    response = ws.recv_json(timeout=3)
+                except WebSocketClosed:
+                    result.add_detail("Runtime closed the malformed WebSocket text frame before application dispatch.")
+                    result.mark_success()
+                    return result
+
+                if not RpcAssertions.expect_error(result, response, -32700, "parse_error", expected_id=None):
+                    return result
+
+                if not ws.wait_for_close(timeout=2):
+                    result.mark_failure("鉴权前非法 UTF-8 返回 parse_error 后连接未关闭")
+                    return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
     def test_ws_014_pre_auth_invalid_envelope_should_invalid_request(self):
         """WS-014: 鉴权前非法信封应返回 invalid_request 并断连。"""
         result = TestResult("WS-014 鉴权前非法信封返回 invalid_request")
@@ -1404,6 +1473,87 @@ class TestWsEvents:
                     if not ws.wait_for_close(timeout=2):
                         result.mark_failure(f"❌ {case['name']} 返回 invalid_request 后连接未关闭")
                         return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_ws_014b_post_auth_invalid_json_should_parse_error(self):
+        """WS-014B: 鉴权后非法 JSON 应返回 parse_error。"""
+        result = TestResult("WS-014B 鉴权后非法JSON返回 parse_error")
+
+        try:
+            _, ws_url, token = self._runtime_hub_info()
+            with SimpleWebSocketClient(ws_url) as ws:
+                auth_response = self._authenticate(ws, token, request_id="auth-14b")
+                if not RpcAssertions.expect_success(result, auth_response):
+                    return result
+
+                ws.send_text('{"jsonrpc":"2.0","id":"bad-json-14b","method":"hub.ping","params":')
+                response = ws.recv_json(timeout=3)
+                if not RpcAssertions.expect_error(result, response, -32700, "parse_error", expected_id=None):
+                    return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_ws_014c_post_auth_invalid_envelope_should_invalid_request(self):
+        """WS-014C: 鉴权后非法信封应返回 invalid_request。"""
+        result = TestResult("WS-014C 鉴权后非法信封返回 invalid_request")
+
+        try:
+            _, ws_url, token = self._runtime_hub_info()
+            with SimpleWebSocketClient(ws_url) as ws:
+                auth_response = self._authenticate(ws, token, request_id="auth-14c")
+                if not RpcAssertions.expect_success(result, auth_response):
+                    return result
+
+                ws.send_json({
+                    "jsonrpc": "1.0",
+                    "id": "bad-envelope-14c",
+                    "method": "hub.ping",
+                    "params": {}
+                })
+                response = ws.recv_json(timeout=3)
+                if not RpcAssertions.expect_error(result, response, -32600, "invalid_request", expected_id="bad-envelope-14c"):
+                    return result
+
+            result.mark_success()
+        except Exception as e:
+            result.mark_failure(str(e))
+
+        return result
+
+    def test_ws_014d_post_auth_batch_root_array_should_invalid_request(self):
+        """WS-014D: 鉴权后根数组 batch 应返回单一 invalid_request。"""
+        result = TestResult("WS-014D 鉴权后根数组batch返回 invalid_request")
+
+        try:
+            _, ws_url, token = self._runtime_hub_info()
+            with SimpleWebSocketClient(ws_url) as ws:
+                auth_response = self._authenticate(ws, token, request_id="auth-14d")
+                if not RpcAssertions.expect_success(result, auth_response):
+                    return result
+
+                ws.send_json([
+                    {
+                        "jsonrpc": "2.0",
+                        "id": "batch-14d",
+                        "method": "hub.ping",
+                        "params": {}
+                    }
+                ])
+                response = ws.recv_json(timeout=3)
+                if not isinstance(response, dict):
+                    result.mark_failure(f"❌ 鉴权后根数组 batch 响应不是单一 JSON-RPC 对象: {response}")
+                    return result
+                if not RpcAssertions.expect_error(result, response, -32600, "invalid_request", expected_id=None):
+                    return result
 
             result.mark_success()
         except Exception as e:
@@ -1605,6 +1755,7 @@ class TestWsEvents:
     def run_all_tests(self, full=False):
         results = [
             self.test_ws_001_first_message_must_authenticate(),
+            self.test_ws_001a_first_get_version_message_must_authenticate(),
             self.test_ws_002_pre_auth_notification_should_close_connection(),
             self.test_ws_003_authenticate_invalid_token_should_close(),
             self.test_ws_004_authenticate_unsupported_protocol_should_close(),
@@ -1621,7 +1772,11 @@ class TestWsEvents:
             self.test_ws_012d_should_push_definition_upserted_event(),
             self.test_ws_012e_should_push_definition_deleted_event(),
             self.test_ws_013_pre_auth_invalid_json_should_parse_error(),
+            self.test_ws_013b_pre_auth_invalid_utf8_should_parse_error(),
             self.test_ws_014_pre_auth_invalid_envelope_should_invalid_request(),
+            self.test_ws_014b_post_auth_invalid_json_should_parse_error(),
+            self.test_ws_014c_post_auth_invalid_envelope_should_invalid_request(),
+            self.test_ws_014d_post_auth_batch_root_array_should_invalid_request(),
             self.test_ws_015_first_authenticate_without_id_should_invalid_request(),
             self.test_ws_016_pre_auth_batch_root_array_should_invalid_request(),
             self.test_ws_017_authenticate_invalid_params_should_close_and_block_retry(),

@@ -25,7 +25,7 @@ public class DefinitionProviderTests : IDisposable
     [Fact]
     public void Impl_Refresh_AfterFileAdded_ShouldExposeUpdatedSnapshot()
     {
-        var loader = new DefinitionLoader(_tempDirectory, Mock.Of<ILogger<DefinitionLoader>>());
+        var loader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), Mock.Of<ILogger<DefinitionLoader>>());
         var provider = new DefinitionProvider(loader);
 
         provider.Refresh();
@@ -41,9 +41,49 @@ public class DefinitionProviderTests : IDisposable
     }
 
     [Fact]
+    public void Impl_GetAllDefinitions_BeforeRefresh_ShouldExposePreviousSnapshotOnly()
+    {
+        var loader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), Mock.Of<ILogger<DefinitionLoader>>());
+        var provider = new DefinitionProvider(loader);
+
+        provider.Refresh();
+        Assert.Empty(provider.GetAllDefinitions());
+
+        WriteDefinition("snapshot-list-target");
+
+        var staleDefinitions = provider.GetAllDefinitions();
+        Assert.DoesNotContain(staleDefinitions, definition => definition.AppId == "snapshot-list-target");
+
+        provider.Refresh();
+
+        var freshDefinitions = provider.GetAllDefinitions();
+        Assert.Contains(freshDefinitions, definition => definition.AppId == "snapshot-list-target");
+    }
+
+    [Fact]
+    public void Impl_GetDefinition_BeforeRefresh_ShouldReadPreviousSnapshotOnly()
+    {
+        var loader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), Mock.Of<ILogger<DefinitionLoader>>());
+        var provider = new DefinitionProvider(loader);
+
+        provider.Refresh();
+        Assert.Null(provider.GetDefinition("snapshot-get-target", ScopeContract.Global));
+
+        WriteDefinition("snapshot-get-target");
+
+        Assert.Null(provider.GetDefinition("snapshot-get-target", ScopeContract.Global));
+
+        provider.Refresh();
+
+        var definition = provider.GetDefinition("snapshot-get-target", ScopeContract.Global);
+        Assert.NotNull(definition);
+        Assert.Equal("snapshot-get-target", definition!.AppId);
+    }
+
+    [Fact]
     public void Impl_GetDefinition_WhenMissing_ShouldReturnNull()
     {
-        var loader = new DefinitionLoader(_tempDirectory, Mock.Of<ILogger<DefinitionLoader>>());
+        var loader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), Mock.Of<ILogger<DefinitionLoader>>());
         var provider = new DefinitionProvider(loader);
         provider.Refresh();
 
@@ -52,9 +92,9 @@ public class DefinitionProviderTests : IDisposable
     }
 
     [Fact]
-    public void Impl_Refresh_WhenLaunchExePathMissing_ShouldIgnoreInvalidDefinition()
+    public void Impl_Refresh_WhenLaunchExePathMissing_ShouldKeepDefinitionForLaunchTimeValidation()
     {
-        var loader = new DefinitionLoader(_tempDirectory, Mock.Of<ILogger<DefinitionLoader>>());
+        var loader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), Mock.Of<ILogger<DefinitionLoader>>());
         var provider = new DefinitionProvider(loader);
 
         var payload = """
@@ -68,20 +108,29 @@ public class DefinitionProviderTests : IDisposable
         }
         """;
 
-        File.WriteAllText(
-            Path.Combine(_tempDirectory, AppDefinitionIdentity.Create("broken.launch.app", ScopeContract.Global).GetFileName()),
-            payload);
+        DefinitionCatalogTestHelper.WriteCatalogText(
+            DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory),
+            $$"""
+            {
+              "version": 1,
+              "definitions": [
+                {{payload}}
+              ]
+            }
+            """);
 
         provider.Refresh();
 
-        Assert.Null(provider.GetDefinition("broken.launch.app", ScopeContract.Global));
-        Assert.Empty(provider.GetAllDefinitions());
+        var definition = provider.GetDefinition("broken.launch.app", ScopeContract.Global);
+        Assert.NotNull(definition);
+        Assert.Null(definition.Launch!.ExePath);
+        Assert.Single(provider.GetAllDefinitions());
     }
 
     [Fact]
     public void Impl_Refresh_WhenDefinitionDirectoryMissing_ShouldClearStaleSnapshot()
     {
-        var loader = new DefinitionLoader(_tempDirectory, Mock.Of<ILogger<DefinitionLoader>>());
+        var loader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), Mock.Of<ILogger<DefinitionLoader>>());
         var provider = new DefinitionProvider(loader);
 
         WriteDefinition("provider.app");
@@ -99,7 +148,7 @@ public class DefinitionProviderTests : IDisposable
     [Fact]
     public void Impl_Refresh_WithMixedAppIdsAndScopes_ShouldExposeStableOrderedSnapshot()
     {
-        var loader = new DefinitionLoader(_tempDirectory, Mock.Of<ILogger<DefinitionLoader>>());
+        var loader = new DefinitionLoader(DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory), Mock.Of<ILogger<DefinitionLoader>>());
         var provider = new DefinitionProvider(loader);
 
         WriteDefinition("provider.zeta", "workspace-z");
@@ -124,6 +173,53 @@ public class DefinitionProviderTests : IDisposable
                 "provider.zeta|workspace-z"
             },
             orderedDefinitions);
+    }
+
+    [Fact]
+    public void Impl_Refresh_WithInvalidRecordAndDuplicateIdentity_ShouldIgnoreInvalidAndExposeOneStableDefinition()
+    {
+        var catalogPath = DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory);
+        var loader = new DefinitionLoader(catalogPath, Mock.Of<ILogger<DefinitionLoader>>());
+        var provider = new DefinitionProvider(loader);
+
+        DefinitionCatalogTestHelper.WriteCatalogText(
+            catalogPath,
+            """
+            {
+              "version": 1,
+              "definitions": [
+                {
+                  "appId": "provider.duplicate",
+                  "scope": "workspace-a",
+                  "displayName": "First Definition"
+                },
+                {
+                  "appId": "provider.duplicate",
+                  "scope": "workspace-a",
+                  "displayName": "Second Definition"
+                },
+                {
+                  "appId": "provider.invalid",
+                  "scope": 1,
+                  "displayName": "Invalid Definition"
+                },
+                {
+                  "appId": "provider.valid",
+                  "scope": "",
+                  "displayName": "Valid Definition"
+                }
+              ]
+            }
+            """);
+
+        provider.Refresh();
+
+        var definitions = provider.GetAllDefinitions();
+        Assert.Equal(2, definitions.Count);
+        var duplicate = Assert.Single(definitions, definition => definition.AppId == "provider.duplicate");
+        Assert.Equal("workspace-a", duplicate.Scope);
+        Assert.Equal("First Definition", duplicate.DisplayName);
+        Assert.Null(provider.GetDefinition("provider.duplicate", "1"));
     }
 
     /// <inheritdoc />
@@ -154,8 +250,8 @@ public class DefinitionProviderTests : IDisposable
         }
         """;
 
-        File.WriteAllText(
-            Path.Combine(_tempDirectory, AppDefinitionIdentity.Create(appId, scope).GetFileName()),
+        DefinitionCatalogTestHelper.UpsertDefinition(
+            DefinitionCatalogTestHelper.GetCatalogPath(_tempDirectory),
             payload);
     }
 }
