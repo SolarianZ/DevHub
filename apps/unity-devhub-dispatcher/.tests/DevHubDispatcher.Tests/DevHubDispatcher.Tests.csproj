@@ -25,6 +25,7 @@
     <Compile Include="../../Editor/Core/DevHubDispatcherAppContractFactory.cs" Link="Shared/DevHubDispatcherAppContractFactory.cs" />
     <Compile Include="../../Editor/Core/DevHubDispatcherIdentityLogic.cs" Link="Shared/DevHubDispatcherIdentityLogic.cs" />
     <Compile Include="../../Editor/Core/DevHubDispatcherHostRequestFactory.cs" Link="Shared/DevHubDispatcherHostRequestFactory.cs" />
+    <Compile Include="../../Editor/Core/DevHubDispatcherLaunchBinding.cs" Link="Shared/DevHubDispatcherLaunchBinding.cs" />
     <Compile Include="../../Editor/Core/DevHubDispatcherSendOptions.cs" Link="Shared/DevHubDispatcherSendOptions.cs" />
   </ItemGroup>
 

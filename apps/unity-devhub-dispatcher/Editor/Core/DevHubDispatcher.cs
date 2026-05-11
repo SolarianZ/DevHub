@@ -471,10 +471,11 @@ namespace DevHubDispatcher.Editor
                 }, cancellationToken);
 
                 await client.UpsertDefinitionAsync(BuildAppDefinition(identity, editorContext), cancellationToken);
-                RegisterInstanceResult registerResult = await client.RegisterInstanceAsync(
-                    BuildAppInstanceRegistration(identity, editorContext),
-                    identity.InstancePassword,
-                    cancellationToken);
+                AppInstanceRegistration registration = BuildAppInstanceRegistration(identity, editorContext);
+                string launchId = DevHubDispatcherLaunchBinding.ResolveLaunchId();
+                RegisterInstanceResult registerResult = launchId == null
+                    ? await client.RegisterInstanceAsync(registration, identity.InstancePassword, cancellationToken)
+                    : await client.RegisterInstanceAsync(registration, identity.InstancePassword, launchId, cancellationToken);
                 return Result<RuntimeConnection>.Ok(
                     new RuntimeConnection(client, registerResult.Instance, client.Runtime.RuntimeTuning),
                     string.Empty);
