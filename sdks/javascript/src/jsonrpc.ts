@@ -37,11 +37,6 @@ export function validateResponseEnvelope(payload: unknown, requestId: string): R
     throw new Error("JSON-RPC response has an invalid jsonrpc version.");
   }
 
-  const responseId = readResponseId(root, "JSON-RPC response");
-  if (responseId !== requestId) {
-    throw new Error("JSON-RPC response id does not match the request id.");
-  }
-
   const hasResult = "result" in root;
   const hasError = "error" in root && root.error !== null && root.error !== undefined;
   if (hasResult === hasError) {
@@ -50,6 +45,11 @@ export function validateResponseEnvelope(payload: unknown, requestId: string): R
 
   if (hasError) {
     throw buildRpcError(root.error as unknown, requestId);
+  }
+
+  const responseId = readResponseId(root, "JSON-RPC response");
+  if (responseId !== requestId) {
+    throw new Error("JSON-RPC response id does not match the request id.");
   }
 
   const result = root.result as unknown;

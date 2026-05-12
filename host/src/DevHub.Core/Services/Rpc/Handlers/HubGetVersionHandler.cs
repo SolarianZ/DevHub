@@ -16,8 +16,6 @@ public sealed class HubGetVersionHandler : IRpcHandler
     /// <summary>
     /// 初始化 <c>hub.getVersion</c> RPC 处理器。
     /// </summary>
-    /// <param name="hubVersionSource">Hub 版本来源。</param>
-    /// <param name="logger">日志记录器。</param>
     public HubGetVersionHandler(IHubVersionSource hubVersionSource, ILogger<HubGetVersionHandler> logger)
     {
         _hubVersionSource = hubVersionSource ?? throw new ArgumentNullException(nameof(hubVersionSource));
@@ -30,7 +28,15 @@ public sealed class HubGetVersionHandler : IRpcHandler
     /// <inheritdoc />
     public Task<JsonRpcResponse> HandleAsync(JsonRpcRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogDebug("收到 hub.getVersion 请求，RequestId: {RequestId}, 参数: {Params}", request.Id, RpcLogJsonSerializer.Serialize(request.Params));
+        if (!string.Equals(request.Method, HubRpcMethods.HubGetVersion, StringComparison.Ordinal))
+        {
+            return Task.FromResult(RpcErrorFactory.MethodNotFound(request.Id));
+        }
+
+        _logger.LogDebug(
+            "收到 hub.getVersion 请求，RequestId: {RequestId}, 参数: {Params}",
+            request.Id,
+            RpcLogJsonSerializer.Serialize(request.Params));
 
         if (!AcceptsParams(request.Params))
         {

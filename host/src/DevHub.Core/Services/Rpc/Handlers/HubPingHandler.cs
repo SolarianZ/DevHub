@@ -7,7 +7,7 @@ using System.Text.Json;
 namespace DevHub.Core.Services.Rpc.Handlers;
 
 /// <summary>
-/// 处理hub.ping方法的RPC处理器
+/// 处理 <c>hub.ping</c> 方法的 RPC 处理器。
 /// </summary>
 public class HubPingHandler : IRpcHandler
 {
@@ -15,10 +15,8 @@ public class HubPingHandler : IRpcHandler
     private readonly ILogger<HubPingHandler> _logger;
 
     /// <summary>
-    /// 初始化 hub.ping RPC 处理器。
+    /// 初始化 <c>hub.ping</c> RPC 处理器。
     /// </summary>
-    /// <param name="clock">系统时钟。</param>
-    /// <param name="logger">日志记录器。</param>
     public HubPingHandler(IClock clock, ILogger<HubPingHandler> logger)
     {
         _clock = clock;
@@ -31,7 +29,15 @@ public class HubPingHandler : IRpcHandler
     /// <inheritdoc />
     public Task<JsonRpcResponse> HandleAsync(JsonRpcRequest request, CancellationToken cancellationToken)
     {
-        _logger.LogDebug("收到 hub.ping 请求，RequestId: {RequestId}, 参数: {Params}", request.Id, RpcLogJsonSerializer.Serialize(request.Params));
+        if (!string.Equals(request.Method, HubRpcMethods.HubPing, StringComparison.Ordinal))
+        {
+            return Task.FromResult(RpcErrorFactory.MethodNotFound(request.Id));
+        }
+
+        _logger.LogDebug(
+            "收到 hub.ping 请求，RequestId: {RequestId}, 参数: {Params}",
+            request.Id,
+            RpcLogJsonSerializer.Serialize(request.Params));
 
         if (!AcceptsParams(request.Params))
         {

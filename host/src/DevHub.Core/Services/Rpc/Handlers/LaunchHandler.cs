@@ -29,6 +29,11 @@ public class LaunchHandler : IRpcHandler
     /// <inheritdoc />
     public async Task<JsonRpcResponse> HandleAsync(JsonRpcRequest request, CancellationToken cancellationToken)
     {
+        if (!string.Equals(request.Method, HubRpcMethods.HubAppsLaunch, StringComparison.Ordinal))
+        {
+            return RpcErrorFactory.MethodNotFound(request.Id);
+        }
+
         if (!RpcParamReader.TryReadParamsObject(request, out var paramsElement, out var invalidParams))
         {
             LogParameterRejected(request.Id, appId: null, scope: null, dedupeKeyPresent: false, waitForRegisterMs: null, "params_not_object");

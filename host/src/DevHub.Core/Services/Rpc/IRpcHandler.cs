@@ -14,6 +14,11 @@ public interface IRpcHandler
     string Method { get; }
 
     /// <summary>
+    /// 鎸囩ず褰撳墠澶勭悊鍣ㄦ槸鍚﹀弬涓庡墠缂€璺敱銆?
+    /// </summary>
+    bool SupportsPrefixRouting => false;
+
+    /// <summary>
     /// 异步处理一条 JSON-RPC 请求。
     /// </summary>
     /// <param name="request">已完成协议层校验并附带运行时上下文的请求对象。</param>

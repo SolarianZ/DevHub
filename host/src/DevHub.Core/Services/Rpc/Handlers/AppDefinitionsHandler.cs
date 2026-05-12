@@ -48,6 +48,9 @@ public class AppDefinitionsHandler : IRpcHandler
     public string Method => "hub.apps";
 
     /// <inheritdoc />
+    public bool SupportsPrefixRouting => true;
+
+    /// <inheritdoc />
     public async Task<JsonRpcResponse> HandleAsync(JsonRpcRequest request, CancellationToken cancellationToken)
     {
         _logger.LogDebug("收到应用程序定义相关RPC请求: {Method}, RequestId: {RequestId}", request.Method, request.Id);

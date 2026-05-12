@@ -17,10 +17,6 @@ def validate_response_envelope(root: Any, request_id: str) -> dict[str, Any]:
     if root.get("jsonrpc") != "2.0":
         raise RuntimeError("JSON-RPC 响应的 jsonrpc 版本非法。")
 
-    response_id = read_response_id(root)
-    if response_id != request_id:
-        raise RuntimeError("JSON-RPC 响应的 id 与请求不匹配。")
-
     has_result = "result" in root
     has_error = "error" in root and root.get("error") is not None
     if has_result == has_error:
@@ -48,6 +44,10 @@ def validate_response_envelope(root: Any, request_id: str) -> dict[str, Any]:
             data=data,
             request_id=request_id,
         )
+
+    response_id = read_response_id(root)
+    if response_id != request_id:
+        raise RuntimeError("JSON-RPC 响应的 id 与请求不匹配。")
 
     result = root.get("result")
     if not isinstance(result, dict):

@@ -44,6 +44,10 @@ public class RpcRouter
         }
 
         _orderedPrefixHandlers = _handlers
+            .Select(static entry => new KeyValuePair<string, List<IRpcHandler>>(
+                entry.Key,
+                entry.Value.Where(static handler => handler.SupportsPrefixRouting).ToList()))
+            .Where(static entry => entry.Value.Count > 0)
             .OrderByDescending(static entry => entry.Key.Length)
             .ThenBy(entry => registrationOrder[entry.Key])
             .ToArray();

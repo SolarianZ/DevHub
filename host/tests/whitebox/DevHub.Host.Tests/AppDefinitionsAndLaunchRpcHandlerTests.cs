@@ -408,6 +408,24 @@ public sealed class AppDefinitionsAndLaunchRpcHandlerTests : IDisposable
 
     [Fact]
     [Trait("Category", "Impl")]
+    public async Task Impl_6_3_12_LaunchRpcHandler_WhenMethodUnknown_ShouldReturnMethodNotFoundWithoutLaunching()
+    {
+        using var context = CreateDefinitionContext();
+        var processLauncher = new Mock<IProcessLauncher>(MockBehavior.Strict);
+        var handler = CreateLaunchHandler(context, processLauncher: processLauncher.Object);
+
+        var response = await handler.HandleAsync(
+            CreateRequest("hub.apps.launch.anything", "launch-method-unknown", new { appId = "launch.success", scope = ScopeContract.Global }),
+            CancellationToken.None);
+
+        AssertError(response, -32601, "method_not_found", "launch-method-unknown");
+        processLauncher.Verify(
+            launcher => launcher.Start(It.IsAny<LaunchConfiguration>(), It.IsAny<string?>()),
+            Times.Never);
+    }
+
+    [Fact]
+    [Trait("Category", "Impl")]
     public async Task Impl_6_3_12_LaunchRpcHandler_ShouldMapLaunchErrorsAndSuccess()
     {
         using var context = CreateDefinitionContext();

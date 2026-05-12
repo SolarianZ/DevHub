@@ -108,6 +108,9 @@ public class InvocationHandler : IRpcHandler
     public string Method => "hub.invoke";
 
     /// <inheritdoc />
+    public bool SupportsPrefixRouting => true;
+
+    /// <inheritdoc />
     public Task<JsonRpcResponse> HandleAsync(JsonRpcRequest request, CancellationToken cancellationToken)
     {
         return request.Method switch

@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from devhub_sdk._jsonrpc import validate_response_envelope
+from devhub_sdk.exceptions import DevHubRpcException
 
 
 @pytest.mark.parametrize("data", [None, {"callback": lambda: "ignored"}])
@@ -35,6 +36,28 @@ def test_validate_response_envelope_should_accept_int64_numeric_response_id() ->
     )
 
     assert result["ok"] is True
+
+
+def test_validate_response_envelope_when_error_response_id_is_null_should_raise_devhub_rpc_exception() -> None:
+    with pytest.raises(DevHubRpcException) as exc_info:
+        validate_response_envelope(
+            {
+                "jsonrpc": "2.0",
+                "id": None,
+                "error": {
+                    "code": -32001,
+                    "message": "unauthorized",
+                    "data": {
+                        "reason": "invalid_token",
+                    },
+                },
+            },
+            "req-1",
+        )
+
+    assert exc_info.value.code == -32001
+    assert exc_info.value.reason == "invalid_token"
+    assert exc_info.value.request_id == "req-1"
 
 
 @pytest.mark.parametrize(

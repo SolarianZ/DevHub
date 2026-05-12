@@ -2,6 +2,7 @@ namespace DevHub.Tests;
 
 using System.Text.Json;
 using DevHub.Core.Models.Rpc;
+using DevHub.Core.Services;
 using DevHub.Core.Services.Rpc;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -59,6 +60,7 @@ public sealed class RpcRouterFaultInjectionTests
     {
         var handler = new Mock<IRpcHandler>();
         handler.SetupGet(static candidate => candidate.Method).Returns("hub.apps");
+        handler.SetupGet(static candidate => candidate.SupportsPrefixRouting).Returns(true);
         handler
             .Setup(static candidate => candidate.HandleAsync(It.IsAny<JsonRpcRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new JsonRpcResponse
@@ -88,14 +90,17 @@ public sealed class RpcRouterFaultInjectionTests
         var broadHandler = new TestHandler(
             "hub",
             "hub",
+            supportsPrefixRouting: true,
             request => Task.FromResult(MethodNotFound(request.Id)));
         var mediumHandler = new TestHandler(
             "hub.apps",
             "hub.apps",
+            supportsPrefixRouting: true,
             request => Task.FromResult(MethodNotFound(request.Id)));
         var specificHandler = new TestHandler(
             "hub.apps.instances",
             "hub.apps.instances",
+            supportsPrefixRouting: true,
             request => Task.FromResult(Success(request.Id, "hub.apps.instances")));
 
         var router = new RpcRouter([broadHandler, mediumHandler, specificHandler], Mock.Of<ILogger<RpcRouter>>());
@@ -116,10 +121,12 @@ public sealed class RpcRouterFaultInjectionTests
         var firstHandler = new TestHandler(
             "hub.apps",
             "first",
+            supportsPrefixRouting: true,
             request => Task.FromResult(MethodNotFound(request.Id)));
         var secondHandler = new TestHandler(
             "hub.apps",
             "second",
+            supportsPrefixRouting: true,
             request => Task.FromResult(Success(request.Id, "second")));
 
         var router = new RpcRouter([firstHandler, secondHandler], Mock.Of<ILogger<RpcRouter>>());
@@ -209,6 +216,7 @@ public sealed class RpcRouterFaultInjectionTests
         var handler = new TestHandler(
             "hub.apps",
             "prefix-canceled",
+            supportsPrefixRouting: true,
             callOrder,
             _ => throw new OperationCanceledException());
         var router = new RpcRouter([handler], Mock.Of<ILogger<RpcRouter>>());
@@ -231,10 +239,12 @@ public sealed class RpcRouterFaultInjectionTests
         var broadHandler = new TestHandler(
             "hub",
             "hub",
+            supportsPrefixRouting: true,
             request => Task.FromResult(MethodNotFound(request.Id)));
         var failingHandler = new TestHandler(
             "hub.apps",
             "hub.apps",
+            supportsPrefixRouting: true,
             _ => throw new InvalidOperationException("boom"));
 
         var router = new RpcRouter([broadHandler, failingHandler], Mock.Of<ILogger<RpcRouter>>());
@@ -255,10 +265,12 @@ public sealed class RpcRouterFaultInjectionTests
         var broadHandler = new TestHandler(
             "hub",
             "hub",
+            supportsPrefixRouting: true,
             request => Task.FromResult(MethodNotFound(request.Id)));
         var specificHandler = new TestHandler(
             "hub.apps",
             "hub.apps",
+            supportsPrefixRouting: true,
             request => Task.FromResult(MethodNotFound(request.Id)));
 
         var router = new RpcRouter([broadHandler, specificHandler], Mock.Of<ILogger<RpcRouter>>());
@@ -274,6 +286,27 @@ public sealed class RpcRouterFaultInjectionTests
         Assert.Equal(-32601, response.Error!.Code);
         Assert.Equal("method_not_found", response.Error.Message);
         Assert.Equal("prefix-not-found", response.Id);
+    }
+
+    [Fact]
+    public async Task Impl_RouteAsync_WhenSingleMethodHandlerDoesNotOptIntoPrefixRouting_ShouldReturnMethodNotFoundWithoutInvokingHandler()
+    {
+        var handler = new Mock<IRpcHandler>();
+        handler.SetupGet(static candidate => candidate.Method).Returns(HubRpcMethods.HubAppsLaunch);
+
+        var router = new RpcRouter([handler.Object], Mock.Of<ILogger<RpcRouter>>());
+
+        var response = await router.RouteAsync(new JsonRpcRequest
+        {
+            Id = "launch-prefix-blocked",
+            Method = "hub.apps.launch.anything",
+            Params = null
+        }, CancellationToken.None);
+
+        Assert.NotNull(response.Error);
+        Assert.Equal(-32601, response.Error!.Code);
+        Assert.Equal("method_not_found", response.Error.Message);
+        handler.Verify(static candidate => candidate.HandleAsync(It.IsAny<JsonRpcRequest>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -360,8 +393,9 @@ public sealed class RpcRouterFaultInjectionTests
         public TestHandler(
             string method,
             string name,
+            bool supportsPrefixRouting,
             Func<JsonRpcRequest, Task<JsonRpcResponse>> callback)
-            : this(method, name, null, callback)
+            : this(method, name, supportsPrefixRouting, null, callback)
         {
         }
 
@@ -370,14 +404,27 @@ public sealed class RpcRouterFaultInjectionTests
             string name,
             List<string>? callOrder,
             Func<JsonRpcRequest, Task<JsonRpcResponse>> callback)
+            : this(method, name, false, callOrder, callback)
+        {
+        }
+
+        public TestHandler(
+            string method,
+            string name,
+            bool supportsPrefixRouting,
+            List<string>? callOrder,
+            Func<JsonRpcRequest, Task<JsonRpcResponse>> callback)
         {
             Method = method;
             _name = name;
+            SupportsPrefixRouting = supportsPrefixRouting;
             _callOrder = callOrder;
             _callback = callback;
         }
 
         public string Method { get; }
+
+        public bool SupportsPrefixRouting { get; }
 
         public Task<JsonRpcResponse> HandleAsync(JsonRpcRequest request, CancellationToken cancellationToken)
         {
