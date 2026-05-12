@@ -232,6 +232,35 @@ export function AppShell(props: AppShellProps) {
   );
 }
 
+function WorkspaceContainer(props: {
+  children: ReactNode;
+  className?: string;
+}) {
+  const className = props.className ? `workspace-view ${props.className}` : "workspace-view";
+
+  return (
+    <section className={className}>
+      <div className="workspace-container">{props.children}</div>
+    </section>
+  );
+}
+
+function PageCard(props: {
+  children: ReactNode;
+  className?: string;
+}) {
+  const className = props.className ? `page-card ${props.className}` : "page-card";
+  return <div className={className}>{props.children}</div>;
+}
+
+function InfoCard(props: {
+  children: ReactNode;
+  className?: string;
+}) {
+  const className = props.className ? `info-card ${props.className}` : "info-card";
+  return <div className={className}>{props.children}</div>;
+}
+
 function MonitorSidebar(props: {
   activeWorkspace: SidebarWorkspace;
   collapsed: boolean;
@@ -349,42 +378,44 @@ function HomeDiscoveryWorkspace(props: {
   const showRecoveryActions = bootstrap?.phase === "host_incompatible";
 
   return (
-    <section className="workspace-view">
+    <WorkspaceContainer className="home-workspace">
       <h1 className="sr-only">主页</h1>
 
-      <div className="discovery-view">
-        <div className="loader" aria-hidden="true" />
-        <p className="status-title">{getDiscoveryTitle(bootstrap)}</p>
-        <p className="status-path">目标位置：{bootstrap?.effectiveDataDir ?? "加载中"}</p>
-        {bootstrap?.lastProblem?.message ? (
-          <p className="status-detail">{bootstrap.lastProblem.message}</p>
-        ) : null}
+      <PageCard className="discovery-card">
+        <div className="discovery-view">
+          <div className="loader" aria-hidden="true" />
+          <p className="status-title">{getDiscoveryTitle(bootstrap)}</p>
+          <p className="status-path">目标位置：{bootstrap?.effectiveDataDir ?? "加载中"}</p>
+          {bootstrap?.lastProblem?.message ? (
+            <p className="status-detail">{bootstrap.lastProblem.message}</p>
+          ) : null}
 
-        {showLaunchAction || showRecoveryActions ? (
-          <div className="status-actions">
-            {showLaunchAction ? (
-              <button
-                type="button"
-                onClick={requiresSettings ? onOpenSettings : onLaunchHost}
-                disabled={busy && !requiresSettings}
-              >
-                {requiresSettings ? "前往设置" : busy ? "正在启动..." : "启动 Host"}
-              </button>
-            ) : null}
-            {showRecoveryActions ? (
-              <>
-                <button type="button" onClick={onResumeDiscovery} disabled={busy}>
-                  {busy ? "正在重新扫描..." : "重新扫描"}
+          {showLaunchAction || showRecoveryActions ? (
+            <div className="status-actions">
+              {showLaunchAction ? (
+                <button
+                  type="button"
+                  onClick={requiresSettings ? onOpenSettings : onLaunchHost}
+                  disabled={busy && !requiresSettings}
+                >
+                  {requiresSettings ? "前往设置" : busy ? "正在启动..." : "启动 Host"}
                 </button>
-                <button type="button" onClick={onOpenSettings}>
-                  前往设置
-                </button>
-              </>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
-    </section>
+              ) : null}
+              {showRecoveryActions ? (
+                <>
+                  <button type="button" onClick={onResumeDiscovery} disabled={busy}>
+                    {busy ? "正在重新扫描..." : "重新扫描"}
+                  </button>
+                  <button type="button" onClick={onOpenSettings}>
+                    前往设置
+                  </button>
+                </>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      </PageCard>
+    </WorkspaceContainer>
   );
 }
 
@@ -430,17 +461,19 @@ function HomeStatusWorkspace(props: {
   );
 
   return (
-    <section className="workspace-view">
+    <WorkspaceContainer className="home-workspace">
       <h1 className="sr-only">主页</h1>
 
-      <header className="host-header">
-        <p className={`host-endpoint session-${hostSessionStatus}`}>
-          {bootstrap?.connection?.rpcEndpoint ?? "未连接"}
-        </p>
-        <p className="host-directory">
-          数据目录：{bootstrap?.effectiveDataDir ?? settings?.effectiveDataDir ?? "加载中"}
-        </p>
-      </header>
+      <PageCard className="host-summary-card">
+        <header className="host-header">
+          <p className={`host-endpoint session-${hostSessionStatus}`}>
+            {bootstrap?.connection?.rpcEndpoint ?? "未连接"}
+          </p>
+          <p className="host-directory">
+            数据目录：{bootstrap?.effectiveDataDir ?? settings?.effectiveDataDir ?? "加载中"}
+          </p>
+        </header>
+      </PageCard>
 
       {versionNotice ? (
         <div className="warning-banner" role="status">
@@ -489,7 +522,7 @@ function HomeStatusWorkspace(props: {
           </InventorySection>
         </>
       ) : null}
-    </section>
+    </WorkspaceContainer>
   );
 }
 
@@ -504,7 +537,7 @@ function InventorySection(props: {
   const { action, collapsed, count, children, title, onToggle } = props;
 
   return (
-    <section className={`section ${collapsed ? "collapsed" : ""}`}>
+    <section className={`page-card section ${collapsed ? "collapsed" : ""}`}>
       <header className="section-header">
         <button
           type="button"
@@ -658,65 +691,77 @@ function HelpWorkspace(props: {
       : "未知";
 
   return (
-    <section className="workspace-view">
+    <WorkspaceContainer className="help-workspace">
       <h1 className="view-title">帮助</h1>
 
-      <div className="support-group">
-        <div className="form-group">
-          <label className="form-label">Host 日志</label>
-          <div className="form-value-row">
-            <div className="path-box">{hostLogDirectory}</div>
-            <button
-              type="button"
-              className="icon-button"
-              aria-label="打开 Host 日志"
-              title="打开 Host 日志"
-              onClick={() => onOpenLogDirectory("host")}
-              disabled={openingLogKind !== null}
-            >
-              <OpenExternalIcon />
-            </button>
+      <div className="info-grid support-group">
+        <InfoCard>
+          <div className="form-group">
+            <label className="form-label">Host 日志</label>
+            <div className="form-value-row">
+              <div className="path-box">{hostLogDirectory}</div>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="打开 Host 日志"
+                title="打开 Host 日志"
+                onClick={() => onOpenLogDirectory("host")}
+                disabled={openingLogKind !== null}
+              >
+                <OpenExternalIcon />
+              </button>
+            </div>
           </div>
-        </div>
+        </InfoCard>
 
-        <div className="form-group">
-          <label className="form-label">Monitor 日志</label>
-          <div className="form-value-row">
-            <div className="path-box">{settings?.monitorLogDirectory ?? "加载中"}</div>
-            <button
-              type="button"
-              className="icon-button"
-              aria-label="打开 Monitor 日志"
-              title="打开 Monitor 日志"
-              onClick={() => onOpenLogDirectory("monitor")}
-              disabled={openingLogKind !== null}
-            >
-              <OpenExternalIcon />
-            </button>
+        <InfoCard>
+          <div className="form-group">
+            <label className="form-label">Monitor 日志</label>
+            <div className="form-value-row">
+              <div className="path-box">{settings?.monitorLogDirectory ?? "加载中"}</div>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="打开 Monitor 日志"
+                title="打开 Monitor 日志"
+                onClick={() => onOpenLogDirectory("monitor")}
+                disabled={openingLogKind !== null}
+              >
+                <OpenExternalIcon />
+              </button>
+            </div>
           </div>
-        </div>
+        </InfoCard>
 
-        <div className="form-group">
-          <label className="form-label">Monitor 版本</label>
-          <div className="version-text">{monitorVersionText}</div>
-        </div>
+        <InfoCard>
+          <div className="form-group">
+            <label className="form-label">Monitor 版本</label>
+            <div className="version-text">{monitorVersionText}</div>
+          </div>
+        </InfoCard>
 
-        <div className="form-group">
-          <label className="form-label">内置 JS SDK 版本</label>
-          <div className="version-text">{sdkVersionText}</div>
-        </div>
+        <InfoCard>
+          <div className="form-group">
+            <label className="form-label">内置 JS SDK 版本</label>
+            <div className="version-text">{sdkVersionText}</div>
+          </div>
+        </InfoCard>
 
-        <div className="form-group">
-          <label className="form-label">当前 Host 版本</label>
-          <div className="version-text">{hostVersionText}</div>
-        </div>
+        <InfoCard>
+          <div className="form-group">
+            <label className="form-label">当前 Host 版本</label>
+            <div className="version-text">{hostVersionText}</div>
+          </div>
+        </InfoCard>
 
-        <div className="form-group">
-          <label className="form-label">兼容状态</label>
-          <div className="version-text">{compatibilityText}</div>
-        </div>
+        <InfoCard>
+          <div className="form-group">
+            <label className="form-label">兼容状态</label>
+            <div className="version-text">{compatibilityText}</div>
+          </div>
+        </InfoCard>
       </div>
-    </section>
+    </WorkspaceContainer>
   );
 }
 
@@ -730,18 +775,20 @@ function TestWorkspace(props: {
   const { workspace, onChangeDraft, onValidate, onSend, onCancel } = props;
 
   return (
-    <section className="workspace-view test-workspace">
+    <WorkspaceContainer className="test-workspace">
       <h1 className="view-title">测试</h1>
 
       <div className="support-group">
-        <div className="form-group">
-          <label className="form-label" htmlFor="rpc-test-endpoint">
-            RPC 地址
-          </label>
-          <div id="rpc-test-endpoint" className="path-box">
-            {workspace.rpcEndpoint ?? "未连接"}
+        <PageCard className="test-meta-card">
+          <div className="form-group">
+            <label className="form-label" htmlFor="rpc-test-endpoint">
+              RPC 地址
+            </label>
+            <div id="rpc-test-endpoint" className="path-box">
+              {workspace.rpcEndpoint ?? "未连接"}
+            </div>
           </div>
-        </div>
+        </PageCard>
 
         {!workspace.available ? (
           <div className="empty-state" role="status">
@@ -749,7 +796,7 @@ function TestWorkspace(props: {
           </div>
         ) : null}
 
-        <section className="test-panel">
+        <PageCard className="test-panel">
           <label className="field">
             <span>JSON-RPC 请求文本</span>
             <textarea
@@ -805,27 +852,31 @@ function TestWorkspace(props: {
           ) : null}
 
           <div className="test-status-grid">
-            <div className="form-group">
-              <label className="form-label" htmlFor="rpc-test-status">
-                请求状态
-              </label>
-              <div id="rpc-test-status" className="path-box">
-                {workspace.requestStatusDetail}
+            <InfoCard>
+              <div className="form-group">
+                <label className="form-label" htmlFor="rpc-test-status">
+                  请求状态
+                </label>
+                <div id="rpc-test-status" className="path-box status-box">
+                  {workspace.requestStatusDetail}
+                </div>
               </div>
-            </div>
+            </InfoCard>
 
-            <div className="form-group">
-              <label className="form-label" htmlFor="rpc-test-result">
-                结果文本
-              </label>
-              <pre id="rpc-test-result" className="test-result-box">
-                {workspace.resultText ?? "当前没有可展示的响应。"}
-              </pre>
-            </div>
+            <InfoCard className="test-result-card">
+              <div className="form-group">
+                <label className="form-label" htmlFor="rpc-test-result">
+                  结果文本
+                </label>
+                <pre id="rpc-test-result" className="test-result-box">
+                  {workspace.resultText ?? "当前没有可展示的响应。"}
+                </pre>
+              </div>
+            </InfoCard>
           </div>
-        </section>
+        </PageCard>
       </div>
-    </section>
+    </WorkspaceContainer>
   );
 }
 
@@ -856,79 +907,87 @@ function SettingsWorkspace(props: {
   } = props;
 
   return (
-    <section className="workspace-view">
+    <WorkspaceContainer className="settings-workspace">
       <h1 className="view-title">设置</h1>
 
       <div className="settings-form">
-        <label className="field">
-          <span>Host 可执行文件路径</span>
-          <div className="field-input-row">
-            <input
-              type="text"
-              value={settingsDraft.hostExecutablePath ?? ""}
-              placeholder="请选择 DevHub.Host 可执行文件路径"
-              onChange={(event) => onChangeField("hostExecutablePath", event.target.value)}
-            />
-            <button
-              type="button"
-              className="icon-button"
-              aria-label="选择 Host 可执行文件"
-              title="选择 Host 可执行文件"
-              onClick={onSelectHostExecutablePath}
-              disabled={busy}
-            >
-              <FileIcon />
-            </button>
-          </div>
-          <FieldError message={fieldErrors.hostExecutablePath} />
-        </label>
+        <PageCard>
+          <label className="field">
+            <span>Host 可执行文件路径</span>
+            <div className="field-input-row">
+              <input
+                type="text"
+                value={settingsDraft.hostExecutablePath ?? ""}
+                placeholder="请选择 DevHub.Host 可执行文件路径"
+                onChange={(event) => onChangeField("hostExecutablePath", event.target.value)}
+              />
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="选择 Host 可执行文件"
+                title="选择 Host 可执行文件"
+                onClick={onSelectHostExecutablePath}
+                disabled={busy}
+              >
+                <FileIcon />
+              </button>
+            </div>
+            <FieldError message={fieldErrors.hostExecutablePath} />
+          </label>
+        </PageCard>
 
-        <label className="field">
-          <span>Host 数据目录</span>
-          <div className="field-input-row">
-            <input
-              type="text"
-              value={settingsDraft.dataDirOverride ?? ""}
-              placeholder="留空表示使用环境变量或平台默认目录"
-              onChange={(event) => onChangeField("dataDirOverride", event.target.value)}
-            />
-            <button
-              type="button"
-              className="icon-button"
-              aria-label="选择 Host 数据目录"
-              title="选择 Host 数据目录"
-              onClick={onSelectDataDirectory}
-              disabled={busy}
-            >
-              <FolderIcon />
-            </button>
-          </div>
-          <FieldError message={fieldErrors.dataDirOverride} />
-        </label>
+        <PageCard>
+          <label className="field">
+            <span>Host 数据目录</span>
+            <div className="field-input-row">
+              <input
+                type="text"
+                value={settingsDraft.dataDirOverride ?? ""}
+                placeholder="留空表示使用环境变量或平台默认目录"
+                onChange={(event) => onChangeField("dataDirOverride", event.target.value)}
+              />
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="选择 Host 数据目录"
+                title="选择 Host 数据目录"
+                onClick={onSelectDataDirectory}
+                disabled={busy}
+              >
+                <FolderIcon />
+              </button>
+            </div>
+            <FieldError message={fieldErrors.dataDirOverride} />
+          </label>
+        </PageCard>
 
         {showHideHostCommandLineWindowOption ? (
-          <div className="field">
-            <span>启动行为</span>
-            <label className="check-field">
-              <input
-                type="checkbox"
-                checked={settingsDraft.hideHostCommandLineWindow ?? true}
-                onChange={(event) => onChangeField("hideHostCommandLineWindow", event.target.checked)}
-                disabled={busy}
-              />
-              <span>隐藏 Host 命令行窗口</span>
-            </label>
-          </div>
+          <PageCard>
+            <div className="field">
+              <span>启动行为</span>
+              <label className="check-field">
+                <input
+                  type="checkbox"
+                  checked={settingsDraft.hideHostCommandLineWindow ?? true}
+                  onChange={(event) => onChangeField("hideHostCommandLineWindow", event.target.checked)}
+                  disabled={busy}
+                />
+                <span>隐藏 Host 命令行窗口</span>
+              </label>
+            </div>
+          </PageCard>
         ) : null}
 
-        <div className="definition-actions">
-          <div className="action-spacer" />
-          <button type="button" onClick={onSave} disabled={busy || !settingsDirty}>
-            {busy ? "保存中..." : "保存设置"}
-          </button>
-        </div>
+        <PageCard className="page-actions settings-actions">
+          <div className="definition-actions">
+            <div className="action-spacer" />
+            <button type="button" onClick={onSave} disabled={busy || !settingsDirty}>
+              {busy ? "保存中..." : "保存设置"}
+            </button>
+          </div>
+        </PageCard>
       </div>
-    </section>
+    </WorkspaceContainer>
   );
 }
 
@@ -943,7 +1002,7 @@ function DefinitionWorkspacePage(props: {
 
   if (!workspace) {
     return (
-      <section className="workspace-view">
+      <WorkspaceContainer className="definition-page">
         <div className="workspace-title-row">
           <button
             type="button"
@@ -956,8 +1015,10 @@ function DefinitionWorkspacePage(props: {
           </button>
           <h1 className="view-title">App Definition</h1>
         </div>
-        <EmptyState title="正在准备 App Definition 工作区" />
-      </section>
+        <PageCard>
+          <EmptyState title="正在准备 App Definition 工作区" />
+        </PageCard>
+      </WorkspaceContainer>
     );
   }
 
@@ -966,7 +1027,7 @@ function DefinitionWorkspacePage(props: {
   const disableInputs = workspace.readOnly || workspace.loading || workspace.saving;
 
   return (
-    <section className="workspace-view definition-page">
+    <WorkspaceContainer className="definition-page">
       <div className="workspace-title-row">
         <button
           type="button"
@@ -988,14 +1049,19 @@ function DefinitionWorkspacePage(props: {
       ) : null}
 
       {workspace.loading ? (
-        <EmptyState title="正在读取定义" />
+        <PageCard>
+          <EmptyState title="正在读取定义" />
+        </PageCard>
       ) : workspace.missing ? (
-        <EmptyState title={workspace.emptyStateMessage ?? "定义不可用"} />
+        <PageCard>
+          <EmptyState title={workspace.emptyStateMessage ?? "定义不可用"} />
+        </PageCard>
       ) : (
         <>
           <div className="definition-form">
-            <div className="form-grid">
-              <div className="field-stack">
+            <PageCard className="form-section">
+              <h2 className="section-title">基础信息</h2>
+              <div className="form-grid">
                 <label className="field">
                   <span>App ID</span>
                   <input
@@ -1018,32 +1084,32 @@ function DefinitionWorkspacePage(props: {
                   />
                   <FieldIssues issues={workspace.fieldErrors["definition.scope"]} />
                 </label>
+
+                <label className="field">
+                  <span>显示名称</span>
+                  <input
+                    type="text"
+                    value={workspace.form.displayName}
+                    disabled={disableInputs}
+                    onChange={(event) => onChangeField("displayName", event.target.value)}
+                  />
+                  <FieldIssues issues={workspace.fieldErrors["definition.displayName"]} />
+                </label>
+
+                <label className="field field-full">
+                  <span>描述</span>
+                  <textarea
+                    rows={3}
+                    value={workspace.form.description}
+                    disabled={disableInputs}
+                    onChange={(event) => onChangeField("description", event.target.value)}
+                  />
+                  <FieldIssues issues={workspace.fieldErrors["definition.description"]} />
+                </label>
               </div>
+            </PageCard>
 
-              <label className="field">
-                <span>显示名称</span>
-                <input
-                  type="text"
-                  value={workspace.form.displayName}
-                  disabled={disableInputs}
-                  onChange={(event) => onChangeField("displayName", event.target.value)}
-                />
-                <FieldIssues issues={workspace.fieldErrors["definition.displayName"]} />
-              </label>
-
-              <label className="field field-full">
-                <span>描述</span>
-                <textarea
-                  rows={3}
-                  value={workspace.form.description}
-                  disabled={disableInputs}
-                  onChange={(event) => onChangeField("description", event.target.value)}
-                />
-                <FieldIssues issues={workspace.fieldErrors["definition.description"]} />
-              </label>
-            </div>
-
-            <section className="form-section">
+            <PageCard className="form-section">
               <h2 className="section-title">能力</h2>
               <div className="check-grid">
                 <label className="check-field">
@@ -1068,9 +1134,9 @@ function DefinitionWorkspacePage(props: {
               <FieldIssues issues={workspace.fieldErrors["definition.capabilities"]} />
               <FieldIssues issues={workspace.fieldErrors["definition.capabilities.rpc"]} />
               <FieldIssues issues={workspace.fieldErrors["definition.capabilities.events"]} />
-            </section>
+            </PageCard>
 
-            <section className="form-section">
+            <PageCard className="form-section">
               <div className="form-section-header">
                 <h2 className="section-title">启动配置</h2>
                 <label className="check-field">
@@ -1143,33 +1209,35 @@ function DefinitionWorkspacePage(props: {
               ) : null}
 
               <FieldIssues issues={workspace.fieldErrors["definition.launch"]} />
-            </section>
+            </PageCard>
           </div>
         </>
       )}
 
       {canDelete || workspace.readOnly || (!workspace.readOnly && !workspace.missing && !workspace.loading) ? (
-        <div className="definition-actions">
-          {canDelete ? (
-            <button type="button" className="button-danger" onClick={onDelete} disabled={workspace.saving}>
-              删除定义
-            </button>
-          ) : workspace.readOnly ? (
-            <span className="definition-note">只读模式不允许保存或删除。</span>
-          ) : (
-            <div className="action-spacer" />
-          )}
-
-          {!workspace.readOnly && !workspace.missing && !workspace.loading ? (
-            <div className="button-row">
-              <button type="button" onClick={onSubmit} disabled={workspace.saving}>
-                {workspace.saving ? "处理中..." : submitLabel}
+        <PageCard className="page-actions definition-action-card">
+          <div className="definition-actions">
+            {canDelete ? (
+              <button type="button" className="button-danger" onClick={onDelete} disabled={workspace.saving}>
+                删除定义
               </button>
-            </div>
-          ) : null}
-        </div>
+            ) : workspace.readOnly ? (
+              <span className="definition-note">只读模式不允许保存或删除。</span>
+            ) : (
+              <div className="action-spacer" />
+            )}
+
+            {!workspace.readOnly && !workspace.missing && !workspace.loading ? (
+              <div className="button-row">
+                <button type="button" onClick={onSubmit} disabled={workspace.saving}>
+                  {workspace.saving ? "处理中..." : submitLabel}
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </PageCard>
       ) : null}
-    </section>
+    </WorkspaceContainer>
   );
 }
 
