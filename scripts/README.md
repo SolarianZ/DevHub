@@ -10,7 +10,7 @@ scripts/
 ├── docs/                                    # 文档维护脚本
 │   └── check_markdown_links.py              # Markdown 链接检查工具
 ├── release/                                 # 发布与版本同步脚本
-│   ├── package_release.py                   # Host、SDK 与可选 Monitor 的发布级编排入口
+│   ├── package_release.py                   # Host、SDK 与 Monitor 的发布级编排入口
 │   ├── package_host.py                      # Host 验证与双变体 ZIP 打包入口
 │   ├── package_dotnet_sdk.py                # .NET SDK 验证与打包入口
 │   ├── package_js_sdk.py                    # JS/TS SDK 验证与打包入口
@@ -26,8 +26,9 @@ scripts/
 
 ## 发布脚本约定
 
-- `scripts/release/package_release.py` 负责 release 级元数据、组件打包编排、manifest、release notes 和最终完整性检查。
+- `scripts/release/package_release.py` 负责 release 级元数据、Host / SDK / Monitor 组件打包编排、manifest、release notes 和最终完整性检查。
 - `scripts/release/package_host.py`、`package_dotnet_sdk.py`、`package_js_sdk.py`、`package_py_sdk.py`、`package_monitor.py` 负责各自产物域的独立验证或打包。
 - `scripts/release/resolve_release_metadata.py` 负责把 `preview`、`main` 与 `v*` ref 解析为统一的 channel、release id、release tag 与 release name。
 - 所有 package 脚本都支持 `--release-id` 和 `--output-root` 参数。
+- `package_release.py` 默认产出完整正式资产；`--no-host`、`--no-dotnet-sdk`、`--no-js-sdk`、`--no-py-sdk`、`--no-monitor` 用于局部验证、排障或中间装配。
 - 具备“只验证不产物化”语义的脚本提供 `--verify-only` 参数，用于执行对应工作流同级别的本地校验而不写出完整产物。

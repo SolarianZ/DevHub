@@ -201,16 +201,11 @@ jobs:
             run_sdk_js="true"
             run_sdk_python="true"
             run_sdk_conformance="true"
+            run_monitor_validation="true"
             run_integration_full_gate="true"
             run_cross_platform_smoke="true"
             prepare_release_core_assets="true"
-            if [[ "${release_channel}" == "stable" ]]; then
-              run_monitor_validation="false"
-              prepare_monitor_release_assets="false"
-            else
-              run_monitor_validation="true"
-              prepare_monitor_release_assets="true"
-            fi
+            prepare_monitor_release_assets="true"
           else
             run_primary_validation="false"
             run_sdk_dotnet="false"
@@ -1036,7 +1031,7 @@ jobs:
             --release-tag "${{ needs.route.outputs.release_tag }}" \
             --release-name "${{ needs.route.outputs.release_name }}" \
             --commit "${{ github.sha }}" \
-            --skip-monitor \
+            --no-monitor \
             --validated-externally
 
       - name: Upload core release assets
@@ -1140,9 +1135,8 @@ jobs:
       always() &&
       needs.route.outputs.is_release_intent == 'true' &&
       needs.prepare-release-core-assets.result == 'success' &&
-      (needs.route.outputs.release_channel == 'stable' ||
-       (needs.monitor-validation.result == 'success' &&
-        needs.prepare-monitor-release-assets.result == 'success'))
+      needs.monitor-validation.result == 'success' &&
+      needs.prepare-monitor-release-assets.result == 'success'
     needs:
       - route
       - monitor-validation

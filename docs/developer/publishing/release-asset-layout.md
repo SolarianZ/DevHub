@@ -83,10 +83,9 @@ GitHub Release 的上传列表由 release-level `release-manifest.json` 的 `ass
 
 ## 5. Monitor App 资产规则
 
-- preview 与 main 快照预发布包含 Monitor App 资产。
-- 稳定版发布的资产集合包含 Host 与三套 SDK。
+- 所有正式发布渠道都包含 Monitor App 资产。
 - CI 发布通过 Linux、Windows、macOS runner 生成 Monitor bundle，并在最终发布前汇总到 `monitor/<targetPlatform>/`。
-- 本地 `preview` 与 `main-snapshot` 打包会为当前机器生成一个 `monitor/<targetPlatform>/` 目录。
+- 本地 `package_release.py` 打包会为当前机器生成一个 `monitor/<targetPlatform>/` 目录；如需局部输出，可显式传入 `--no-monitor`。
 - 每个 Monitor 平台目录包含该平台的 bundle、Monitor manifest、Monitor release notes 和验证摘要。
 - release-level manifest 中的 Monitor App 资产使用 `category = monitor-app`，`target` 使用 Monitor manifest 中的 `targetPlatform`，`variant` 使用最终分发包所属的 bundle 分类。
 - Monitor 平台 manifest 保留完整平台 bundle 文件清单；release-level manifest 只列出最终上传到 GitHub Release 的 Host、SDK 与 Monitor 分发包文件。

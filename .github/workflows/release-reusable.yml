@@ -183,7 +183,6 @@ jobs:
           shopt -u dotglob
 
       - name: Download Monitor App assets from ci
-        if: needs.resolve_release_metadata.outputs.channel != 'stable'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -219,7 +218,6 @@ jobs:
           done
 
       - name: Refresh release manifest with Monitor assets
-        if: needs.resolve_release_metadata.outputs.channel != 'stable'
         run: |
           python3 scripts/release/package_release.py \
             --release-id "${{ needs.resolve_release_metadata.outputs.release_id }}" \
@@ -228,7 +226,6 @@ jobs:
             --release-name "${{ needs.resolve_release_metadata.outputs.release_name }}" \
             --commit "${{ needs.resolve_release_metadata.outputs.commit_sha }}" \
             --reuse-existing-output \
-            --skip-monitor \
             --monitor-assets-root "${{ runner.temp }}/monitor-assets"
 
       - name: Publish GitHub Release

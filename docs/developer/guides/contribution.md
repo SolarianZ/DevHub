@@ -54,7 +54,7 @@ python scripts/release/package_release.py --release-id local-dry-run --channel l
 
 - Host 白盒测试与最小 smoke 验证
 - `.NET SDK`、`JS/TS SDK`、`Python SDK` 测试
-- Host 双变体多平台发布包、三套 SDK 包、manifest 与发布说明生成
+- Host 双变体多平台发布包、三套 SDK 包、当前机器 Monitor 资产、manifest 与发布说明生成
 - 资产完整性检查
 
 若改动涉及 `apps/monitor/`，在运行该打包入口前额外执行：
@@ -73,7 +73,7 @@ python scripts/release/package_py_sdk.py --release-id py-local-check --verify-on
 python scripts/release/package_monitor.py --release-id local-dry-run
 ```
 
-其中 `package_monitor.py` 负责 Monitor 工作区的本地打包与产物归档；preview/main 发布候选资产由 `package_release.py` 汇总 Host、SDK 与 Monitor App 资产。所有 package 脚本都支持 `--help`、`--release-id` 和 `--output-root`；具备“只验证不产物化”语义的脚本支持 `--verify-only`。
+其中 `package_monitor.py` 负责 Monitor 工作区的本地打包与产物归档；`package_release.py` 默认汇总 Host、SDK 与 Monitor App 资产，并支持通过 `--no-host`、`--no-dotnet-sdk`、`--no-js-sdk`、`--no-py-sdk`、`--no-monitor` 生成局部输出。所有 package 脚本都支持 `--help`、`--release-id` 和 `--output-root`；具备“只验证不产物化”语义的脚本支持 `--verify-only`。
 
 ## 3. 外部协作者常用入口
 

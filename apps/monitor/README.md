@@ -69,13 +69,13 @@ Monitor 验收相关命令：
 - 开发态桌面运行：`npm run tauri:dev`
 - 前端单独调试：`npm run dev`
 - Monitor 单平台组件脚本入口：`python ../../scripts/release/package_monitor.py --release-id <release-id>`
-- preview/main 发布候选编排入口：`python ../../scripts/release/package_release.py --release-id <release-id> --channel preview|main-snapshot`
+- 发布候选编排入口：`python ../../scripts/release/package_release.py --release-id <release-id> --channel preview|main-snapshot|stable|local`
 - 底层 Tauri 构建命令：`npm run tauri:build`
 - 安装包与桌面快捷方式按单实例运行；重复启动时会唤醒已有主窗口，不会创建新的 Monitor 进程。
 
 `package_monitor.py` 会先校验 `package.json`、`package-lock.json`、`src-tauri/tauri.conf.json` 与 `src-tauri/Cargo.toml` 的版本一致性，再执行 `npm ci` 和 `npm run sync:version-metadata`，确保共享版本元数据在干净工作区内也可生成。默认打包路径会继续串联 `npm run verify` 与 `npm run tauri:build`，并把 bundle 产物、校验日志、manifest 和 release notes 归档到 `artifacts/monitor/<release-id>/`。`--validated-externally` 只跳过重复验证，仍会执行安装、版本元数据同步和 bundle 构建。产物 manifest 记录 Monitor 版本、仓库源码 JS SDK 版本、目标平台和 bundle 资产。命令行中出现 `--help` 时，脚本只输出能力与参数摘要，不执行版本检查、验证或打包逻辑；`--verify-only` 只执行版本与验证检查，不生成 bundle。
 
-preview/main 发布链通过主 CI 验证 Monitor，并在 `.github/workflows/release-reusable.yml` 的 Linux、Windows、macOS 矩阵中生成 Monitor App 资产。稳定版发布资产集合维持 Host 与 SDK 资产。
+所有正式发布链路都会通过主 CI 验证 Monitor，并在 Linux、Windows、macOS 矩阵中生成 Monitor App 资产。`package_release.py` 默认汇总 Host、三套 SDK 与 Monitor；如需局部验证、中间装配或排障，可显式传入 `--no-host`、`--no-dotnet-sdk`、`--no-js-sdk`、`--no-py-sdk`、`--no-monitor`。
 
 Monitor 启动后会先扫描当前有效 `DEVHUB_DATA_DIR`，并持续自动搜索可用 Host。原生 discovery 会先确认 `runtime.protocolVersion=1` 与真实 `hub.ping` 成功，再优先调用 `hub.getVersion` 获取 Host 版本；仅在 `hub.getVersion` 返回 `method_not_found` 时回退到 `runtime.hubVersion`。只有确定兼容状态为 `incompatible` 时才会阻断发现态；`updateRecommended` 与 `unknown` 会继续允许前端建立会话，并在 `主页` 顶部和 `帮助` 工作区暴露诊断信息。若前端连接阶段再次得到保护性 `incompatible` 结果，当前 session 会被主动释放，并切回阻断式提示。若自动搜索约 3 秒后仍未发现可用 Host，`主页` 才会显示 `启动 Host`；若未配置 Host 可执行文件路径，则会引导用户进入 `设置` 工作区补全配置；若发现确定不兼容的 Host，则保留发现态并提供 `重新扫描` 与 `前往设置` 恢复动作。
 

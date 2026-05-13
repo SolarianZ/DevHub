@@ -34,7 +34,8 @@ python scripts/release/package_release.py --release-id local-dry-run --channel l
 - `npm --prefix sdks/javascript test`
 - `python -m pip install -e "./sdks/python[test]" requests`
 - `python -m pytest sdks/python/tests`
-- Host 双变体 / SDK 资产完整性检查、manifest 与 release notes 生成
+- `npm --prefix apps/monitor run verify`
+- Host 双变体 / SDK / Monitor 资产完整性检查、manifest 与 release notes 生成
 
 如需按产物域执行工作流同级别的局部验证，可使用以下组件脚本入口：
 
@@ -48,10 +49,10 @@ python scripts/release/package_monitor.py --release-id monitor-local-check --ver
 
 所有 package 脚本都支持 `--help`、`--release-id` 和 `--output-root`；命令行中出现 `--help` 时，脚本只输出能力与参数摘要，不执行验证或打包。
 
-若需要本地核验 preview 或 main 快照预发布的完整 Monitor App 汇总路径，可使用对应渠道：
+如需执行局部验证、排障或 CI 中间装配，可显式传入 `--no-host`、`--no-dotnet-sdk`、`--no-js-sdk`、`--no-py-sdk`、`--no-monitor`。例如：
 
 ```bash
-python scripts/release/package_release.py --release-id preview-local-dry-run --channel preview
+python scripts/release/package_release.py --release-id local-partial-check --channel local --no-monitor
 ```
 
 若通过 GitHub Actions 执行远端发布：
@@ -67,11 +68,11 @@ python scripts/release/package_release.py --release-id preview-local-dry-run --c
 - `artifacts/release/<release-id>/host/` 下对每个默认 RID 都同时包含 `devhub-host-<rid>.zip` 与 `devhub-host-<rid>-single-file.zip`。
 - `artifacts/release/<release-id>/host/` 下不存在 `trimmed` 或其他第三种 Host 变体。
 - `artifacts/release/<release-id>/sdk/` 下包含 `.NET`、`JS/TS`、`Python` 三套 SDK 资产。
-- preview 与 main 快照预发布在 `artifacts/release/<release-id>/monitor/<targetPlatform>/` 下包含 Monitor bundle、`release-manifest.json`、`release-notes.md` 与 `checks/validation-summary.json`。
+- 所有正式发布输出在 `artifacts/release/<release-id>/monitor/<targetPlatform>/` 下包含 Monitor bundle、`release-manifest.json`、`release-notes.md` 与 `checks/validation-summary.json`。
 - `release-manifest.json` 已为每条 Host 资产写入 `variant = multi-file | single-file`。
-- preview 与 main 快照预发布的 `release-manifest.json` 已写入 `monitorPackages`，并为最终发布的 Monitor 分发包写入 `category = monitor-app`、目标平台、Monitor 版本与 JS SDK 版本。
+- `release-manifest.json` 已写入 `monitorPackages`，并为最终发布的 Monitor 分发包写入 `category = monitor-app`、目标平台、Monitor 版本与 JS SDK 版本。
 - `release-notes.md` 已把同一 RID 的 Host multi-file / single-file 资产分开展示。
-- preview 与 main 快照预发布的 `release-notes.md` 已展示 Monitor Packages 表格。
+- `release-notes.md` 已展示 Monitor Packages 表格。
 - `checks/validation-summary.json` 记录了本次验证结果。
 
 ## 2. 发布通道专项确认
@@ -94,6 +95,7 @@ python scripts/release/package_release.py --release-id preview-local-dry-run --c
 
 - 确认稳定版 tag 已准备好，例如 `v1.0.1`。
 - 确认该 tag 对应提交已经通过 `ci`，再进入发布或重跑发布；用于发布的 workflow artifact 应来自该成功 run。
+- 确认 Monitor App 的 Linux、Windows、macOS bundle 已包含在 GitHub Release 资产中。
 - 确认面向外部用户的安装说明已与本次发布资产对应；如仍保留 TODO 占位，需明确具体占位项及对应发布资产。
 
 ## 3. 发布后核验
@@ -105,7 +107,7 @@ python scripts/release/package_release.py --release-id preview-local-dry-run --c
   - multi-file 版解压后包含 `DevHub.Host.dll`、`DevHub.Core.dll` 与依赖侧车文件，且目录整体可直接用于运行。
   - single-file 版解压后包含平台启动文件与必要配置侧车文件，不以多文件 DLL 图形式暴露 Host 主体。
 - 抽查 `.NET SDK`、`JS/TS SDK`、`Python SDK` 至少各一个资产，确认文件可读且名称与版本一致。
-- preview 与 main 快照预发布抽查至少一个 Monitor App bundle，确认目标平台与 `release-manifest.json` 中的条目一致。
+- 抽查至少一个 Monitor App bundle，确认目标平台与 `release-manifest.json` 中的条目一致。
 - 核对 `release-notes.md` 中的通道、tag 和提交 SHA 与本次发布相符。
 - 若为 preview 或 main 预发布，确认 release 被标记为 prerelease。
 

@@ -173,7 +173,11 @@ class ReleasePackageOptions:
     commit: str
     output_root: Path
     host_rids: tuple[str, ...]
-    skip_monitor: bool = False
+    include_host: bool = True
+    include_dotnet_sdk: bool = True
+    include_javascript_sdk: bool = True
+    include_python_sdk: bool = True
+    include_monitor: bool = True
     monitor_assets_root: Path | None = None
     reuse_existing_output: bool = False
     validated_externally: bool = False

@@ -24,7 +24,12 @@ from package_models import (
     ReleasePackageResult,
     ValidationRecord,
 )
-from package_monitor import copy_monitor_package_outputs, describe_monitor_release_assets, package_monitor
+from package_monitor import (
+    copy_monitor_package_outputs,
+    describe_monitor_release_assets,
+    package_monitor,
+    read_monitor_release_manifest,
+)
 from package_py_sdk import package_py_sdk
 from package_shared import (
     DEFAULT_HOST_RIDS,
@@ -57,12 +62,26 @@ from package_shared import (
 
 
 DEFAULT_OUTPUT_ROOT = REPO_ROOT / "artifacts" / "release"
+COMPONENT_VALIDATION_PREFIXES: dict[str, tuple[str, ...]] = {
+    "host": ("Host ",),
+    "dotnet": (".NET SDK ",),
+    "javascript": ("JS SDK ",),
+    "python": ("Python SDK ", "Python build backend install"),
+    "monitor": ("Monitor ",),
+}
+COMPONENT_SUBDIRECTORIES: dict[str, Path] = {
+    "host": Path("host"),
+    "dotnet": Path("sdk") / "dotnet",
+    "javascript": Path("sdk") / "javascript",
+    "python": Path("sdk") / "python",
+    "monitor": Path("monitor"),
+}
 
 
 def build_help() -> PackageHelp:
     return PackageHelp(
         command="python scripts/release/package_release.py --help",
-        summary="Build the full DevHub local release candidate by orchestrating Host, SDK, and optional Monitor component packagers.",
+        summary="Build DevHub release assets by orchestrating Host, SDK, and Monitor component packagers.",
         sections=(
             PackageHelpSection(
                 title="Common Parameters",
@@ -86,18 +105,22 @@ def build_help() -> PackageHelp:
                         "--host-rid <rid>",
                         "Override the Host RID matrix. Repeat for multiple targets. Defaults to win-x64, linux-x64, osx-arm64.",
                     ),
-                    PackageHelpOption("--skip-monitor", "Skip local Monitor packaging for preview/main-snapshot channels."),
+                    PackageHelpOption("--no-host", "Exclude Host packaging and Host assets from this release output."),
+                    PackageHelpOption("--no-dotnet-sdk", "Exclude .NET SDK packaging and assets from this release output."),
+                    PackageHelpOption("--no-js-sdk", "Exclude JS/TS SDK packaging and assets from this release output."),
+                    PackageHelpOption("--no-py-sdk", "Exclude Python SDK packaging and assets from this release output."),
+                    PackageHelpOption("--no-monitor", "Exclude Monitor packaging and Monitor assets from this release output."),
                     PackageHelpOption(
                         "--validated-externally",
                         "Assume same-grade Host/SDK/Monitor verification already completed upstream and only run packaging/assembly steps.",
                     ),
                     PackageHelpOption(
                         "--monitor-assets-root <dir>",
-                        "Merge Monitor package outputs from an external root instead of building them locally.",
+                        "Merge Monitor package outputs from an external root when assembling or refreshing a release output.",
                     ),
                     PackageHelpOption(
                         "--reuse-existing-output",
-                        "Refresh manifest, notes, and integrity checks from an existing release output directory.",
+                        "Refresh manifest, notes, and integrity checks from an existing release output directory by reusing retained component assets.",
                     ),
                 ),
             ),
@@ -127,11 +150,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         dest="host_rids",
         help="Host RID to publish. Can be passed multiple times. Defaults to win-x64/linux-x64/osx-arm64.",
     )
-    parser.add_argument(
-        "--skip-monitor",
-        action="store_true",
-        help="Do not run local Monitor packaging for preview/main-snapshot channels.",
-    )
+    parser.add_argument("--no-host", action="store_true", help="Exclude Host packaging and Host assets from this release output.")
+    parser.add_argument("--no-dotnet-sdk", action="store_true", help="Exclude .NET SDK packaging and assets from this release output.")
+    parser.add_argument("--no-js-sdk", action="store_true", help="Exclude JS/TS SDK packaging and assets from this release output.")
+    parser.add_argument("--no-py-sdk", action="store_true", help="Exclude Python SDK packaging and assets from this release output.")
+    parser.add_argument("--no-monitor", action="store_true", help="Exclude Monitor packaging and Monitor assets from this release output.")
     parser.add_argument(
         "--validated-externally",
         action="store_true",
@@ -139,12 +162,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument(
         "--monitor-assets-root",
-        help="Directory containing platform Monitor package outputs to merge into the release output.",
+        help="Directory containing platform Monitor package outputs to merge into the release output during assembly or refresh.",
     )
     parser.add_argument(
         "--reuse-existing-output",
         action="store_true",
-        help="Refresh manifest, notes, and integrity checks from an existing release output directory.",
+        help="Refresh manifest, notes, and integrity checks from an existing release output directory by reusing retained component assets.",
     )
     return parser.parse_args(argv)
 
@@ -162,38 +185,72 @@ def package_release(options: ReleasePackageOptions) -> ReleasePackageResult:
     elif output_dir.exists():
         remove_tree(output_dir)
 
+    if options.monitor_assets_root is not None and not options.include_monitor:
+        raise RuntimeError("`--no-monitor` 与 `--monitor-assets-root` 不能同时使用。")
+
     checks_dir.mkdir(parents=True, exist_ok=True)
     validation_records = (
-        [record for record in read_existing_validation_records(checks_dir / "validation-summary.json") if record.name != "Release asset integrity"]
+        filter_validation_records(
+            [record for record in read_existing_validation_records(checks_dir / "validation-summary.json") if record.name != "Release asset integrity"],
+            options=options,
+        )
         if options.reuse_existing_output
         else []
     )
 
     if options.reuse_existing_output:
-        assets = discover_core_release_assets(output_dir, options.host_rids)
-        versions = collect_release_versions()
+        remove_excluded_component_outputs(output_dir, options=options)
+
+    if options.reuse_existing_output:
+        assets = discover_release_assets(output_dir, options=options)
+        versions = collect_release_versions(options=options)
     else:
-        assets, versions = build_core_release_assets(
+        assets, versions = build_release_assets(
             output_dir=output_dir,
             checks_dir=checks_dir,
-            host_rids=options.host_rids,
+            options=options,
             validation_records=validation_records,
             skip_validation=options.validated_externally,
         )
 
-    include_local_monitor = options.channel in {"preview", "main-snapshot"} and not options.skip_monitor
     monitor_assets: list[ReleaseAsset] = []
-    if monitor_assets_root is not None:
-        if options.channel == "stable":
-            raise RuntimeError("stable 渠道不接受 Monitor App 发布资产。")
-        monitor_assets.extend(copy_monitor_package_outputs(output_dir, monitor_assets_root))
-    elif include_local_monitor:
+    if options.include_monitor and monitor_assets_root is not None:
+        monitor_assets.extend(
+            copy_monitor_package_outputs(
+                output_dir,
+                monitor_assets_root,
+                expected_release_id=options.release_id,
+            )
+        )
+        validate_monitor_asset_versions(
+            monitor_assets,
+            expected_monitor_version=read_json_version(MONITOR_PACKAGE_JSON),
+            expected_javascript_sdk_version=read_json_version(JS_SDK_DIR / "package.json"),
+        )
+    elif options.include_monitor and options.reuse_existing_output:
+        monitor_assets.extend(
+            reuse_existing_monitor_assets(
+                output_dir,
+                expected_release_id=options.release_id,
+            )
+        )
+        validate_monitor_asset_versions(
+            monitor_assets,
+            expected_monitor_version=read_json_version(MONITOR_PACKAGE_JSON),
+            expected_javascript_sdk_version=read_json_version(JS_SDK_DIR / "package.json"),
+        )
+    elif options.include_monitor:
         local_monitor_assets, monitor_records = package_local_monitor_assets(
             output_dir=output_dir,
             release_id=options.release_id,
             skip_validation=options.validated_externally,
         )
         monitor_assets.extend(local_monitor_assets)
+        validate_monitor_asset_versions(
+            monitor_assets,
+            expected_monitor_version=read_json_version(MONITOR_PACKAGE_JSON),
+            expected_javascript_sdk_version=read_json_version(JS_SDK_DIR / "package.json"),
+        )
         validation_records.extend(monitor_records)
     assets.extend(monitor_assets)
 
@@ -221,9 +278,8 @@ def package_release(options: ReleasePackageOptions) -> ReleasePackageResult:
     ensure_asset_integrity(
         output_dir=output_dir,
         manifest=manifest,
-        host_rids=options.host_rids,
+        options=options,
         validation_records=validation_records,
-        require_monitor=bool(monitor_assets),
     )
     write_json(checks_dir / "validation-summary.json", build_validation_summary(validation_records))
 
@@ -237,97 +293,160 @@ def package_release(options: ReleasePackageOptions) -> ReleasePackageResult:
     )
 
 
-def collect_release_versions() -> dict[str, str]:
-    return {
-        "host": read_msbuild_version(HOST_PROJECT),
-        "dotnetSdk": read_msbuild_version(DOTNET_SDK_PROJECTS[0]),
-        "dotnetSdkDependencyInjection": read_msbuild_version(DOTNET_SDK_PROJECTS[1]),
-        "javascriptSdk": read_json_version(JS_SDK_DIR / "package.json"),
-        "pythonSdk": read_toml_version(PYTHON_SDK_DIR / "pyproject.toml"),
-        "monitor": read_json_version(MONITOR_PACKAGE_JSON),
-    }
+def collect_release_versions(*, options: ReleasePackageOptions) -> dict[str, str]:
+    versions: dict[str, str] = {}
+    if options.include_host:
+        versions["host"] = read_msbuild_version(HOST_PROJECT)
+    if options.include_dotnet_sdk:
+        versions["dotnetSdk"] = read_msbuild_version(DOTNET_SDK_PROJECTS[0])
+        versions["dotnetSdkDependencyInjection"] = read_msbuild_version(DOTNET_SDK_PROJECTS[1])
+    if options.include_javascript_sdk:
+        versions["javascriptSdk"] = read_json_version(JS_SDK_DIR / "package.json")
+    if options.include_python_sdk:
+        versions["pythonSdk"] = read_toml_version(PYTHON_SDK_DIR / "pyproject.toml")
+    if options.include_monitor:
+        versions["monitor"] = read_json_version(MONITOR_PACKAGE_JSON)
+    return versions
 
 
-def build_core_release_assets(
+def filter_validation_records(
+    records: Sequence[ValidationRecord],
+    *,
+    options: ReleasePackageOptions,
+) -> list[ValidationRecord]:
+    included_components = enabled_component_names(options)
+    filtered_records: list[ValidationRecord] = []
+    for record in records:
+        component = component_for_validation_record(record.name)
+        if component is None or component in included_components:
+            filtered_records.append(record)
+    return filtered_records
+
+
+def component_for_validation_record(name: str) -> str | None:
+    for component, prefixes in COMPONENT_VALIDATION_PREFIXES.items():
+        if any(name.startswith(prefix) for prefix in prefixes):
+            return component
+    return None
+
+
+def enabled_component_names(options: ReleasePackageOptions) -> tuple[str, ...]:
+    components: list[str] = []
+    if options.include_host:
+        components.append("host")
+    if options.include_dotnet_sdk:
+        components.append("dotnet")
+    if options.include_javascript_sdk:
+        components.append("javascript")
+    if options.include_python_sdk:
+        components.append("python")
+    if options.include_monitor:
+        components.append("monitor")
+    return tuple(components)
+
+
+def remove_excluded_component_outputs(output_dir: Path, *, options: ReleasePackageOptions) -> None:
+    for component, relative_path in COMPONENT_SUBDIRECTORIES.items():
+        should_keep = {
+            "host": options.include_host,
+            "dotnet": options.include_dotnet_sdk,
+            "javascript": options.include_javascript_sdk,
+            "python": options.include_python_sdk,
+            "monitor": options.include_monitor,
+        }[component]
+        if should_keep:
+            continue
+        component_dir = output_dir / relative_path
+        if component_dir.exists():
+            remove_tree(component_dir)
+
+
+def build_release_assets(
     *,
     output_dir: Path,
     checks_dir: Path,
-    host_rids: tuple[str, ...],
+    options: ReleasePackageOptions,
     validation_records: list[ValidationRecord],
     skip_validation: bool,
 ) -> tuple[list[ReleaseAsset], dict[str, str]]:
     assets: list[ReleaseAsset] = []
     versions: dict[str, str] = {}
 
-    host_result = package_host(
-        HostPackageOptions(
-            output_dir=output_dir,
-            checks_dir=checks_dir,
-            host_rids=host_rids,
-            skip_validation=skip_validation,
+    if options.include_host:
+        host_result = package_host(
+            HostPackageOptions(
+                output_dir=output_dir,
+                checks_dir=checks_dir,
+                host_rids=options.host_rids,
+                skip_validation=skip_validation,
+            )
         )
-    )
-    assets.extend(host_result.assets)
-    versions.update(host_result.versions)
-    validation_records.extend(host_result.validation_records)
+        assets.extend(host_result.assets)
+        versions.update(host_result.versions)
+        validation_records.extend(host_result.validation_records)
 
-    dotnet_result = package_dotnet_sdk(
-        DotNetSdkPackageOptions(
-            output_dir=output_dir,
-            checks_dir=checks_dir,
-            skip_validation=skip_validation,
+    if options.include_dotnet_sdk:
+        dotnet_result = package_dotnet_sdk(
+            DotNetSdkPackageOptions(
+                output_dir=output_dir,
+                checks_dir=checks_dir,
+                skip_validation=skip_validation,
+            )
         )
-    )
-    assets.extend(dotnet_result.assets)
-    versions.update(dotnet_result.versions)
-    validation_records.extend(dotnet_result.validation_records)
+        assets.extend(dotnet_result.assets)
+        versions.update(dotnet_result.versions)
+        validation_records.extend(dotnet_result.validation_records)
 
-    javascript_result = package_js_sdk(
-        JavaScriptSdkPackageOptions(
-            output_dir=output_dir,
-            checks_dir=checks_dir,
-            skip_validation=skip_validation,
+    if options.include_javascript_sdk:
+        javascript_result = package_js_sdk(
+            JavaScriptSdkPackageOptions(
+                output_dir=output_dir,
+                checks_dir=checks_dir,
+                skip_validation=skip_validation,
+            )
         )
-    )
-    assets.extend(javascript_result.assets)
-    versions.update(javascript_result.versions)
-    validation_records.extend(javascript_result.validation_records)
+        assets.extend(javascript_result.assets)
+        versions.update(javascript_result.versions)
+        validation_records.extend(javascript_result.validation_records)
 
-    python_result = package_py_sdk(
-        PythonSdkPackageOptions(
-            output_dir=output_dir,
-            checks_dir=checks_dir,
-            skip_validation=skip_validation,
+    if options.include_python_sdk:
+        python_result = package_py_sdk(
+            PythonSdkPackageOptions(
+                output_dir=output_dir,
+                checks_dir=checks_dir,
+                skip_validation=skip_validation,
+            )
         )
-    )
-    assets.extend(python_result.assets)
-    versions.update(python_result.versions)
-    validation_records.extend(python_result.validation_records)
+        assets.extend(python_result.assets)
+        versions.update(python_result.versions)
+        validation_records.extend(python_result.validation_records)
 
-    versions["monitor"] = read_json_version(MONITOR_PACKAGE_JSON)
+    if options.include_monitor:
+        versions["monitor"] = read_json_version(MONITOR_PACKAGE_JSON)
     return assets, versions
 
 
-def discover_core_release_assets(output_dir: Path, host_rids: Sequence[str]) -> list[ReleaseAsset]:
+def discover_release_assets(output_dir: Path, *, options: ReleasePackageOptions) -> list[ReleaseAsset]:
     assets: list[ReleaseAsset] = []
-    host_dir = output_dir / "host"
-    for rid in host_rids:
-        for variant in HOST_VARIANTS:
-            assets.append(
-                ReleaseAsset(
-                    path=host_dir / variant.archive_name(rid),
-                    category="host",
-                    target=rid,
-                    variant=variant.name,
+    if options.include_host:
+        host_dir = output_dir / "host"
+        for rid in options.host_rids:
+            for variant in HOST_VARIANTS:
+                assets.append(
+                    ReleaseAsset(
+                        path=host_dir / variant.archive_name(rid),
+                        category="host",
+                        target=rid,
+                        variant=variant.name,
+                    )
                 )
-            )
 
-    for relative_dir in (
-        Path("sdk") / "dotnet",
-        Path("sdk") / "javascript",
-        Path("sdk") / "python",
-    ):
-        assets.extend(describe_release_assets(sorted((output_dir / relative_dir).glob("*"))))
+    if options.include_dotnet_sdk:
+        assets.extend(describe_release_assets(sorted((output_dir / "sdk" / "dotnet").glob("*"))))
+    if options.include_javascript_sdk:
+        assets.extend(describe_release_assets(sorted((output_dir / "sdk" / "javascript").glob("*"))))
+    if options.include_python_sdk:
+        assets.extend(describe_release_assets(sorted((output_dir / "sdk" / "python").glob("*"))))
 
     return assets
 
@@ -352,10 +471,84 @@ def package_local_monitor_assets(
                 skip_validation=skip_validation,
             )
         )
-        return copy_monitor_package_outputs(output_dir, monitor_staging_root), monitor_result.validation_records
+        return (
+            copy_monitor_package_outputs(
+                output_dir,
+                monitor_staging_root,
+                expected_release_id=release_id,
+            ),
+            monitor_result.validation_records,
+        )
     finally:
         if monitor_staging_root.exists():
             remove_tree(monitor_staging_root)
+
+
+def reuse_existing_monitor_assets(
+    output_dir: Path,
+    *,
+    expected_release_id: str,
+) -> list[ReleaseAsset]:
+    monitor_root = output_dir / "monitor"
+    if not monitor_root.is_dir():
+        raise RuntimeError(
+            "无法复用现有 Monitor 发布资产：发布目录缺少 monitor/。"
+            " 请先准备 Monitor 输出，或显式传入 --monitor-assets-root。"
+        )
+
+    manifest_paths = sorted(monitor_root.glob("*/release-manifest.json"))
+    if not manifest_paths:
+        raise RuntimeError(
+            "无法复用现有 Monitor 发布资产：monitor/ 下缺少平台 release-manifest.json。"
+            " 请先准备完整的 Monitor 平台输出，或显式传入 --monitor-assets-root。"
+        )
+
+    assets: list[ReleaseAsset] = []
+    for manifest_path in manifest_paths:
+        monitor_manifest = read_monitor_release_manifest(
+            manifest_path,
+            expected_release_id=expected_release_id,
+        )
+        package_assets = describe_monitor_release_assets(
+            manifest_path.parent,
+            monitor_manifest,
+            publishable_only=True,
+        )
+        if not package_assets:
+            raise RuntimeError(
+                f"无法复用现有 Monitor 发布资产：平台目录缺少可发布资产：{manifest_path}。"
+                " 请重新准备该平台输出，或显式传入 --monitor-assets-root。"
+            )
+        assets.extend(package_assets)
+
+    if not assets:
+        raise RuntimeError(
+            "无法复用现有 Monitor 发布资产：未解析出任何可发布 Monitor 资产。"
+            " 请重新准备 Monitor 输出，或显式传入 --monitor-assets-root。"
+        )
+
+    return assets
+
+
+def validate_monitor_asset_versions(
+    assets: Sequence[ReleaseAsset],
+    *,
+    expected_monitor_version: str,
+    expected_javascript_sdk_version: str,
+) -> None:
+    for asset in assets:
+        if asset.category != "monitor-app":
+            continue
+        if asset.monitorVersion != expected_monitor_version:
+            raise RuntimeError(
+                "Monitor 发布资产版本与仓库版本不一致："
+                f" asset={asset.path.name!r}, manifest={asset.monitorVersion!r}, expected={expected_monitor_version!r}"
+            )
+        if asset.javascriptSdkVersion != expected_javascript_sdk_version:
+            raise RuntimeError(
+                "Monitor 发布资产引用的 JS SDK 版本与仓库版本不一致："
+                f" asset={asset.path.name!r}, manifest={asset.javascriptSdkVersion!r}, expected={expected_javascript_sdk_version!r}"
+            )
 
 
 def build_manifest(
@@ -388,7 +581,10 @@ def build_manifest(
             asset_entry["javascriptSdkVersion"] = asset.javascriptSdkVersion
         manifest_assets.append(asset_entry)
 
-    monitor_packages = build_monitor_package_entries(output_dir)
+    monitor_packages = build_monitor_package_entries(
+        output_dir,
+        expected_release_id=release_id,
+    )
 
     manifest: dict[str, object] = {
         "schemaVersion": 1,
@@ -415,14 +611,21 @@ def build_manifest(
     return manifest
 
 
-def build_monitor_package_entries(output_dir: Path) -> list[dict[str, object]]:
+def build_monitor_package_entries(
+    output_dir: Path,
+    *,
+    expected_release_id: str,
+) -> list[dict[str, object]]:
     monitor_root = output_dir / "monitor"
     if not monitor_root.exists():
         return []
 
     packages: list[dict[str, object]] = []
     for manifest_path in sorted(monitor_root.glob("*/release-manifest.json")):
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest = read_monitor_release_manifest(
+            manifest_path,
+            expected_release_id=expected_release_id,
+        )
         target_platform = manifest.get("targetPlatform")
         versions = manifest.get("versions")
         if not isinstance(target_platform, str) or not isinstance(versions, dict):
@@ -540,14 +743,21 @@ def resolve_release_upload_files(output_dir: Path) -> list[Path]:
     return release_files
 
 
-def build_expected_monitor_release_assets(output_dir: Path) -> list[ReleaseAsset]:
+def build_expected_monitor_release_assets(
+    output_dir: Path,
+    *,
+    expected_release_id: str,
+) -> list[ReleaseAsset]:
     monitor_root = output_dir / "monitor"
     if not monitor_root.exists():
         return []
 
     assets: list[ReleaseAsset] = []
     for manifest_path in sorted(monitor_root.glob("*/release-manifest.json")):
-        monitor_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        monitor_manifest = read_monitor_release_manifest(
+            manifest_path,
+            expected_release_id=expected_release_id,
+        )
         package_assets = describe_monitor_release_assets(
             manifest_path.parent,
             monitor_manifest,
@@ -643,40 +853,57 @@ def write_release_notes(output_dir: Path, manifest: dict[str, object], release_n
 def ensure_asset_integrity(
     output_dir: Path,
     manifest: dict[str, object],
-    host_rids: Sequence[str],
+    options: ReleasePackageOptions,
     validation_records: list[ValidationRecord],
-    require_monitor: bool,
 ) -> None:
     required_paths = [output_dir / "release-manifest.json", output_dir / "release-notes.md"]
-    expected_host_asset_names = {variant.archive_name(rid) for rid in host_rids for variant in HOST_VARIANTS}
-    required_paths.extend(output_dir / "host" / asset_name for asset_name in sorted(expected_host_asset_names))
-    required_paths.extend(
-        [
-            output_dir / "checks" / "validation-summary.json",
-            next_existing(output_dir / "sdk" / "dotnet", "*.nupkg"),
-            next_existing(output_dir / "sdk" / "dotnet", "*.snupkg"),
-            next_existing(output_dir / "sdk" / "javascript", "*.tgz"),
-            next_existing(output_dir / "sdk" / "python", "*.tar.gz"),
-            next_existing(output_dir / "sdk" / "python", "*.whl"),
-        ]
+    expected_host_asset_names = (
+        {variant.archive_name(rid) for rid in options.host_rids for variant in HOST_VARIANTS}
+        if options.include_host
+        else set()
     )
+    if options.include_host:
+        required_paths.extend(output_dir / "host" / asset_name for asset_name in sorted(expected_host_asset_names))
+    required_paths.append(output_dir / "checks" / "validation-summary.json")
+    if options.include_dotnet_sdk:
+        required_paths.extend(
+            [
+                next_existing(output_dir / "sdk" / "dotnet", "*.nupkg"),
+                next_existing(output_dir / "sdk" / "dotnet", "*.snupkg"),
+            ]
+        )
+    if options.include_javascript_sdk:
+        required_paths.append(next_existing(output_dir / "sdk" / "javascript", "*.tgz"))
+    if options.include_python_sdk:
+        required_paths.extend(
+            [
+                next_existing(output_dir / "sdk" / "python", "*.tar.gz"),
+                next_existing(output_dir / "sdk" / "python", "*.whl"),
+            ]
+        )
 
     for path in required_paths:
         if not path.exists():
             raise RuntimeError(f"Missing required release asset: {path}")
 
-    actual_host_asset_names = {path.name for path in sorted((output_dir / "host").glob("*.zip"))}
-    missing_host_asset_names = sorted(expected_host_asset_names - actual_host_asset_names)
-    unexpected_host_asset_names = sorted(actual_host_asset_names - expected_host_asset_names)
-    if missing_host_asset_names:
-        raise RuntimeError(f"Missing Host variants: {', '.join(missing_host_asset_names)}")
-    if unexpected_host_asset_names:
-        raise RuntimeError(f"Unexpected Host variants: {', '.join(unexpected_host_asset_names)}")
+    if options.include_host:
+        actual_host_asset_names = {path.name for path in sorted((output_dir / "host").glob("*.zip"))}
+        missing_host_asset_names = sorted(expected_host_asset_names - actual_host_asset_names)
+        unexpected_host_asset_names = sorted(actual_host_asset_names - expected_host_asset_names)
+        if missing_host_asset_names:
+            raise RuntimeError(f"Missing Host variants: {', '.join(missing_host_asset_names)}")
+        if unexpected_host_asset_names:
+            raise RuntimeError(f"Unexpected Host variants: {', '.join(unexpected_host_asset_names)}")
 
     manifest_payload_assets = parse_release_payload_assets(output_dir, manifest)
-    expected_payload_assets = discover_core_release_assets(output_dir, host_rids)
-    if require_monitor:
-        expected_payload_assets.extend(build_expected_monitor_release_assets(output_dir))
+    expected_payload_assets = discover_release_assets(output_dir, options=options)
+    if options.include_monitor:
+        expected_payload_assets.extend(
+            build_expected_monitor_release_assets(
+                output_dir,
+                expected_release_id=options.release_id,
+            )
+        )
 
     actual_payload_identities = {
         release_asset_identity(asset, output_dir)
@@ -693,24 +920,25 @@ def ensure_asset_integrity(
             f" actual={sorted(actual_payload_identities)!r}"
         )
 
-    expected_manifest_variants = {(rid, variant.name) for rid in host_rids for variant in HOST_VARIANTS}
-    actual_manifest_variants: set[tuple[str, str]] = set()
-    for asset in manifest_payload_assets:
-        if asset.category != "host":
-            continue
-        if asset.variant is None:
-            raise RuntimeError("Host 资产缺少 target 或 variant 字段。")
-        actual_manifest_variants.add((asset.target, asset.variant))
+    if options.include_host:
+        expected_manifest_variants = {(rid, variant.name) for rid in options.host_rids for variant in HOST_VARIANTS}
+        actual_manifest_variants: set[tuple[str, str]] = set()
+        for asset in manifest_payload_assets:
+            if asset.category != "host":
+                continue
+            if asset.variant is None:
+                raise RuntimeError("Host 资产缺少 target 或 variant 字段。")
+            actual_manifest_variants.add((asset.target, asset.variant))
 
-    if actual_manifest_variants != expected_manifest_variants:
-        raise RuntimeError(
-            "Host manifest 变体矩阵不完整。"
-            f" expected={sorted(expected_manifest_variants)!r}"
-            f" actual={sorted(actual_manifest_variants)!r}"
-        )
+        if actual_manifest_variants != expected_manifest_variants:
+            raise RuntimeError(
+                "Host manifest 变体矩阵不完整。"
+                f" expected={sorted(expected_manifest_variants)!r}"
+                f" actual={sorted(actual_manifest_variants)!r}"
+            )
 
     monitor_assets = [asset for asset in manifest_payload_assets if asset.category == "monitor-app"]
-    if require_monitor:
+    if options.include_monitor:
         monitor_packages = manifest.get("monitorPackages")
         if not isinstance(monitor_packages, list) or not monitor_packages:
             raise RuntimeError("release-manifest.json 缺少 Monitor 平台包信息。")
@@ -744,7 +972,7 @@ def ensure_asset_integrity(
     for asset_name in expected_host_asset_names:
         if asset_name not in release_notes_text:
             raise RuntimeError(f"release-notes.md 缺少 Host 资产条目：{asset_name}")
-    if require_monitor and "## Monitor Packages" not in release_notes_text:
+    if options.include_monitor and "## Monitor Packages" not in release_notes_text:
         raise RuntimeError("release-notes.md 缺少 Monitor 平台包说明。")
     for asset in monitor_assets:
         if asset.path.name not in release_notes_text:
@@ -770,12 +998,22 @@ def next_existing(base_dir: Path, pattern: str) -> Path:
     return match
 
 
+def validate_component_selection(args: argparse.Namespace) -> None:
+    if args.no_host and args.host_rids:
+        raise RuntimeError("`--no-host` 与 `--host-rid` 不能同时使用。")
+    if args.no_monitor and args.monitor_assets_root:
+        raise RuntimeError("`--no-monitor` 与 `--monitor-assets-root` 不能同时使用。")
+    if args.no_host and args.no_dotnet_sdk and args.no_js_sdk and args.no_py_sdk and args.no_monitor:
+        raise RuntimeError("至少需要启用一个组件；不能同时关闭 Host、三套 SDK 与 Monitor。")
+
+
 def main(argv: list[str] | None = None) -> int:
     args_list = list(sys.argv[1:] if argv is None else argv)
     if maybe_print_help(args_list, build_help()):
         return 0
 
     args = parse_args(args_list)
+    validate_component_selection(args)
     release_id = validate_release_label(args.release_id, field_name="release-id")
     release_tag = validate_release_label(args.release_tag or release_id, field_name="release-tag")
     release_name = args.release_name or f"DevHub {release_id}"
@@ -791,7 +1029,11 @@ def main(argv: list[str] | None = None) -> int:
             commit=commit,
             output_root=Path(args.output_root).resolve(),
             host_rids=host_rids,
-            skip_monitor=bool(args.skip_monitor),
+            include_host=not bool(args.no_host),
+            include_dotnet_sdk=not bool(args.no_dotnet_sdk),
+            include_javascript_sdk=not bool(args.no_js_sdk),
+            include_python_sdk=not bool(args.no_py_sdk),
+            include_monitor=not bool(args.no_monitor),
             monitor_assets_root=Path(args.monitor_assets_root).resolve() if args.monitor_assets_root else None,
             reuse_existing_output=bool(args.reuse_existing_output),
             validated_externally=bool(args.validated_externally),

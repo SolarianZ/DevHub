@@ -43,7 +43,7 @@ dotnet run --project host/src/DevHub.Host/DevHub.Host.csproj -c Release
 python scripts/release/package_release.py --release-id local-dry-run --channel local
 ```
 
-该命令会在 `artifacts/release/local-dry-run/` 下生成 Host 压缩包、SDK 包、manifest 和 release notes。
+该命令会在 `artifacts/release/local-dry-run/` 下生成 Host 压缩包、三套 SDK 包、当前机器可构建的 Monitor 资产、manifest 和 release notes。
 
 `artifacts/release/local-dry-run/host/` 对每个默认 RID 都提供两类 Host ZIP：
 

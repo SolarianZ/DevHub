@@ -421,7 +421,32 @@ def ensure_asset_integrity(output_dir: Path, validation_records: list[Validation
     )
 
 
-def copy_monitor_package_outputs(output_dir: Path, monitor_assets_root: Path) -> list[ReleaseAsset]:
+def read_monitor_release_manifest(
+    manifest_path: Path,
+    *,
+    expected_release_id: str | None = None,
+) -> dict[str, object]:
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"Monitor manifest 不是合法对象：{manifest_path}")
+
+    if expected_release_id is not None:
+        release_id = payload.get("releaseId")
+        if not isinstance(release_id, str) or release_id.strip() != expected_release_id:
+            raise RuntimeError(
+                "Monitor manifest releaseId 与当前发布不一致："
+                f" manifest={manifest_path}, actual={release_id!r}, expected={expected_release_id!r}"
+            )
+
+    return payload
+
+
+def copy_monitor_package_outputs(
+    output_dir: Path,
+    monitor_assets_root: Path,
+    *,
+    expected_release_id: str | None = None,
+) -> list[ReleaseAsset]:
     package_dirs = find_monitor_package_dirs(monitor_assets_root)
     if not package_dirs:
         raise RuntimeError(f"未找到 Monitor 打包输出：{monitor_assets_root}")
@@ -435,7 +460,10 @@ def copy_monitor_package_outputs(output_dir: Path, monitor_assets_root: Path) ->
     seen_platforms: set[str] = set()
     for package_dir in package_dirs:
         manifest_path = package_dir / "release-manifest.json"
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest = read_monitor_release_manifest(
+            manifest_path,
+            expected_release_id=expected_release_id,
+        )
         if manifest.get("product") != "monitor":
             raise RuntimeError(f"Monitor manifest product 字段无效：{manifest_path}")
         target_platform = manifest.get("targetPlatform")
