@@ -274,7 +274,7 @@ async def test_events_client_check_version_compatibility_should_fallback_to_runt
     client = await DevHubEventsClient.from_runtime(
         DevHubClientOptions(client_id="version-ws-client"),
         DevHubEventsClientDependencies(
-            runtime_resolver=FakeRuntimeResolver(_create_connection_info(hub_version="0.8.0")),
+            runtime_resolver=FakeRuntimeResolver(_create_connection_info(hub_version="0.8.1")),
             session_factory=FakeWsSessionFactory(session),
         ),
     )
@@ -286,7 +286,7 @@ async def test_events_client_check_version_compatibility_should_fallback_to_runt
 
     assert result == VersionCompatibilityResult(
         sdk_version="0.7.0",
-        host_version="0.8.0",
+        host_version="0.8.1",
         status=VersionCompatibilityStatus.UPDATE_RECOMMENDED,
     )
 

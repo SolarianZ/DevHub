@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "devhub-sdk-python"
-version = "0.8.0"
+version = "0.8.1"
 description = "DevHub 协议 Python SDK"
 readme = "README.md"
 requires-python = ">=3.11"

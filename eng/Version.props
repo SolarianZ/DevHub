@@ -1,8 +1,8 @@
 <Project>
   <PropertyGroup>
-    <DevHubVersion>0.8.0</DevHubVersion>
-    <DevHubAssemblyVersion>0.8.0.0</DevHubAssemblyVersion>
-    <DevHubFileVersion>0.8.0.0</DevHubFileVersion>
-    <DevHubInformationalVersion>0.8.0</DevHubInformationalVersion>
+    <DevHubVersion>0.8.1</DevHubVersion>
+    <DevHubAssemblyVersion>0.8.1.0</DevHubAssemblyVersion>
+    <DevHubFileVersion>0.8.1.0</DevHubFileVersion>
+    <DevHubInformationalVersion>0.8.1</DevHubInformationalVersion>
   </PropertyGroup>
 </Project>

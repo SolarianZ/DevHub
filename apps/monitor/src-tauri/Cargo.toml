@@ -1,6 +1,6 @@
 [package]
 name = "devhub-monitor"
-version = "0.8.0"
+version = "0.8.1"
 description = "DevHub Monitor native shell"
 authors = ["DevHub"]
 edition = "2021"

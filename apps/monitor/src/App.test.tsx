@@ -144,7 +144,7 @@ function createConnection(
         launchDedupeWindowSeconds: 5,
         launchRegisterTimeoutSeconds: 45,
       },
-      hubVersion: "0.8.0",
+      hubVersion: "0.8.1",
       ...runtimeOverrides,
     },
   };
@@ -224,7 +224,7 @@ function createVersionCompatibilityResult(
 ): VersionCompatibilityResult {
   return {
     sdkVersion: MONITOR_VERSION_METADATA.sdkVersion,
-    hostVersion: "0.8.0",
+    hostVersion: "0.8.1",
     status: "compatible",
     ...overrides,
   };
@@ -1160,7 +1160,7 @@ describe("Monitor App", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "帮助" }));
     await screen.findByRole("heading", { name: "帮助" });
-    screen.getByText("0.8.1");
+    expect(getHelpValue("当前 Host 版本")).toBe("0.8.1");
     screen.getByText("建议升级");
     expect(screen.queryByText("兼容性未知")).toBeNull();
   }, 15_000);

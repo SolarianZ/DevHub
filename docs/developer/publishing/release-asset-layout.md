@@ -120,21 +120,21 @@ GitHub Release 的上传列表由 release-level `release-manifest.json` 的 `ass
       "sha256": "..."
     },
     {
-      "name": "DevHub Monitor_0.8.0_x64.AppImage",
+      "name": "DevHub Monitor_0.8.1_x64.AppImage",
       "category": "monitor-app",
       "target": "linux-x64",
       "variant": "bundle-appimage",
-      "path": "monitor/linux-x64/bundle/appimage/DevHub Monitor_0.8.0_x64.AppImage",
-      "monitorVersion": "0.8.0",
-      "javascriptSdkVersion": "0.8.0",
+      "path": "monitor/linux-x64/bundle/appimage/DevHub Monitor_0.8.1_x64.AppImage",
+      "monitorVersion": "0.8.1",
+      "javascriptSdkVersion": "0.8.1",
       "sha256": "..."
     }
   ],
   "monitorPackages": [
     {
       "targetPlatform": "linux-x64",
-      "monitorVersion": "0.8.0",
-      "javascriptSdkVersion": "0.8.0",
+      "monitorVersion": "0.8.1",
+      "javascriptSdkVersion": "0.8.1",
       "manifestPath": "monitor/linux-x64/release-manifest.json",
       "releaseNotesPath": "monitor/linux-x64/release-notes.md",
       "validationSummaryPath": "monitor/linux-x64/checks/validation-summary.json"
