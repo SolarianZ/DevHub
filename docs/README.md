@@ -35,7 +35,7 @@
 - [`developer/guides/contribution.md`](./developer/guides/contribution.md)：协作规则、仓库治理、文档治理与发布准备。
 - [`developer/operations/deployment.md`](./developer/operations/deployment.md)：部署、运行与上线后校验。
 - [`developer/operations/troubleshooting.md`](./developer/operations/troubleshooting.md)：运行期诊断、恢复动作与 Monitor 排障入口。
-- [`developer/publishing/README.md`](./developer/publishing/README.md)：发布流程、资产命名与 TODO 占位规范。
+- [`developer/publishing/README.md`](./developer/publishing/README.md)：发布流程、资产命名规范。
 
 ### 我想核对协议、Schema 或原始报文
 
@@ -52,17 +52,3 @@
 - `docs/assets/`：保留静态资源，不作为规范、使用或运维口径来源。
 - 除本文件外，不在 `docs/` 根目录新增 Markdown。
 - 涉及公开协议事实、字段定义、错误语义或 Schema 契约时，必须回指 [`specification/protocol/Specification.md`](./specification/protocol/Specification.md)，避免维护并行副本。
-
-## 4. 发布资产占位规范
-
-当文档需要引用尚未生成的正式发布资产、下载链接或安装命令时，统一使用以下占位写法：
-
-```text
-TODO(devhub-release): 正式发布资产可用后，填写 <资产名称 / 版本号 / 下载链接 / 安装命令>；当前不要填写未生成的版本号、下载地址或仓库外安装命令。
-```
-
-使用规则：
-
-- 必须说明未来会由哪个发布资产或版本信息替换当前占位。
-- 可以保留仓库内开发命令、本地验证命令或项目引用方式，但要明确它们不是正式安装入口。
-- 详细示例与发布资产命名规则见 [`developer/publishing/README.md`](./developer/publishing/README.md)。

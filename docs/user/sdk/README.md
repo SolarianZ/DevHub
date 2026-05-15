@@ -15,12 +15,6 @@
 - [`开发指南`](../../developer/guides/development.md)：工作区构建、测试、本地打包与仓库级验证入口。
 - [`使用文档总入口`](../README.md)：返回使用文档入口。
 
-## 发布资产占位
-
-当语言相关安装资产尚未在当前分发渠道提供时，请统一沿用 [`../../developer/publishing/README.md`](../../developer/publishing/README.md) 中的 `TODO(devhub-release)` 占位规范。
-
-各语言 README 只保留工作区概述、内容结构与重要注意事项；完整接入说明见对应语言指南。仓库内命令仅用于本地开发、测试或本地打包验证，不代表正式发布安装入口。
-
 ## 接入闭环
 
 1. 先按 [`../host/quickstart.md`](../host/quickstart.md) 启动 Host，并确认 `hub.ping` 成功。

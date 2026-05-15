@@ -7,7 +7,6 @@
 ### 1.1 文档与治理
 
 - `README.md`、`docs/README.md`、Host 上手、SDK 接入和原始协议接入文档导航可用。
-- 所有尚未正式发布的版本号、下载链接和安装命令均使用 `TODO(devhub-release)` 占位，没有伪造的发布信息。
 
 ### 1.2 代码与验证
 
@@ -96,7 +95,6 @@ python scripts/release/package_release.py --release-id local-partial-check --cha
 - 确认稳定版 tag 已准备好，例如 `v1.0.1`。
 - 确认该 tag 对应提交已经通过 `ci`，再进入发布或重跑发布；用于发布的 workflow artifact 应来自该成功 run。
 - 确认 Monitor App 的 Linux、Windows、macOS bundle 已包含在 GitHub Release 资产中。
-- 确认面向外部用户的安装说明已与本次发布资产对应；如仍保留 TODO 占位，需明确具体占位项及对应发布资产。
 
 ## 3. 发布后核验
 

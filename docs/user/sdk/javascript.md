@@ -8,7 +8,6 @@
 - Node.js 调用方需具备 `Node.js 20+` 与 `npm`。
 - 浏览器 / WebView 调用方需由宿主应用提供可用的运行时连接信息，并通过自定义 `runtimeResolver` 交给 SDK。
 - 浏览器 / WebView 直连 Host 时，宿主应用还需提供 `tokenFile` 中的 Bearer Token，并确保前端可以直接访问 `hub.json.httpBaseUrl` 指向的回环地址。
-- 若当前分发渠道尚未提供正式安装资产，请按 [`../../developer/publishing/README.md`](../../developer/publishing/README.md) 中的 `TODO(devhub-release)` 占位规范书写安装说明。
 
 ## 2. 获取 SDK
 

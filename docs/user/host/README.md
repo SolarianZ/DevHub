@@ -12,7 +12,3 @@
 - [`../sdk/README.md`](../sdk/README.md)：官方 SDK 接入入口。
 - [`../protocol/README.md`](../protocol/README.md)：不依赖官方 SDK 的原始协议接入路径。
 - [`../README.md`](../README.md)：使用文档总入口。
-
-## 发布资产占位
-
-当 Host 下载入口、平台资产名称或安装命令尚未在当前分发渠道提供时，请统一沿用 [`../../developer/publishing/README.md`](../../developer/publishing/README.md) 中的 `TODO(devhub-release)` 占位规范。

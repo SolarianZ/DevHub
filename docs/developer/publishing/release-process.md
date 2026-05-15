@@ -81,12 +81,7 @@ Host 两类 ZIP 都保持 framework-dependent。multi-file 版用于标准目录
 - 当前发布流程只生成并上传 GitHub Release 资产，不会同步把 `.NET SDK` 发布到 NuGet、把 `JS/TS SDK` 发布到 npm，或把 `Python SDK` 发布到 PyPI。
 - `apps/monitor/` 使用 `python scripts/release/package_monitor.py --release-id <id>` 生成单平台 Monitor bundle、manifest、release notes 与验证摘要。该脚本固定使用当前仓库 `sdks/javascript` 源码，并在打包前执行 `npm run sync:version-metadata`，保证 `--validated-externally` 路径在干净工作区内也具备完整输入。
 
-## 5. 发布说明与 TODO 占位
-
-- 正式版本号、下载链接和安装命令尚未对外冻结时，用户文档必须使用 `TODO(devhub-release)` 占位。
-- `release-notes.md` 负责描述本次发布对应的通道、提交、资产和验证摘要；Host 同一 RID 的 multi-file 与 single-file 资产在该文件中以独立条目呈现，不取代面向用户的安装文档。
-
-## 6. 维护者入口
+## 5. 维护者入口
 
 - 发布前检查与发布后核验：[`release-checklist.md`](./release-checklist.md)
 - 发布资产布局：[`release-asset-layout.md`](./release-asset-layout.md)

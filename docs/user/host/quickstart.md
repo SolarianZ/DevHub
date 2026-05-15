@@ -7,7 +7,6 @@
 - 仓库内最直接的上手路径依赖 `.NET 10 SDK`，用于从源代码运行或发布 Host。
 - 使用发布资产运行 Host 时，目标机器需预装匹配的 `.NET 10` 与 `ASP.NET Core Runtime`；Host ZIP 资产均为 framework-dependent。
 - 使用独立数据目录运行 Host 时，需先确定 `DEVHUB_DATA_DIR` 的值，并确保当前用户对该目录有读写权限。
-- 若当前分发渠道尚未提供正式下载资产，请沿用 [`../../developer/publishing/README.md`](../../developer/publishing/README.md) 中的 `TODO(devhub-release)` 占位规范书写安装说明。
 
 如需了解部署与运行边界，请先阅读 [`../../developer/operations/deployment.md`](../../developer/operations/deployment.md)。
 

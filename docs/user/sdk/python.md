@@ -6,7 +6,6 @@
 
 - 已按 [`../host/quickstart.md`](../host/quickstart.md) 启动 Host，并确认 `hub.json` 与 `tokenFile` 可读。
 - 本地具备 `Python 3.11+` 和 `pip`。
-- 若当前分发渠道尚未提供正式安装资产，请按 [`../../developer/publishing/README.md`](../../developer/publishing/README.md) 中的 `TODO(devhub-release)` 占位规范书写安装说明。
 
 ## 2. 获取 SDK
 
