@@ -16,6 +16,12 @@
 python3 scripts/release/sync_versions.py
 ```
 
+若本次改动涉及 `sdks/javascript/` 或 `apps/monitor/` 依赖树，或遇到 `npm ci` / `monitor-validation` 因 lockfile 漂移失败，先执行：
+
+```bash
+python scripts/release/refresh_js_lockfiles.py
+```
+
 确认 `eng/Version.props`、`sdks/javascript/package.json`、`sdks/javascript/package-lock.json` 与 `sdks/python/pyproject.toml` 已同步后，再执行统一打包入口：
 
 ```bash

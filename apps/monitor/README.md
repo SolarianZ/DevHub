@@ -13,6 +13,7 @@
 - `npm run verify`
 - `python ../../scripts/release/package_monitor.py --release-id local-dry-run`
 - `python ../../scripts/release/package_monitor.py --release-id monitor-local-check --verify-only`
+- `python ../../scripts/release/refresh_js_lockfiles.py --only monitor`
 
 ## 环境要求
 
@@ -25,6 +26,7 @@
 推荐先安装本地依赖：
 
 - `npm ci`
+- 若 `npm ci` 因 lockfile 漂移失败，先执行 `python ../../scripts/release/refresh_js_lockfiles.py --only monitor`；需要同时刷新 JS SDK 与 Monitor 时，执行 `python ../../scripts/release/refresh_js_lockfiles.py`。
 
 Monitor 验收相关命令：
 

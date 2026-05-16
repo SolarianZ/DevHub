@@ -18,6 +18,7 @@ scripts/
 │   ├── package_monitor.py                   # Monitor 单平台验证与打包入口
 │   ├── package_models.py                    # 发布脚本共享数据模型
 │   ├── package_shared.py                    # 发布脚本共享 CLI / 日志 / 路径 / JSON 辅助
+│   ├── refresh_js_lockfiles.py              # 刷新 JS SDK 与 Monitor lockfile 并执行 npm ci 自检
 │   ├── resolve_release_metadata.py          # 统一解析 preview/main/stable 发布元数据
 │   └── sync_versions.py                     # 版本号同步脚本
 └── sdk/                                     # SDK 验证辅助脚本
@@ -28,6 +29,7 @@ scripts/
 
 - `scripts/release/package_release.py` 负责 release 级元数据、Host / SDK / Monitor 组件打包编排、manifest、release notes 和最终完整性检查。
 - `scripts/release/package_host.py`、`package_dotnet_sdk.py`、`package_js_sdk.py`、`package_py_sdk.py`、`package_monitor.py` 负责各自产物域的独立验证或打包。
+- `scripts/release/refresh_js_lockfiles.py` 负责刷新 `sdks/javascript/` 与 `apps/monitor/` 的 `package-lock.json`，并按选定 npm 基准执行 `npm ci` 自检。
 - `scripts/release/resolve_release_metadata.py` 负责把 `preview`、`main` 与 `v*` ref 解析为统一的 channel、release id、release tag 与 release name。
 - 所有 package 脚本都支持 `--release-id` 和 `--output-root` 参数。
 - `package_release.py` 默认产出完整正式资产；`--no-host`、`--no-dotnet-sdk`、`--no-js-sdk`、`--no-py-sdk`、`--no-monitor` 用于局部验证、排障或中间装配。
